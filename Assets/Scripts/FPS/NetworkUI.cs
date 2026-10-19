@@ -160,7 +160,13 @@ namespace AirsoftFPS
             {
                 if (mnet != null)
                 {
-                    string modeName = mnet.Mode == MatchNet.GameModeType.FreeForAll ? "Free-for-All Deathmatch" : "Co-op Survival";
+                    string modeName = mnet.Mode switch
+                    {
+                        MatchNet.GameModeType.FreeForAll => "Free-for-All Deathmatch",
+                        MatchNet.GameModeType.TeamDeathmatch => "Team Deathmatch",
+                        MatchNet.GameModeType.GunGame => "Gun Game",
+                        _ => "Co-op Survival"
+                    };
                     var sb = new StringBuilder();
                     sb.AppendLine("MODE:  " + modeName);
                     foreach (var e in mnet.Roster)

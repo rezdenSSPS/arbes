@@ -15,7 +15,7 @@ namespace AirsoftFPS
     // the whole state to clients whenever it changes.
     public class MatchNet : MonoBehaviour
     {
-        public enum GameModeType { Coop = 0, FreeForAll = 1 }
+        public enum GameModeType { Coop = 0, FreeForAll = 1, TeamDeathmatch = 2, GunGame = 3 }
         public enum Phase { Lobby = 0, InMatch = 1, Results = 2 }
 
         public struct Entry
@@ -25,6 +25,7 @@ namespace AirsoftFPS
             public bool ready;
             public int kills;
             public int deaths;
+            public int team;   // 0 = none, 1 = Red, 2 = Blue (Team Deathmatch)
         }
 
         public static MatchNet Instance { get; private set; }
@@ -34,6 +35,8 @@ namespace AirsoftFPS
 
         // Config
         public const int FFA_KILL_TARGET = 15;
+        public const int TDM_KILL_TARGET = 40;
+        public const int GUNGAME_WEAPONS = 10;
         const string MATCH_SCENE = "AirsoftArena";
         const string LOBBY_SCENE = "AirsoftLobby";
 
@@ -46,6 +49,7 @@ namespace AirsoftFPS
         public GameModeType Mode { get; private set; } = GameModeType.Coop;
         public Phase CurrentPhase { get; private set; } = Phase.Lobby;
         public ulong WinnerClientId { get; private set; } = ulong.MaxValue;
+        public int WinnerTeam { get; private set; } = 0;  // 0 none, 1 Red, 2 Blue
         public IReadOnlyList<Entry> Roster => roster;
 
         // Raised on everyone whenever the roster/mode/phase changes, so UI can refresh.
@@ -136,7 +140,7 @@ namespace AirsoftFPS
         public void HostCycleMode()
         {
             if (!IsHost) return;
-            Mode = Mode == GameModeType.Coop ? GameModeType.FreeForAll : GameModeType.Coop;
+            Mode = (GameModeType)(((int)Mode + 1) % 4);
             BroadcastState();
         }
 
@@ -154,10 +158,16 @@ namespace AirsoftFPS
             EnemiesEnabled = (Mode == GameModeType.Coop);
             CurrentPhase = Phase.InMatch;
             WinnerClientId = ulong.MaxValue;
-            // reset scores for a fresh match
+            WinnerTeam = 0;
+            // reset scores (and split into two teams for Team Deathmatch)
+            int t = 1;
             for (int i = 0; i < roster.Count; i++)
             {
-                var e = roster[i]; e.kills = 0; e.deaths = 0; roster[i] = e;
+                var e = roster[i];
+                e.kills = 0; e.deaths = 0;
+                e.team = (Mode == GameModeType.TeamDeathmatch) ? t : 0;
+                if (Mode == GameModeType.TeamDeathmatch) t = (t == 1) ? 2 : 1;
+                roster[i] = e;
             }
             BroadcastState();
             nm.SceneManager.LoadScene(MATCH_SCENE, LoadSceneMode.Single);
@@ -170,8 +180,11 @@ namespace AirsoftFPS
         {
             if (nm == null || !nm.IsServer) return;
 
-            bool pvp = killerClientId != victimClientId && Mode == GameModeType.FreeForAll && HasEntry(killerClientId);
-            string killerName = pvp ? NameFor(killerClientId) : "";
+            bool pvpMode = Mode == GameModeType.FreeForAll || Mode == GameModeType.TeamDeathmatch || Mode == GameModeType.GunGame;
+            bool teamKill = Mode == GameModeType.TeamDeathmatch && HasEntry(killerClientId)
+                            && TeamOf(killerClientId) == TeamOf(victimClientId);
+            bool scored = pvpMode && killerClientId != victimClientId && HasEntry(killerClientId) && !teamKill;
+            string killerName = scored ? NameFor(killerClientId) : "";
             RaiseKill(killerName, NameFor(victimClientId), weapon ?? "");
 
             bool changed = false;
@@ -179,26 +192,34 @@ namespace AirsoftFPS
             {
                 var e = roster[i];
                 if (e.clientId == victimClientId) { e.deaths++; roster[i] = e; changed = true; }
-                else if (e.clientId == killerClientId && killerClientId != victimClientId
-                         && Mode == GameModeType.FreeForAll)
-                { e.kills++; roster[i] = e; changed = true; }
+                else if (scored && e.clientId == killerClientId) { e.kills++; roster[i] = e; changed = true; }
             }
 
+            // Win conditions
             if (Mode == GameModeType.FreeForAll)
             {
-                foreach (var e in roster)
-                {
-                    if (e.kills >= FFA_KILL_TARGET)
-                    {
-                        CurrentPhase = Phase.Results;
-                        WinnerClientId = e.clientId;
-                        Invoke(nameof(ReturnToLobby), 6f);
-                        break;
-                    }
-                }
+                foreach (var e in roster) if (e.kills >= FFA_KILL_TARGET) { EndMatch(e.clientId, 0); break; }
+            }
+            else if (Mode == GameModeType.GunGame)
+            {
+                foreach (var e in roster) if (e.kills >= GUNGAME_WEAPONS) { EndMatch(e.clientId, 0); break; }
+            }
+            else if (Mode == GameModeType.TeamDeathmatch)
+            {
+                if (TeamScore(1) >= TDM_KILL_TARGET) EndMatch(ulong.MaxValue, 1);
+                else if (TeamScore(2) >= TDM_KILL_TARGET) EndMatch(ulong.MaxValue, 2);
             }
 
             if (changed || CurrentPhase == Phase.Results) BroadcastState();
+        }
+
+        void EndMatch(ulong winnerClient, int winnerTeam)
+        {
+            if (CurrentPhase == Phase.Results) return;
+            CurrentPhase = Phase.Results;
+            WinnerClientId = winnerClient;
+            WinnerTeam = winnerTeam;
+            Invoke(nameof(ReturnToLobby), 6f);
         }
 
         void ReturnToLobby()
@@ -206,10 +227,11 @@ namespace AirsoftFPS
             if (nm == null || !nm.IsServer) return;
             CurrentPhase = Phase.Lobby;
             WinnerClientId = ulong.MaxValue;
+            WinnerTeam = 0;
             EnemiesEnabled = true;
             for (int i = 0; i < roster.Count; i++)
             {
-                var e = roster[i]; e.ready = false; e.kills = 0; e.deaths = 0; roster[i] = e;
+                var e = roster[i]; e.ready = false; e.kills = 0; e.deaths = 0; e.team = 0; roster[i] = e;
             }
             BroadcastState();
             nm.SceneManager.LoadScene(LOBBY_SCENE, LoadSceneMode.Single);
@@ -318,6 +340,7 @@ namespace AirsoftFPS
             w.WriteValueSafe((byte)Mode);
             w.WriteValueSafe((byte)CurrentPhase);
             w.WriteValueSafe(WinnerClientId);
+            w.WriteValueSafe(WinnerTeam);
             w.WriteValueSafe(roster.Count);
             foreach (var e in roster)
             {
@@ -326,6 +349,7 @@ namespace AirsoftFPS
                 w.WriteValueSafe(e.ready);
                 w.WriteValueSafe(e.kills);
                 w.WriteValueSafe(e.deaths);
+                w.WriteValueSafe(e.team);
             }
             nm.CustomMessagingManager.SendNamedMessageToAll(MSG_STATE, w, NetworkDelivery.Reliable);
         }
@@ -338,6 +362,7 @@ namespace AirsoftFPS
             reader.ReadValueSafe(out byte modeB);
             reader.ReadValueSafe(out byte phaseB);
             reader.ReadValueSafe(out ulong winner);
+            reader.ReadValueSafe(out int winnerTeam);
             reader.ReadValueSafe(out int count);
 
             roster.Clear();
@@ -348,12 +373,14 @@ namespace AirsoftFPS
                 reader.ReadValueSafe(out bool ready);
                 reader.ReadValueSafe(out int kills);
                 reader.ReadValueSafe(out int deaths);
-                roster.Add(new Entry { clientId = cid, name = nm2, ready = ready, kills = kills, deaths = deaths });
+                reader.ReadValueSafe(out int team);
+                roster.Add(new Entry { clientId = cid, name = nm2, ready = ready, kills = kills, deaths = deaths, team = team });
             }
 
             Mode = (GameModeType)modeB;
             CurrentPhase = (Phase)phaseB;
             WinnerClientId = winner;
+            WinnerTeam = winnerTeam;
             EnemiesEnabled = (Mode == GameModeType.Coop);
             OnStateChanged?.Invoke();
         }
@@ -384,6 +411,28 @@ namespace AirsoftFPS
             reader.ReadValueSafe(out string victim);
             reader.ReadValueSafe(out string weapon);
             OnKillFeed?.Invoke(killer, victim, weapon);
+        }
+
+        public int TeamOf(ulong clientId)
+        {
+            foreach (var e in roster) if (e.clientId == clientId) return e.team;
+            return 0;
+        }
+        public int TeamScore(int team)
+        {
+            int sc = 0; foreach (var e in roster) if (e.team == team) sc += e.kills; return sc;
+        }
+        public int GunLevelOf(ulong clientId)
+        {
+            foreach (var e in roster) if (e.clientId == clientId) return e.kills;
+            return 0;
+        }
+        // Team Deathmatch: block damage between teammates (friendly fire off).
+        public bool BlocksDamage(ulong attacker, ulong victim)
+        {
+            if (Mode != GameModeType.TeamDeathmatch || attacker == victim) return false;
+            if (!HasEntry(attacker) || !HasEntry(victim)) return false;
+            return TeamOf(attacker) == TeamOf(victim);
         }
 
         public string NameFor(ulong clientId)

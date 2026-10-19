@@ -229,6 +229,14 @@ namespace AirsoftFPS
 
         void HandleWeaponSwitch()
         {
+            // Gun Game: your weapon is locked to your progression level; no manual switching.
+            if (MatchNet.Instance != null && MatchNet.Instance.Mode == MatchNet.GameModeType.GunGame)
+            {
+                int lvl = Mathf.Clamp(MatchNet.Instance.GunLevelOf(OwnerClientId), 0, weapons.Length - 1);
+                if (lvl != currentIndex) SwitchWeaponRpc(lvl);
+                return;
+            }
+
             var kb = Keyboard.current;
             if (kb == null) return;
 
@@ -509,6 +517,9 @@ namespace AirsoftFPS
                 var health = netObj.GetComponent<Health>();
                 if (health != null)
                 {
+                    // Team Deathmatch: no friendly fire between teammates.
+                    if (MatchNet.Instance != null && MatchNet.Instance.BlocksDamage(OwnerClientId, netObj.OwnerClientId))
+                        return;
                     health.TakeDamage(damage, OwnerClientId, weapon.ToString());
                     HitConfirmRpc(hitPoint, RpcTarget.Single(OwnerClientId, RpcTargetUse.Temp));
                 }

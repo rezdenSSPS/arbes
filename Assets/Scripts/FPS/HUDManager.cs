@@ -293,12 +293,15 @@ namespace AirsoftFPS
             BuildModeUI();
             var mnet = MatchNet.Instance;
 
-            bool ffa = mnet != null && mnet.Mode == MatchNet.GameModeType.FreeForAll;
+            var mode = mnet != null ? mnet.Mode : MatchNet.GameModeType.Coop;
 
-            // Top banner: wave number in Co-op, mode name in FFA.
+            // Top banner per mode.
             if (waveText != null)
             {
-                if (ffa) waveText.text = "FREE-FOR-ALL";
+                if (mode == MatchNet.GameModeType.FreeForAll) waveText.text = "FREE-FOR-ALL";
+                else if (mode == MatchNet.GameModeType.TeamDeathmatch)
+                    waveText.text = $"TEAM DEATHMATCH    <color=#FF6B6B>{mnet.TeamScore(1)}</color> : <color=#6BA8FF>{mnet.TeamScore(2)}</color>";
+                else if (mode == MatchNet.GameModeType.GunGame) waveText.text = "GUN GAME";
                 else
                 {
                     var spawner = FindAnyObjectByType<EnemySpawner>();
@@ -314,13 +317,39 @@ namespace AirsoftFPS
                 if (showScores)
                 {
                     var list = new System.Collections.Generic.List<MatchNet.Entry>(mnet.Roster);
-                    list.Sort((a, b) => ffa ? b.kills.CompareTo(a.kills) : a.deaths.CompareTo(b.deaths));
                     var sb = new System.Text.StringBuilder();
-                    sb.AppendLine(ffa ? $"<b>SCOREBOARD</b>   (first to {MatchNet.FFA_KILL_TARGET})" : "<b>PLAYERS</b>");
-                    sb.AppendLine("");
-                    foreach (var e in list)
-                        sb.AppendLine(ffa ? $"{e.name}      {e.kills} kills / {e.deaths} deaths"
-                                          : $"{e.name}      {e.deaths} downs");
+                    if (mode == MatchNet.GameModeType.TeamDeathmatch)
+                    {
+                        sb.AppendLine($"<b>TEAM DEATHMATCH</b>   (first team to {MatchNet.TDM_KILL_TARGET})");
+                        sb.AppendLine($"<color=#FF6B6B>RED  {mnet.TeamScore(1)}</color>      <color=#6BA8FF>BLUE  {mnet.TeamScore(2)}</color>");
+                        sb.AppendLine("");
+                        list.Sort((a, b) => a.team != b.team ? a.team.CompareTo(b.team) : b.kills.CompareTo(a.kills));
+                        foreach (var e in list)
+                            sb.AppendLine($"<color={(e.team == 1 ? "#FF6B6B" : "#6BA8FF")}>{e.name}</color>      {e.kills} / {e.deaths}");
+                    }
+                    else if (mode == MatchNet.GameModeType.GunGame)
+                    {
+                        sb.AppendLine($"<b>GUN GAME</b>   (finish all {MatchNet.GUNGAME_WEAPONS} weapons)");
+                        sb.AppendLine("");
+                        list.Sort((a, b) => b.kills.CompareTo(a.kills));
+                        foreach (var e in list)
+                            sb.AppendLine($"{e.name}      weapon {System.Math.Min(e.kills + 1, MatchNet.GUNGAME_WEAPONS)} / {MatchNet.GUNGAME_WEAPONS}");
+                    }
+                    else if (mode == MatchNet.GameModeType.FreeForAll)
+                    {
+                        sb.AppendLine($"<b>SCOREBOARD</b>   (first to {MatchNet.FFA_KILL_TARGET})");
+                        sb.AppendLine("");
+                        list.Sort((a, b) => b.kills.CompareTo(a.kills));
+                        foreach (var e in list)
+                            sb.AppendLine($"{e.name}      {e.kills} kills / {e.deaths} deaths");
+                    }
+                    else
+                    {
+                        sb.AppendLine("<b>PLAYERS</b>");
+                        sb.AppendLine("");
+                        foreach (var e in list)
+                            sb.AppendLine($"{e.name}      {e.deaths} downs");
+                    }
                     scoreboardText.text = sb.ToString();
                     if (!scoreboardText.gameObject.activeSelf) scoreboardText.gameObject.SetActive(true);
                 }
@@ -334,8 +363,11 @@ namespace AirsoftFPS
                 bool over = mnet.CurrentPhase == MatchNet.Phase.Results;
                 if (over)
                 {
-                    string winner = mnet.WinnerClientId == ulong.MaxValue ? "Nobody" : mnet.NameFor(mnet.WinnerClientId);
-                    resultText.text = $"WINNER\n{winner}\n<size=50%>returning to lobby...</size>";
+                    string title;
+                    if (mnet.WinnerTeam == 1) title = "<color=#FF6B6B>RED TEAM WINS</color>";
+                    else if (mnet.WinnerTeam == 2) title = "<color=#6BA8FF>BLUE TEAM WINS</color>";
+                    else title = (mnet.WinnerClientId == ulong.MaxValue ? "Nobody" : mnet.NameFor(mnet.WinnerClientId)) + " WINS";
+                    resultText.text = $"{title}\n<size=50%>returning to lobby...</size>";
                     if (!resultText.gameObject.activeSelf) resultText.gameObject.SetActive(true);
                 }
                 else if (resultText.gameObject.activeSelf)
