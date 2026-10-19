@@ -1,0 +1,31 @@
+# Auto detect text files and normalize line endings
+* text=auto
+
+# ---- Unity source ----
+*.cs text diff=csharp
+
+# ---- Unity YAML assets: Smart Merge (UnityYAMLMerge) ----
+*.unity      merge=unityyamlmerge eol=lf
+*.prefab     merge=unityyamlmerge eol=lf
+*.asset      merge=unityyamlmerge eol=lf
+*.meta       merge=unityyamlmerge eol=lf
+*.mat        merge=unityyamlmerge eol=lf
+*.anim       merge=unityyamlmerge eol=lf
+*.controller merge=unityyamlmerge eol=lf
+*.physicMaterial merge=unityyamlmerge eol=lf
+
+# ---- Binary assets (nikdy nemergovat jako text) ----
+*.fbx   binary
+*.FBX   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.psd   binary
+*.tga   binary
+*.wav   binary
+*.mp3   binary
+*.ogg   binary
+*.ttf   binary
+*.otf   binary
+*.unitypackage binary
