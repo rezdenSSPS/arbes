@@ -39,6 +39,10 @@ namespace AirsoftFPS
         public const int TDM_KILL_TARGET = 40;
         public const int GUNGAME_WEAPONS = 10;
         public const float RESULTS_SECONDS = 6f;   // results screen, then everyone returns to the lobby
+        // Match time limit (minutes) the host can pick in the lobby; 0 = off. Co-op never has one.
+        public static readonly int[] TIME_LIMIT_OPTIONS = { 0, 5, 10, 15 };
+        public const int DEFAULT_TIME_LIMIT = 10;
+        const string TIME_LIMIT_PREF = "Airsoft.TimeLimit";
         const string MATCH_SCENE = "AirsoftArena";
         const string LOBBY_SCENE = "AirsoftLobby";
 
@@ -53,6 +57,11 @@ namespace AirsoftFPS
         public Phase CurrentPhase { get; private set; } = Phase.Lobby;
         public ulong WinnerClientId { get; private set; } = ulong.MaxValue;
         public int WinnerTeam { get; private set; } = 0;  // 0 none, 1 Red, 2 Blue
+        public bool IsDraw { get; private set; }          // match ended on time with an exact tie
+        public bool EndedOnTime { get; private set; }     // match ended because the clock ran out
+        public int TimeLimitMinutes { get; private set; } = DEFAULT_TIME_LIMIT;
+        // Network server time (NetworkManager.ServerTime) when the clock runs out; 0 = not running.
+        public double MatchEndTime { get; private set; }
         public IReadOnlyList<Entry> Roster => roster;
 
         // Raised on everyone whenever the roster/mode/phase changes, so UI can refresh.
@@ -88,6 +97,8 @@ namespace AirsoftFPS
             Instance = this;
             localName = PlayerPrefs.GetString("Airsoft.PlayerName", "");
             localLook = AirsoftLook.LoadLocal();
+            int saved = PlayerPrefs.GetInt(TIME_LIMIT_PREF, DEFAULT_TIME_LIMIT);
+            TimeLimitMinutes = Array.IndexOf(TIME_LIMIT_OPTIONS, saved) >= 0 ? saved : DEFAULT_TIME_LIMIT;
         }
 
         void Update()
@@ -105,6 +116,8 @@ namespace AirsoftFPS
             // Host is both server and client; make sure client handlers are up too.
             if (nm.IsClient && !clientHandlersUp) RegisterClientHandlers();
             if (nm.IsServer && !serverHandlersUp) RegisterServerHandlers();
+
+            if (nm.IsServer) TickMatchClock();
         }
 
         // ───────────────────────── Local player API (UI calls these) ─────────────────────────
@@ -192,6 +205,40 @@ namespace AirsoftFPS
             BroadcastState();
         }
 
+        // Host picks the match time limit in the lobby (minutes, one of TIME_LIMIT_OPTIONS; 0 = off).
+        public void HostSetTimeLimit(int minutes)
+        {
+            if (!IsHost || CurrentPhase != Phase.Lobby || TimeLimitMinutes == minutes) return;
+            if (Array.IndexOf(TIME_LIMIT_OPTIONS, minutes) < 0) return;
+            TimeLimitMinutes = minutes;
+            PlayerPrefs.SetInt(TIME_LIMIT_PREF, minutes);
+            PlayerPrefs.Save();
+            BroadcastState();
+        }
+
+        // True when the current mode plays with the time limit (Co-op never does).
+        public bool UsesTimeLimit => Mode != GameModeType.Coop && TimeLimitMinutes > 0;
+
+        // Seconds left on the match clock (valid on everyone), or -1 when there is no clock.
+        // While the arena is still loading it reads the full limit.
+        public float TimeLeft
+        {
+            get
+            {
+                if (CurrentPhase == Phase.Lobby || !UsesTimeLimit) return -1f;
+                if (MatchEndTime <= 0) return CurrentPhase == Phase.InMatch ? TimeLimitMinutes * 60f : 0f;
+                if (CurrentPhase == Phase.Results) return 0f;
+                double now = nm != null ? nm.ServerTime.Time : 0;
+                return Mathf.Max(0f, (float)(MatchEndTime - now));
+            }
+        }
+
+        public static string FormatClock(float seconds)
+        {
+            int s = Mathf.Max(0, Mathf.CeilToInt(seconds));
+            return (s / 60).ToString("00") + ":" + (s % 60).ToString("00");
+        }
+
         public bool AllReady()
         {
             if (roster.Count == 0) return false;
@@ -207,6 +254,9 @@ namespace AirsoftFPS
             CurrentPhase = Phase.InMatch;
             WinnerClientId = ulong.MaxValue;
             WinnerTeam = 0;
+            IsDraw = false;
+            EndedOnTime = false;
+            MatchEndTime = 0;   // the clock starts once the arena has loaded (TickMatchClock)
             // reset scores (and split into two teams for Team Deathmatch)
             int t = 1;
             for (int i = 0; i < roster.Count; i++)
@@ -261,13 +311,65 @@ namespace AirsoftFPS
             if (changed || CurrentPhase == Phase.Results) BroadcastState();
         }
 
-        void EndMatch(ulong winnerClient, int winnerTeam)
+        void EndMatch(ulong winnerClient, int winnerTeam, bool onTime = false, bool draw = false)
         {
             if (CurrentPhase == Phase.Results) return;
             CurrentPhase = Phase.Results;
-            WinnerClientId = winnerClient;
-            WinnerTeam = winnerTeam;
+            WinnerClientId = draw ? ulong.MaxValue : winnerClient;
+            WinnerTeam = draw ? 0 : winnerTeam;
+            IsDraw = draw;
+            EndedOnTime = onTime;
             Invoke(nameof(ReturnToLobby), RESULTS_SECONDS);
+        }
+
+        // Server: start the clock once the arena is the active scene, end the match when it runs out.
+        void TickMatchClock()
+        {
+            if (CurrentPhase != Phase.InMatch || !UsesTimeLimit) return;
+            double now = nm.ServerTime.Time;
+            if (MatchEndTime <= 0)
+            {
+                if (SceneManager.GetActiveScene().name != MATCH_SCENE) return;
+                MatchEndTime = now + TimeLimitMinutes * 60.0;
+                BroadcastState();
+                return;
+            }
+            if (now >= MatchEndTime) EndMatchOnTime();
+        }
+
+        // Time ran out: FFA -> most kills; Gun Game -> highest weapon level, then kills, then
+        // fewest deaths; TDM -> higher team score. An exact tie is a draw.
+        void EndMatchOnTime()
+        {
+            if (Mode == GameModeType.TeamDeathmatch)
+            {
+                int red = TeamScore(1), blue = TeamScore(2);
+                EndMatch(ulong.MaxValue, red > blue ? 1 : 2, true, red == blue);
+            }
+            else
+            {
+                bool gunGame = Mode == GameModeType.GunGame;
+                int best = -1; bool tie = false;
+                for (int i = 0; i < roster.Count; i++)
+                {
+                    if (best < 0) { best = i; continue; }
+                    int c = gunGame ? CompareGunGame(roster[i], roster[best]) : roster[i].kills.CompareTo(roster[best].kills);
+                    if (c > 0) { best = i; tie = false; }
+                    else if (c == 0) tie = true;
+                }
+                if (best < 0) EndMatch(ulong.MaxValue, 0, true, true);   // nobody left to win
+                else EndMatch(roster[best].clientId, 0, true, tie);
+            }
+            BroadcastState();
+        }
+
+        // > 0 when a ranks above b in Gun Game.
+        int CompareGunGame(Entry a, Entry b)
+        {
+            int c = GunLevelOf(a.clientId).CompareTo(GunLevelOf(b.clientId));
+            if (c == 0) c = a.kills.CompareTo(b.kills);
+            if (c == 0) c = b.deaths.CompareTo(a.deaths);
+            return c;
         }
 
         // Host skips the rest of the results countdown.
@@ -284,6 +386,9 @@ namespace AirsoftFPS
             CurrentPhase = Phase.Lobby;
             WinnerClientId = ulong.MaxValue;
             WinnerTeam = 0;
+            IsDraw = false;
+            EndedOnTime = false;
+            MatchEndTime = 0;
             EnemiesEnabled = true;
             for (int i = 0; i < roster.Count; i++)
             {
@@ -350,6 +455,10 @@ namespace AirsoftFPS
             roster.Clear();
             CurrentPhase = Phase.Lobby;
             WinnerClientId = ulong.MaxValue;
+            WinnerTeam = 0;
+            IsDraw = false;
+            EndedOnTime = false;
+            MatchEndTime = 0;
             serverHandlersUp = false;
             clientHandlersUp = false;
             OnStateChanged?.Invoke();
@@ -399,6 +508,9 @@ namespace AirsoftFPS
             w.WriteValueSafe((byte)CurrentPhase);
             w.WriteValueSafe(WinnerClientId);
             w.WriteValueSafe(WinnerTeam);
+            w.WriteValueSafe((byte)((IsDraw ? 1 : 0) | (EndedOnTime ? 2 : 0)));
+            w.WriteValueSafe((byte)TimeLimitMinutes);
+            w.WriteValueSafe(MatchEndTime);
             w.WriteValueSafe(roster.Count);
             foreach (var e in roster)
             {
@@ -422,6 +534,9 @@ namespace AirsoftFPS
             reader.ReadValueSafe(out byte phaseB);
             reader.ReadValueSafe(out ulong winner);
             reader.ReadValueSafe(out int winnerTeam);
+            reader.ReadValueSafe(out byte endFlags);
+            reader.ReadValueSafe(out byte timeLimit);
+            reader.ReadValueSafe(out double matchEnd);
             reader.ReadValueSafe(out int count);
 
             roster.Clear();
@@ -441,6 +556,10 @@ namespace AirsoftFPS
             CurrentPhase = (Phase)phaseB;
             WinnerClientId = winner;
             WinnerTeam = winnerTeam;
+            IsDraw = (endFlags & 1) != 0;
+            EndedOnTime = (endFlags & 2) != 0;
+            TimeLimitMinutes = timeLimit;
+            MatchEndTime = matchEnd;
             EnemiesEnabled = (Mode == GameModeType.Coop);
             OnStateChanged?.Invoke();
         }

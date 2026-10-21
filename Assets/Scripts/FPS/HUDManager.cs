@@ -68,6 +68,9 @@ namespace AirsoftFPS
         TextMeshProUGUI ggNext;
         readonly List<Image> ggSteps = new List<Image>();
         TextMeshProUGUI coopWave, coopLeftNum;
+        GameObject clockChip;
+        Image clockFrame;
+        TextMeshProUGUI clockCaption, clockText;
         readonly List<FeedRow> feedRows = new List<FeedRow>();
         RectTransform crosshair;
         Image[] crossArms;
@@ -264,6 +267,21 @@ namespace AirsoftFPS
             ffaWidget.SetActive(mode == MatchNet.GameModeType.FreeForAll);
             ggWidget.SetActive(mode == MatchNet.GameModeType.GunGame);
             coopWidget.SetActive(mode == MatchNet.GameModeType.Coop);
+
+            // match clock (last 30 s in orange, last 10 s in danger red)
+            float timeLeft = mnet != null ? mnet.TimeLeft : -1f;
+            clockChip.SetActive(timeLeft >= 0f);
+            if (timeLeft >= 0f)
+            {
+                clockText.text = MatchNet.FormatClock(timeLeft);
+                bool late = timeLeft <= 30f;
+                Color warn = ClockColor(timeLeft);
+                clockText.color = warn;
+                clockCaption.color = late ? warn : Muted;
+                clockFrame.enabled = late;
+                clockFrame.color = warn;
+            }
+
             if (mnet != null)
             {
                 if (mode == MatchNet.GameModeType.TeamDeathmatch)
@@ -403,7 +421,9 @@ namespace AirsoftFPS
             ulong me = nm != null ? nm.LocalClientId : 0;
             var mode = mnet.Mode;
             sbTitle.text = ModeName(mode).ToUpperInvariant();
-            sbGoal.text = Goal(mode);
+            float timeLeft = mnet.TimeLeft;
+            sbGoal.text = Goal(mode) + (timeLeft >= 0f
+                ? $"  ·  <color={Html(ClockColor(timeLeft))}>{MatchNet.FormatClock(timeLeft)}</color> left" : "");
             string where = !string.IsNullOrEmpty(NetworkUI.JoinCode) ? "ONLINE · " + NetworkUI.JoinCode : "LAN";
             sbFooterLeft.text = "Town arena · " + where;
             sbFooterRight.text = mnet.Roster.Count + " / 8 players";
@@ -478,6 +498,8 @@ namespace AirsoftFPS
             return "Weapon " + (i + 1);
         }
 
+        static Color ClockColor(float timeLeft) => timeLeft <= 10f ? Danger : timeLeft <= 30f ? Accent : Fg;
+
         static string Goal(MatchNet.GameModeType m) => m switch
         {
             MatchNet.GameModeType.TeamDeathmatch => "first team to " + MatchNet.TDM_KILL_TARGET,
@@ -524,8 +546,10 @@ namespace AirsoftFPS
                     break;
             }
             string code = NetworkUI.JoinCode;
+            float timeLeft = mnet.TimeLeft;
             pauseMeta.text = $"Town arena          {mnet.Roster.Count} / 8 players" +
-                (string.IsNullOrEmpty(code) ? "          LAN game" : $"          Code <color={Html(Accent)}>{code}</color>");
+                (string.IsNullOrEmpty(code) ? "          LAN game" : $"          Code <color={Html(Accent)}>{code}</color>") +
+                (timeLeft >= 0f ? $"          <color={Html(ClockColor(timeLeft))}>{MatchNet.FormatClock(timeLeft)}</color> left" : "");
         }
 
         void UpdateResults(MatchNet mnet)
@@ -534,20 +558,31 @@ namespace AirsoftFPS
             ulong me = nm != null ? nm.LocalClientId : 0;
             var mode = mnet.Mode;
             bool tdm = mode == MatchNet.GameModeType.TeamDeathmatch;
-            resMode.text = ModeName(mode).ToUpperInvariant() + " · MATCH OVER";
-            if (tdm && mnet.WinnerTeam != 0)
+            bool onTime = mnet.EndedOnTime;
+            resMode.text = ModeName(mode).ToUpperInvariant() + (onTime ? " · TIME'S UP" : " · MATCH OVER");
+            if (mnet.IsDraw)
+            {
+                resWinner.text = "DRAW";
+                resBanner.color = Muted;
+                resSub.text = tdm ? $"{mnet.TeamScore(1)} : {mnet.TeamScore(2)} · time's up, scores level"
+                                  : "time's up · tied for first place";
+            }
+            else if (tdm && mnet.WinnerTeam != 0)
             {
                 resWinner.text = mnet.WinnerTeam == 1 ? "RED TEAM WINS" : "BLUE TEAM WINS";
                 resBanner.color = TeamColor(mnet.WinnerTeam);
-                resSub.text = $"{mnet.TeamScore(1)} : {mnet.TeamScore(2)} · first team to {MatchNet.TDM_KILL_TARGET}";
+                resSub.text = $"{mnet.TeamScore(1)} : {mnet.TeamScore(2)} · " +
+                              (onTime ? "higher score when time ran out" : $"first team to {MatchNet.TDM_KILL_TARGET}");
             }
             else
             {
                 string w = mnet.WinnerClientId == ulong.MaxValue ? "NOBODY" : mnet.NameFor(mnet.WinnerClientId).ToUpperInvariant();
                 resWinner.text = mnet.WinnerClientId == me ? "YOU WIN" : w + " WINS";
                 resBanner.color = Accent;
-                resSub.text = mode == MatchNet.GameModeType.GunGame ? "finished all " + MatchNet.GUNGAME_WEAPONS + " weapons"
-                                                                    : "first to " + MatchNet.FFA_KILL_TARGET + " kills";
+                bool gg = mode == MatchNet.GameModeType.GunGame;
+                resSub.text = onTime ? (gg ? "time's up · furthest weapon" : "time's up · most kills")
+                            : gg ? "finished all " + MatchNet.GUNGAME_WEAPONS + " weapons"
+                                 : "first to " + MatchNet.FFA_KILL_TARGET + " kills";
             }
 
             var list = new List<MatchNet.Entry>(mnet.Roster);
@@ -698,7 +733,7 @@ namespace AirsoftFPS
 
             // top-center widget
             var top = VCol(root, "TopCenter", 6, TextAnchor.UpperCenter, false);
-            top.GetComponent<RectTransform>().At(0.5f, 1f, 0, -18, 600, 100);
+            top.GetComponent<RectTransform>().At(0.5f, 1f, 0, -18, 600, 140);
 
             tdmWidget = VCol(top.transform, "TDM", 6, TextAnchor.UpperCenter, false).gameObject;
             var tdmRow = HRow(tdmWidget.transform, "Score", 0);
@@ -752,6 +787,17 @@ namespace AirsoftFPS
             var left = HRow(coop, "Left", 6, TextAnchor.LowerLeft);
             coopLeftNum = Label(left.transform, "0", F.CondBold, 22, Accent, TextAlignmentOptions.BottomLeft);
             Label(left.transform, "enemies left", F.Body, 14, Fg, TextAlignmentOptions.BottomLeft).margin = new Vector4(0, 0, 0, 3);
+
+            // match clock under the mode widget (hidden when there is no time limit)
+            var clock = ScrimRow(top.transform, "Clock", 8, new RectOffset(12, 12, 4, 4), 0.78f);
+            clockChip = clock.gameObject;
+            clockFrame = Frame(clock, Accent, 1f);
+            clockFrame.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            clockCaption = Label(clock, "TIME", F.BodyBold, 11, Muted, TextAlignmentOptions.MidlineLeft, 0.14f);
+            clockText = Label(clock, "00:00", F.MonoBold, 18, Fg);
+            clockFrame.transform.SetAsLastSibling();
+            clockFrame.enabled = false;
+            clockChip.SetActive(false);
 
             // top-right kill feed
             var feed = VCol(root, "KillFeed", 4, TextAnchor.UpperRight, false);
