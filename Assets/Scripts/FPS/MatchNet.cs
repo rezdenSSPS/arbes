@@ -7,7 +7,7 @@ using UnityEngine.SceneManagement;
 
 namespace AirsoftFPS
 {
-    // Lobby + match director. Self-bootstrapping singleton (like NetDiag/AutoConnect)
+    // Lobby + match director. Self-bootstrapping singleton (like AutoConnect)
     // so it needs no scene wiring and survives the lobby -> arena scene load.
     //
     // Networking uses the NetworkManager's CustomMessagingManager, which works

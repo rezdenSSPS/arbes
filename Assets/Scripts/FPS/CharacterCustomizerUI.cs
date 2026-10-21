@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.EventSystems;
 using TMPro;
+using Unity.Netcode;
 
 namespace AirsoftFPS
 {
@@ -22,6 +23,8 @@ namespace AirsoftFPS
         ArbesLook.Avatar avatar;
         float spin = 160f;
         bool dragging;
+        GameObject canvasRoot;
+        bool shown = true;
         readonly System.Collections.Generic.List<(TextMeshProUGUI txt, System.Func<string> get)> rows = new();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -49,6 +52,7 @@ namespace AirsoftFPS
             BuildStage();
             BuildUI();
             RebuildAvatar();
+            SetShown(InLobby());
         }
 
         // ───────────── 3D preview ─────────────
@@ -114,8 +118,26 @@ namespace AirsoftFPS
             if (avatar != null) ArbesLook.SetLayer(avatar.root, PreviewLayer);
         }
 
+        // Only visible once the player is in a lobby (hosting or connected), not on the connect screen.
+        static bool InLobby()
+        {
+            var nm = NetworkManager.Singleton;
+            if (nm == null) return false;
+            return nm.IsServer || nm.IsConnectedClient;
+        }
+
+        void SetShown(bool on)
+        {
+            shown = on;
+            if (canvasRoot) canvasRoot.SetActive(on);
+            if (previewCam) previewCam.enabled = on;
+        }
+
         void Update()
         {
+            bool want = InLobby();
+            if (want != shown) SetShown(want);
+            if (!shown) return;
             if (stage == null) return;
             var turn = stage.Find("Turntable");
             if (turn)
@@ -141,6 +163,7 @@ namespace AirsoftFPS
             }
 
             var canvasGo = new GameObject("CustomizerCanvas");
+            canvasRoot = canvasGo;
             canvasGo.transform.SetParent(transform, false);
             var canvas = canvasGo.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
