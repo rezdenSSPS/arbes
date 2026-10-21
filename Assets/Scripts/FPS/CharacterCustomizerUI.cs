@@ -7,8 +7,8 @@ using static AirsoftFPS.UIKit;
 
 namespace AirsoftFPS
 {
-    // Character editor: full-screen modal with a live 3D preview, steppers for body
-    // and hat, and colour swatch rows. Builds itself whenever the AirsoftLobby scene
+    // Character editor: full-screen modal with a live 3D preview, steppers for body,
+    // hat and eyewear, and colour swatch rows. Builds itself whenever the AirsoftLobby scene
     // is loaded; the lobby screen shows the same 3D preview (PreviewTexture). The
     // chosen look is saved locally and synced to everyone via MatchNet.
     public class CharacterCustomizerUI : MonoBehaviour
@@ -241,6 +241,8 @@ namespace AirsoftFPS
             Stepper(col.transform, "HAT", () => AirsoftLook.Hats[look.hat], () => look.hat, AirsoftLook.Hats.Length,
                 d => look.hat = Wrap(look.hat + d, AirsoftLook.Hats.Length));
             Swatches(col.transform, "HAT COLOR", AirsoftLook.PaletteNames, AirsoftLook.Palette, () => look.hatColor, i => look.hatColor = i);
+            Stepper(col.transform, "EYEWEAR", () => AirsoftLook.Eyewear[look.eyewear], () => look.eyewear, AirsoftLook.Eyewear.Length,
+                d => look.eyewear = Wrap(look.eyewear + d, AirsoftLook.Eyewear.Length));
             Swatches(col.transform, "SHIRT", AirsoftLook.PaletteNames, AirsoftLook.Palette, () => look.shirt, i => look.shirt = i);
             Swatches(col.transform, "PANTS", AirsoftLook.PaletteNames, AirsoftLook.Palette, () => look.pants, i => look.pants = i);
             Swatches(col.transform, "SKIN", AirsoftLook.SkinNames, AirsoftLook.SkinTones, () => look.skin, i => look.skin = i);
@@ -249,7 +251,7 @@ namespace AirsoftFPS
             Spacer(col.transform);
             var foot = Rect(col.transform, "Footer").LE(-1, 67);
             Box(foot, "Line", Line).rectTransform.At(0.5f, 1f, 0, 0, 624, 1);
-            var note = Label(foot, "Saved on this computer and shown to all players. In Team Deathmatch your shirt takes the team color.",
+            var note = Label(foot, "Saved on this computer and shown to all players. In Team Deathmatch you wear team armbands.",
                 F.Body, 13, Muted).Wrap();
             note.rectTransform.Fill(0, 19, 260, 0);
             var save = Button(foot, "SAVE", Btn.Primary, 19, () => Close(true), F.CondBlack, 12);
