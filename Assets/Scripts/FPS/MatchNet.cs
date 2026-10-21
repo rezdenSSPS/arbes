@@ -51,6 +51,7 @@ namespace AirsoftFPS
         const string MSG_STATE = "mn_state";  // server -> clients
         const string MSG_KILL  = "mn_kill";   // server -> clients (kill feed)
         const string MSG_LOOK  = "mn_look";   // client -> server (character look)
+        const string MSG_DEATH = "mn_death";  // server -> the victim only (killcam + death screen)
 
         // Shared view (valid on everyone; authoritative copy lives on the server)
         public GameModeType Mode { get; private set; } = GameModeType.Coop;
@@ -70,6 +71,24 @@ namespace AirsoftFPS
         // Raised on everyone when a kill happens: (killerName, victimName, weapon).
         // killerName is empty for a non-PvP death (enemy / suicide).
         public event Action<string,string,string> OnKillFeed;
+
+        // Who eliminated the local player, as the server saw it. Sent only to the victim.
+        public enum KillerKind : byte { None = 0, Player = 1, Enemy = 2 }
+        public struct DeathInfo
+        {
+            public KillerKind kind;
+            public ulong killerClientId;   // ulong.MaxValue for AI enemies / none
+            public ulong killerObjectId;   // NetworkObjectId of the killer (players and AI)
+            public string killerName, weapon;
+            public int killerHp, killerMaxHp;   // killer's health at the moment of the kill (-1 = unknown)
+            public int killerTeam;
+            public Vector3 killerPos;      // fallback look-at point if the killer object is gone
+            public float time;             // local Time.unscaledTime when it arrived
+        }
+
+        public DeathInfo LastDeath { get; private set; }
+        // Raised on the victim's machine only, when the server reports the local player's death.
+        public event Action<DeathInfo> OnLocalDeath;
 
         readonly List<Entry> roster = new List<Entry>();
 
@@ -273,8 +292,9 @@ namespace AirsoftFPS
 
         // ───────────────────────── Server-side match logic ─────────────────────────
 
-        // Called by Health on the server when a player dies.
-        public void ReportKill(ulong victimClientId, ulong killerClientId, string weapon)
+        // Called by Health on the server when a player dies. killerObject is whoever dealt the
+        // last hit if known (AI enemies pass themselves; players are looked up by client id).
+        public void ReportKill(ulong victimClientId, ulong killerClientId, string weapon, NetworkObject killerObject = null)
         {
             if (nm == null || !nm.IsServer) return;
 
@@ -284,6 +304,7 @@ namespace AirsoftFPS
             bool scored = pvpMode && killerClientId != victimClientId && HasEntry(killerClientId) && !teamKill;
             string killerName = scored ? NameFor(killerClientId) : "";
             RaiseKill(killerName, NameFor(victimClientId), weapon ?? "");
+            SendDeathInfo(victimClientId, killerClientId, weapon, killerObject);
 
             bool changed = false;
             for (int i = 0; i < roster.Count; i++)
@@ -421,6 +442,7 @@ namespace AirsoftFPS
             if (clientHandlersUp || nm == null) return;
             nm.CustomMessagingManager.RegisterNamedMessageHandler(MSG_STATE, OnClientRecvState);
             nm.CustomMessagingManager.RegisterNamedMessageHandler(MSG_KILL, OnClientRecvKill);
+            nm.CustomMessagingManager.RegisterNamedMessageHandler(MSG_DEATH, OnClientRecvDeath);
             clientHandlersUp = true;
         }
 
@@ -459,6 +481,7 @@ namespace AirsoftFPS
             IsDraw = false;
             EndedOnTime = false;
             MatchEndTime = 0;
+            LastDeath = default;
             serverHandlersUp = false;
             clientHandlersUp = false;
             OnStateChanged?.Invoke();
@@ -590,6 +613,68 @@ namespace AirsoftFPS
             reader.ReadValueSafe(out string victim);
             reader.ReadValueSafe(out string weapon);
             OnKillFeed?.Invoke(killer, victim, weapon);
+        }
+
+        // Server: tell the victim who eliminated them. Everything comes from the server's own
+        // hit record (Health.TakeDamage), so a client can't fake its killer or the killer's HP.
+        void SendDeathInfo(ulong victim, ulong killer, string weapon, NetworkObject killerObj)
+        {
+            if (killerObj == null && killer != victim && HasEntry(killer)
+                && nm.ConnectedClients.TryGetValue(killer, out var client))
+                killerObj = client.PlayerObject;
+
+            var info = new DeathInfo { kind = KillerKind.None, killerClientId = ulong.MaxValue, killerName = "",
+                                       weapon = weapon ?? "", killerHp = -1, killerMaxHp = -1 };
+            var kh = killerObj != null && killerObj.IsSpawned ? killerObj.GetComponent<Health>() : null;
+            bool player = kh != null && kh.isPlayer;
+            if (kh != null && !(player && killerObj.OwnerClientId == victim))
+            {
+                info.kind = player ? KillerKind.Player : KillerKind.Enemy;
+                info.killerClientId = player ? killerObj.OwnerClientId : ulong.MaxValue;
+                info.killerObjectId = killerObj.NetworkObjectId;
+                info.killerName = player ? NameFor(killerObj.OwnerClientId) : "Enemy soldier";
+                info.killerTeam = player && Mode == GameModeType.TeamDeathmatch ? TeamOf(killerObj.OwnerClientId) : 0;
+                info.killerHp = kh.currentHealth.Value;
+                info.killerMaxHp = kh.maxHealth;
+                info.killerPos = killerObj.transform.position;
+            }
+
+            if (victim == nm.LocalClientId) { ApplyDeathInfo(info); return; }   // host died
+            using var w = new FastBufferWriter(256, Allocator.Temp, 4096);
+            w.WriteValueSafe((byte)info.kind);
+            w.WriteValueSafe(info.killerClientId);
+            w.WriteValueSafe(info.killerObjectId);
+            w.WriteValueSafe(info.killerName);
+            w.WriteValueSafe(info.weapon);
+            w.WriteValueSafe(info.killerHp);
+            w.WriteValueSafe(info.killerMaxHp);
+            w.WriteValueSafe(info.killerTeam);
+            w.WriteValueSafe(info.killerPos);
+            nm.CustomMessagingManager.SendNamedMessage(MSG_DEATH, victim, w, NetworkDelivery.Reliable);
+        }
+
+        void OnClientRecvDeath(ulong sender, FastBufferReader reader)
+        {
+            if (nm == null || nm.IsServer || sender != NetworkManager.ServerClientId) return;
+            var info = new DeathInfo();
+            reader.ReadValueSafe(out byte kind);
+            info.kind = (KillerKind)kind;
+            reader.ReadValueSafe(out info.killerClientId);
+            reader.ReadValueSafe(out info.killerObjectId);
+            reader.ReadValueSafe(out info.killerName);
+            reader.ReadValueSafe(out info.weapon);
+            reader.ReadValueSafe(out info.killerHp);
+            reader.ReadValueSafe(out info.killerMaxHp);
+            reader.ReadValueSafe(out info.killerTeam);
+            reader.ReadValueSafe(out info.killerPos);
+            ApplyDeathInfo(info);
+        }
+
+        void ApplyDeathInfo(DeathInfo info)
+        {
+            info.time = Time.unscaledTime;
+            LastDeath = info;
+            OnLocalDeath?.Invoke(info);
         }
 
         public int TeamOf(ulong clientId)

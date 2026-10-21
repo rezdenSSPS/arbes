@@ -186,7 +186,7 @@ namespace AirsoftFPS
             {
                 var targetHealth = hit.collider.GetComponentInParent<Health>();
                 if (targetHealth != null && targetHealth.isPlayer && !targetHealth.isDead.Value)
-                    targetHealth.TakeDamage(damage, 0);
+                    targetHealth.TakeDamage(damage, 0, "", NetworkObject);
             }
 
             ShootEffectRpc();

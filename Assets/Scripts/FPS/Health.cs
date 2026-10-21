@@ -24,6 +24,7 @@ namespace AirsoftFPS
 
         ulong lastAttackerClientId;
         string lastAttackerWeapon = "";
+        NetworkObject lastAttackerObject;   // who dealt the last hit (AI enemies pass themselves), for the killcam
         Transform[] spawnPoints;
 
         public override void OnNetworkSpawn()
@@ -48,13 +49,14 @@ namespace AirsoftFPS
 
         public void TakeDamage(int amount, ulong attackerClientId) => TakeDamage(amount, attackerClientId, "");
 
-        public void TakeDamage(int amount, ulong attackerClientId, string weapon)
+        public void TakeDamage(int amount, ulong attackerClientId, string weapon, NetworkObject attackerObject = null)
         {
             if (!IsServer) return;
             if (isDead.Value) return;
 
             lastAttackerClientId = attackerClientId;
             lastAttackerWeapon = weapon;
+            lastAttackerObject = attackerObject;
             currentHealth.Value = Mathf.Max(0, currentHealth.Value - amount);
 
             if (currentHealth.Value <= 0)
@@ -69,7 +71,7 @@ namespace AirsoftFPS
             if (isPlayer)
             {
                 // Tell the match director who died (and who got the kill, for FFA scoring)
-                MatchNet.Instance?.ReportKill(OwnerClientId, lastAttackerClientId, lastAttackerWeapon);
+                MatchNet.Instance?.ReportKill(OwnerClientId, lastAttackerClientId, lastAttackerWeapon, lastAttackerObject);
                 // Respawn after delay
                 Invoke(nameof(Respawn), respawnDelay);
             }

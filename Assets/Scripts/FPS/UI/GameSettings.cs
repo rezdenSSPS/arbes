@@ -31,6 +31,9 @@ namespace AirsoftFPS
         public static int CrosshairSize;      // arm length in px, 6 – 24
         public static bool ShowHitMarker;
         public static bool ShowHealthBars;
+        public static bool Killcam;           // look at your killer for ~2 s before the death screen
+        public static bool ShowMinimap;
+        public static bool MinimapRotate;     // true = map turns with you (you face up), false = north up
 
         public static readonly string[] CrosshairColorNames = { "White", "Blaze", "Green", "Cyan", "Yellow" };
         public static readonly Color[] CrosshairColors =
@@ -85,6 +88,9 @@ namespace AirsoftFPS
             CrosshairSize  = PlayerPrefs.GetInt(P + "XSize", 12);
             ShowHitMarker  = PlayerPrefs.GetInt(P + "HitMarker", 1) == 1;
             ShowHealthBars = PlayerPrefs.GetInt(P + "HealthBars", 1) == 1;
+            Killcam        = PlayerPrefs.GetInt(P + "Killcam", 1) == 1;
+            ShowMinimap    = PlayerPrefs.GetInt(P + "Minimap", 1) == 1;
+            MinimapRotate  = PlayerPrefs.GetInt(P + "MinimapRotate", 1) == 1;
             Clamp();
         }
 
@@ -123,6 +129,9 @@ namespace AirsoftFPS
             PlayerPrefs.SetInt(P + "XSize", CrosshairSize);
             PlayerPrefs.SetInt(P + "HitMarker", ShowHitMarker ? 1 : 0);
             PlayerPrefs.SetInt(P + "HealthBars", ShowHealthBars ? 1 : 0);
+            PlayerPrefs.SetInt(P + "Killcam", Killcam ? 1 : 0);
+            PlayerPrefs.SetInt(P + "Minimap", ShowMinimap ? 1 : 0);
+            PlayerPrefs.SetInt(P + "MinimapRotate", MinimapRotate ? 1 : 0);
             PlayerPrefs.Save();
             Apply();
         }
@@ -131,7 +140,7 @@ namespace AirsoftFPS
         {
             foreach (var k in new[] { "Sens", "ScopedSens", "InvertY", "ToggleCrouch", "Fov", "ResW", "ResH", "Fullscreen",
                          "VSync", "Quality", "PostFx", "ShowFps", "VolMaster", "VolSfx", "VolMusic", "VolVoice",
-                         "XColor", "XSize", "HitMarker", "HealthBars" })
+                         "XColor", "XSize", "HitMarker", "HealthBars", "Killcam", "Minimap", "MinimapRotate" })
                 PlayerPrefs.DeleteKey(P + k);
             Load();
         }
