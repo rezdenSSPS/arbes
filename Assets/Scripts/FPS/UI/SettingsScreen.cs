@@ -200,6 +200,7 @@ namespace AirsoftFPS
                 v => { GameSettings.CrosshairSize = Mathf.RoundToInt(v); RefreshAll(); }, v => Mathf.RoundToInt(v) + " px");
             Check(c1, "Show hit marker", () => GameSettings.ShowHitMarker, v => GameSettings.ShowHitMarker = v);
             Check(c1, "Show enemy health bars", () => GameSettings.ShowHealthBars, v => GameSettings.ShowHealthBars = v);
+            Check(c1, "Killcam (look at who eliminated you)", () => GameSettings.Killcam, v => GameSettings.Killcam = v);
 
             // live preview
             var prev = Box(pane, "Preview", Hex("#4F5A62"));
@@ -208,6 +209,17 @@ namespace AirsoftFPS
             var cross = Rect(prev.transform, "Crosshair").At(0.5f, 0.5f, 0, 0, 80, 80);
             var arms = CrosshairArms(cross);
             refreshers.Add(() => LayoutCrosshair(arms, GameSettings.CrosshairSize, GameSettings.CrosshairTint));
+
+            // minimap, under the preview
+            var mm = VCol(pane, "Minimap", 18);
+            mm.GetComponent<RectTransform>().TL(600, 326, 552, 154);
+            Check(mm.transform, "Show minimap", () => GameSettings.ShowMinimap, v => GameSettings.ShowMinimap = v);
+            var orient = VCol(mm.transform, "Orientation", 10);
+            Label(orient.transform, "Minimap orientation", F.Body, 16, Fg).LE(-1, 22);
+            var holder = HRow(orient.transform, "SegHolder", 0);
+            var seg = Segments(holder.transform, new[] { "ROTATING", "NORTH UP" }, GameSettings.MinimapRotate ? 0 : 1, 40, 15,
+                i => GameSettings.MinimapRotate = i == 0);
+            refreshers.Add(() => seg.Select(GameSettings.MinimapRotate ? 0 : 1, false));
             return pane.gameObject;
         }
 

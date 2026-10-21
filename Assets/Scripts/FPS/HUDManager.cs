@@ -9,8 +9,8 @@ using static AirsoftFPS.UIKit;
 namespace AirsoftFPS
 {
     // In-match UI, built in code with UIKit: HUD (health, ammo, weapon slots,
-    // crosshair, hit marker, kill feed, per-mode top widget), scoreboard (Tab),
-    // death screen, pause (Esc) and the end-of-match results.
+    // crosshair, hit marker, kill feed, per-mode top widget, minimap), scoreboard (Tab),
+    // killcam + death screen, pause (Esc) and the end-of-match results.
     public class HUDManager : MonoBehaviour
     {
         // Old scene-wired HUD. Kept so existing scenes still load; hidden at runtime.
@@ -56,8 +56,9 @@ namespace AirsoftFPS
 
         // ───────── built UI ─────────
         Canvas canvas;
-        GameObject hudRoot, scoreboard, deathScreen, pauseScreen, resultsScreen;
+        GameObject hudRoot, scoreboard, deathScreen, killcamScreen, pauseScreen, resultsScreen;
         SettingsScreen settings;
+        KillCam killCam;
 
         // HUD widgets
         GameObject codeChip;
@@ -94,8 +95,13 @@ namespace AirsoftFPS
 
         // death
         Image deathSwatch;
-        TextMeshProUGUI deathBy, deathSeconds;
+        TextMeshProUGUI deathBy, deathHp, deathSeconds;
         Image deathFill;
+
+        // killcam overlay
+        Image kcSwatch, kcFill;
+        TextMeshProUGUI kcBy, kcHp, kcSeconds;
+        GameObject kcHpBlock;
 
         // pause
         TextMeshProUGUI pauseMode, pauseScore, pauseMeta;
@@ -222,11 +228,13 @@ namespace AirsoftFPS
             if (dead && deathTime < 0f) deathTime = Time.unscaledTime;
             if (!dead) deathTime = -1f;
             bool showScores = kb != null && kb.tabKey.isPressed && mnet != null && !results && !isPaused;
+            bool killcam = dead && killCam != null && killCam.Playing;
 
-            hudRoot.SetActive(!results && !isPaused);
+            hudRoot.SetActive(!results && !isPaused && !killcam);
             resultsScreen.SetActive(results);
             pauseScreen.SetActive(isPaused && !results);
-            deathScreen.SetActive(dead && !results && !isPaused && !showScores);
+            deathScreen.SetActive(dead && !killcam && !results && !isPaused && !showScores);
+            killcamScreen.SetActive(killcam && !results && !isPaused && !showScores);
             scoreboard.SetActive(showScores);
 
             InputBlocked = isPaused || results || settings.IsOpen;
@@ -237,7 +245,7 @@ namespace AirsoftFPS
             if (!results) UpdateHud(mnet, dead);
             if (showScores) { sbTimer -= Time.unscaledDeltaTime; if (sbTimer <= 0f) { sbTimer = 0.2f; UpdateScoreboard(mnet); } }
             else sbTimer = 0f;
-            if (dead && !results) UpdateDeath();
+            if (dead && !results) UpdateDeath(killcam);
             if (isPaused) UpdatePause(mnet);
             if (results) UpdateResults(mnet);
         }
@@ -508,18 +516,41 @@ namespace AirsoftFPS
             _ => "survive the waves together"
         };
 
-        void UpdateDeath()
+        void UpdateDeath(bool killcam)
         {
             float delay = playerHealth != null ? playerHealth.respawnDelay : 3f;
             float left = Mathf.Max(0f, delay - (Time.unscaledTime - deathTime));
             deathSeconds.text = Mathf.CeilToInt(left).ToString();
             SetBar(deathFill, 1f - left / Mathf.Max(0.01f, delay));
-            bool pvp = !string.IsNullOrEmpty(lastKiller);
-            deathSwatch.color = pvp ? (lastKillerTeam != 0 ? TeamColor(lastKillerTeam) : Red) : DangerLine;
-            deathBy.text = pvp
-                ? $"<color={Html(lastKillerTeam != 0 ? TeamColor(lastKillerTeam) : Red)}>{lastKiller}</color>" +
-                  (string.IsNullOrEmpty(lastKillerWeapon) ? "" : $" <size=20><color={Html(Accent)}>· {lastKillerWeapon}</color></size>")
+
+            // Who: the server's report of this death (sent only to us) if it arrived, else the kill feed.
+            var mnet = MatchNet.Instance;
+            var info = mnet != null ? mnet.LastDeath : default;
+            bool fresh = info.time > 0f && info.time >= deathTime - 1f && info.kind != MatchNet.KillerKind.None;
+            string killer = fresh ? info.killerName : lastKiller;
+            string weapon = fresh ? info.weapon : lastKillerWeapon;
+            int team = fresh ? info.killerTeam : lastKillerTeam;
+            bool known = !string.IsNullOrEmpty(killer);
+            Color c = team != 0 ? TeamColor(team) : Red;
+            string by = known
+                ? $"<color={Html(c)}>{killer}</color>" +
+                  (string.IsNullOrEmpty(weapon) ? "" : $" <size=20><color={Html(Accent)}>· {weapon}</color></size>")
                 : "Enemy fire";
+            bool hasHp = fresh && info.killerHp >= 0 && info.killerMaxHp > 0;
+            string hp = hasHp ? $"<color={Html(Fg)}>{info.killerHp}</color> / {info.killerMaxHp} HP left" : "";
+
+            deathSwatch.color = known ? c : DangerLine;
+            deathBy.text = by;
+            deathHp.text = hp;
+            deathHp.gameObject.SetActive(hasHp);
+
+            if (!killcam) return;
+            kcSwatch.color = known ? c : DangerLine;
+            kcBy.text = by;
+            kcHpBlock.SetActive(hasHp);
+            if (hasHp) kcHp.text = $"{info.killerHp}<size=16><color={Html(Muted)}> / {info.killerMaxHp}</color></size>";
+            kcSeconds.text = "Respawning in " + Mathf.CeilToInt(left);
+            SetBar(kcFill, killCam.Progress);
         }
 
         void UpdatePause(MatchNet mnet)
@@ -687,11 +718,14 @@ namespace AirsoftFPS
             hudRoot = Rect(root, "HUD").Fill().gameObject;
             BuildHud(hudRoot.transform);
             deathScreen = BuildDeath(root);
+            killcamScreen = BuildKillcam(root);
             scoreboard = BuildScoreboard(root);
             pauseScreen = BuildPause(root);
             resultsScreen = BuildResults(root);
             settings = SettingsScreen.Create(root, null);
-            deathScreen.SetActive(false); scoreboard.SetActive(false); pauseScreen.SetActive(false); resultsScreen.SetActive(false);
+            deathScreen.SetActive(false); killcamScreen.SetActive(false);
+            scoreboard.SetActive(false); pauseScreen.SetActive(false); resultsScreen.SetActive(false);
+            killCam = gameObject.AddComponent<KillCam>();
         }
 
         static RectTransform ScrimRow(Transform parent, string name, float spacing, RectOffset pad, float alpha = 0.72f)
@@ -713,7 +747,7 @@ namespace AirsoftFPS
 
             // top-left: join code + fps
             var tl = VCol(root, "TopLeft", 6, TextAnchor.UpperLeft, false);
-            tl.GetComponent<RectTransform>().At(0f, 1f, 24, -20, 400, 80);
+            tl.GetComponent<RectTransform>().At(0f, 1f, 24, -20, 400, 260);
             var chip = ScrimRow(tl.transform, "Code", 10, new RectOffset(10, 10, 6, 6));
             Label(chip, "CODE", F.BodyBold, 12, Muted, TextAlignmentOptions.MidlineLeft, 0.14f);
             codeValue = Label(chip, "", F.MonoBold, 12, Accent, TextAlignmentOptions.MidlineLeft, 0.16f);
@@ -730,6 +764,7 @@ namespace AirsoftFPS
             codeChip = chip.gameObject;
             fpsText = Label(tl.transform, "", F.MonoBold, 12, Ready);
             fpsText.LE(-1, 16);
+            Minimap.Create(tl.transform);   // under the code chip, clear of kill feed / health / ammo
 
             // top-center widget
             var top = VCol(root, "TopCenter", 6, TextAnchor.UpperCenter, false);
@@ -907,6 +942,7 @@ namespace AirsoftFPS
             var byCol = VCol(card.transform, "Text", 2, TextAnchor.MiddleLeft, false);
             Label(byCol.transform, "ELIMINATED BY", F.BodyBold, 11, Muted, TextAlignmentOptions.MidlineLeft, 0.14f);
             deathBy = Label(byCol.transform, "", F.CondBold, 28, Fg);
+            deathHp = Label(byCol.transform, "", F.Body, 14, Muted);
 
             var resp = VCol(col.transform, "Respawn", 12, TextAnchor.MiddleCenter, true);
             resp.LE(360, -1);
@@ -922,6 +958,53 @@ namespace AirsoftFPS
             KeyCap(tab.transform, "TAB", 11);
             Label(tab.transform, "scoreboard", F.Body, 13, TextSoft);
             return screen.gameObject;
+        }
+
+        // Cinematic bands while the killcam watches the killer (the full death screen follows).
+        GameObject BuildKillcam(Transform root)
+        {
+            var screen = Rect(root, "Killcam").Fill();
+            var top = Band(screen, "Top", true, 52);
+            var tag = HRow(top, "Tag", 10, TextAnchor.MiddleLeft);
+            tag.GetComponent<RectTransform>().At(0f, 0.5f, 24, 0, 500, 30);
+            var badge = HRow(tag.transform, "Badge", 0, TextAnchor.MiddleCenter);
+            badge.padding = new RectOffset(10, 10, 3, 3);
+            badge.gameObject.AddComponent<Image>().color = Accent;
+            Label(badge.transform, "KILLCAM", F.CondBold, 15, Ground, TextAlignmentOptions.Center, 0.12f);
+            Label(tag.transform, "watching who got you", F.Body, 14, TextSoft);
+            kcSeconds = Label(top, "", F.BodySemi, 14, TextSoft, TextAlignmentOptions.MidlineRight);
+            kcSeconds.rectTransform.At(1f, 0.5f, -24, 0, 300, 30);
+            kcFill = Bar(top, "Progress", A(Line, 0.6f), Accent);
+            var bar = kcFill.transform.parent.GetComponent<RectTransform>();
+            bar.anchorMin = Vector2.zero; bar.anchorMax = new Vector2(1f, 0f); bar.pivot = new Vector2(0.5f, 0f);
+            bar.sizeDelta = new Vector2(0, 3); bar.anchoredPosition = Vector2.zero;
+
+            var bottom = Band(screen, "Bottom", false, 96);
+            var card = HRow(bottom, "By", 18, TextAnchor.MiddleCenter);
+            card.GetComponent<RectTransform>().Fill();
+            kcSwatch = Box(card.transform, "Swatch", Red);
+            kcSwatch.LE(36, 36);
+            var byCol = VCol(card.transform, "Text", 2, TextAnchor.MiddleLeft, false);
+            Label(byCol.transform, "ELIMINATED BY", F.BodyBold, 11, Muted, TextAlignmentOptions.MidlineLeft, 0.14f);
+            kcBy = Label(byCol.transform, "", F.CondBold, 28, Fg);
+            var hpGroup = HRow(card.transform, "HpGroup", 18, TextAnchor.MiddleLeft);
+            kcHpBlock = hpGroup.gameObject;
+            Box(hpGroup.transform, "Sep", LineStrong).LE(1, 40);
+            var hpCol = VCol(hpGroup.transform, "Hp", 2, TextAnchor.MiddleLeft, false);
+            Label(hpCol.transform, "THEIR HP", F.BodyBold, 11, Muted, TextAlignmentOptions.MidlineLeft, 0.14f);
+            kcHp = Label(hpCol.transform, "", F.CondBlack, 28, Fg);
+            return screen.gameObject;
+        }
+
+        static RectTransform Band(Transform parent, string name, bool top, float height)
+        {
+            var rt = Box(parent, name, A(Ground, 0.86f)).rectTransform;
+            rt.anchorMin = new Vector2(0f, top ? 1f : 0f);
+            rt.anchorMax = new Vector2(1f, top ? 1f : 0f);
+            rt.pivot = new Vector2(0.5f, top ? 1f : 0f);
+            rt.sizeDelta = new Vector2(0f, height);
+            rt.anchoredPosition = Vector2.zero;
+            return rt;
         }
 
         GameObject BuildScoreboard(Transform root)
