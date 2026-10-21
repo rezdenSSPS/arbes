@@ -45,7 +45,6 @@ namespace AirsoftFPS
         Vector3 recoilPos;       // current positional kick
         Vector3 recoilRot;       // current rotational kick (euler degrees)
         float switchLower;       // 1 = fully lowered (just switched), lerps to 0
-        Vector3 lastTracerStart, lastTracerEnd;  // for replicating the shot to others
         float reloadLerp;        // smoothed reload dip
         float bobTimer;
         bool haveRest;
@@ -60,8 +59,10 @@ namespace AirsoftFPS
         bool[] hasModel;
 
         // ───── Server-authoritative hit validation ─────
-        // The owner raycasts locally for responsiveness and only reports *what* it hit;
+        // The owner flies its BBs locally for responsiveness and only reports *what* they hit;
         // the server decides damage (from its own WeaponData) and rejects impossible hits.
+        // Every trigger pull is announced first (ShootRpc: origin, direction, weapon, seed), so the
+        // server can re-fly the same BBs and check a reported hit against their real path and timing.
         const float FIRE_RATE_TOLERANCE = 0.1f;   // allow 10% faster than fireRate (clock/jitter)
         const float SHOT_BURST_WINDOW = 0.2f;     // seconds of shots that may arrive bunched up by jitter
         const float SWITCH_GRACE = 0.75f;         // old weapon still accepted this long after a switch (RTT)
@@ -69,10 +70,26 @@ namespace AirsoftFPS
         const float TARGET_TOLERANCE = 3f;        // reported hit point vs server's view of the target's colliders
         const float RANGE_TOLERANCE = 0.5f;
         const float LOS_END_MARGIN = 0.3f;        // ignore geometry this close to either end of a LOS ray
+        const float PATH_TOLERANCE = 0.6f;        // hit point vs the server's re-flown BB path
+        const float TOF_TOLERANCE = 0.25f;        // a hit may arrive this much sooner than the BB's flight time (jitter)
+        const float LATE_TOLERANCE = 1.5f;        // ... and this much after the longest possible flight (lag spikes)
+        const int SHOT_HISTORY = 64;              // shots remembered for validation (> fireRate * MAX_FLIGHT_TIME)
+
+        struct ShotRecord
+        {
+            public int seq;          // 0 = empty slot
+            public bool valid;       // passed the fire-time checks
+            public int weapon;
+            public Vector3 origin, dir;
+            public uint seed;
+            public bool aimed;
+            public float time;       // server receive time (Time.unscaledTime)
+            public int usedPellets;  // bitmask of pellets that already scored
+        }
 
         int localShotSeq;                 // owner: one id per trigger pull (all pellets share it)
         int svLastShot;                   // server: last shot id seen from this shooter
-        int svPelletsLeft;                // server: hits still allowed for svLastShot
+        readonly ShotRecord[] svShots = new ShotRecord[SHOT_HISTORY];
         float svShotTokens = -1f;         // server: fire-rate token bucket (-1 = full on first use)
         float svTokenTime;
         int svPrevWeapon = -1;            // server: weapon before the last switch, for SWITCH_GRACE
@@ -81,7 +98,6 @@ namespace AirsoftFPS
 
         static readonly RaycastHit[] s_losHits = new RaycastHit[16];
 
-        static Material s_tracerMat;
         static Material s_glowMat;
 
         public WeaponData CurrentWeapon => weapons != null && currentIndex < weapons.Length ? weapons[currentIndex] : null;
@@ -421,9 +437,7 @@ namespace AirsoftFPS
                 magAmmos[currentIndex] = ammoInMag;
                 NotifyAmmo();
 
-                localShotSeq++;
-                for (int p = 0; p < w.pelletsPerShot; p++)
-                    FireRaycast(w);
+                FireBBs(w);
 
                 // Camera recoil (player look kicks up)
                 if (fpsController)
@@ -431,9 +445,6 @@ namespace AirsoftFPS
 
                 // Weapon model kick (owner-local animation)
                 ApplyWeaponKick(w);
-
-                // Networked muzzle flash + tracer so everyone sees the shot
-                ShootRpc(lastTracerStart, lastTracerEnd);
 
                 if (ammoInMag <= 0 && ammoReserve > 0)
                     StartReload();
@@ -452,75 +463,46 @@ namespace AirsoftFPS
             recoilRot.x = Mathf.Max(recoilRot.x, -22f);
         }
 
-        void FireRaycast(WeaponData w)
+        // One trigger pull: announce it to the server first (so it can validate the hits that follow
+        // and show the BBs to everyone else), then fly the BBs locally.
+        void FireBBs(WeaponData w)
         {
             if (!playerCam) return;
 
-            Vector3 spread = Vector3.zero;
-            float spreadAngle = isAiming ? w.spread * 0.3f : w.spread;
-            spread.x = Random.Range(-spreadAngle, spreadAngle);
-            spread.y = Random.Range(-spreadAngle, spreadAngle);
-
+            localShotSeq++;
+            int shot = localShotSeq;
+            int weaponIdx = currentIndex;
+            Vector3 origin = playerCam.transform.position;
             Vector3 dir = playerCam.transform.forward;
-            dir = Quaternion.Euler(spread) * dir;
+            uint seed = (uint)Random.Range(int.MinValue, int.MaxValue);
+            bool aimed = isAiming;
 
-            Ray ray = new Ray(playerCam.transform.position, dir);
-            Vector3 tracerEnd;
-
-            if (Physics.Raycast(ray, out RaycastHit hit, w.range, hitMask))
+            ShootRpc(shot, weaponIdx, origin, dir, seed, aimed);
+            SpawnBBs(w, origin, dir, seed, aimed, hit =>
             {
-                tracerEnd = hit.point;
-                var hitNetObj = hit.collider.GetComponentInParent<NetworkObject>();
-                if (hitNetObj != null)
-                    HitRpc(hitNetObj.NetworkObjectId, localShotSeq, currentIndex, ray.origin, hit.point);
+                if (this == null) return;   // player despawned while the BB was in the air
                 SpawnImpact(hit.point, hit.normal);
-            }
-            else
-            {
-                tracerEnd = ray.origin + dir * w.range;
-            }
-
-            // Tracer starts from the muzzle for a believable look
-            Vector3 tracerStart = muzzlePoint ? muzzlePoint.position : ray.origin;
-            SpawnTracer(tracerStart, tracerEnd);
-            lastTracerStart = tracerStart;
-            lastTracerEnd = tracerEnd;
+                var hitNetObj = hit.collider.GetComponentInParent<NetworkObject>();
+                if (hitNetObj != null && hitNetObj.GetComponent<Health>() != null && IsSpawned)
+                    HitRpc(hitNetObj.NetworkObjectId, shot, weaponIdx, origin, hit.point);
+            });
         }
 
-        // ───── Visual effects (owner-local) ─────
-        void SpawnTracer(Vector3 start, Vector3 end)
+        // Launches every pellet of a shot. `onHit` == null -> visual-only copy (remote clients).
+        void SpawnBBs(WeaponData w, Vector3 origin, Vector3 dir, uint seed, bool aimed,
+                      BBProjectile.HitHandler onHit)
         {
-            var go = new GameObject("Tracer");
-            var lr = go.AddComponent<LineRenderer>();
-            lr.material = TracerMat();
-            lr.textureMode = LineTextureMode.Stretch;
-            lr.numCapVertices = 2;
-            lr.startWidth = 0.035f;
-            lr.endWidth = 0.012f;
-            lr.positionCount = 2;
-            lr.SetPosition(0, start);
-            lr.SetPosition(1, end);
-            lr.startColor = lr.endColor = new Color(1f, 0.92f, 0.55f, 1f);
-            lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            StartCoroutine(FadeTracer(go, lr, 0.055f));
+            // The BB is drawn leaving the gun and slides onto the true eye-line path over a few metres.
+            Vector3 muzzle = muzzlePoint && (muzzlePoint.position - origin).sqrMagnitude < 2.25f
+                ? muzzlePoint.position : origin;
+            int pellets = Mathf.Max(1, w.pelletsPerShot);
+            if (onHit == null) onHit = hit => { if (this != null) SpawnImpact(hit.point, hit.normal); };
+            for (int p = 0; p < pellets; p++)
+                BBProjectile.Fire(w, origin, BBBallistics.PelletDirection(w, dir, seed, p, aimed), muzzle,
+                                  hitMask, transform, onHit);
         }
 
-        IEnumerator FadeTracer(GameObject go, LineRenderer lr, float dur)
-        {
-            float t = 0f;
-            Color baseCol = lr.startColor;
-            while (t < dur && go != null)
-            {
-                t += Time.deltaTime;
-                float a = Mathf.Clamp01(1f - t / dur);
-                var c = new Color(baseCol.r, baseCol.g, baseCol.b, a);
-                lr.startColor = c;
-                lr.endColor = c;
-                yield return null;
-            }
-            if (go != null) Destroy(go);
-        }
-
+        // ───── Visual effects ─────
         void SpawnImpact(Vector3 point, Vector3 normal)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -528,7 +510,7 @@ namespace AirsoftFPS
             if (col) Destroy(col);
             go.name = "Impact";
             go.transform.position = point + normal * 0.02f;
-            go.transform.localScale = Vector3.one * 0.14f;
+            go.transform.localScale = Vector3.one * 0.08f;
             var rend = go.GetComponent<Renderer>();
             rend.sharedMaterial = GlowMat();
             rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -538,10 +520,10 @@ namespace AirsoftFPS
             lightGo.transform.localPosition = Vector3.zero;
             var l = lightGo.AddComponent<Light>();
             l.color = new Color(1f, 0.7f, 0.3f);
-            l.range = 2.5f;
-            l.intensity = 3f;
+            l.range = 1.5f;
+            l.intensity = 2f;
 
-            StartCoroutine(FadeImpact(go, 0.22f));
+            StartCoroutine(FadeImpact(go, 0.18f));
         }
 
         IEnumerator FadeImpact(GameObject go, float dur)
@@ -554,23 +536,69 @@ namespace AirsoftFPS
                 t += Time.deltaTime;
                 float k = Mathf.Clamp01(1f - t / dur);
                 go.transform.localScale = startScale * k;
-                if (light) light.intensity = 3f * k;
+                if (light) light.intensity = 2f * k;
                 yield return null;
             }
             if (go != null) Destroy(go);
         }
 
+        // Fire-time checks happen here, once per trigger pull: sender, alive, weapon, fire rate and
+        // origin. The shot is remembered so HitRpc can re-fly its BBs, then relayed to everyone.
         [Rpc(SendTo.Server)]
-        void ShootRpc(Vector3 tracerStart, Vector3 tracerEnd)
+        void ShootRpc(int shotSeq, int weaponIdx, Vector3 origin, Vector3 dir, uint seed, bool aimed,
+                      RpcParams rpcParams = default)
         {
-            ShootEffectsRpc(tracerStart, tracerEnd);
+            if (rpcParams.Receive.SenderClientId != OwnerClientId) return;   // no shooting "as" someone else
+            if (shotSeq <= svLastShot) { RejectShot(shotSeq, "stale shot"); return; }
+            svLastShot = shotSeq;
+
+            ref var rec = ref svShots[shotSeq & (SHOT_HISTORY - 1)];
+            rec = new ShotRecord { seq = shotSeq, valid = false };
+
+            if (ownHealth != null && ownHealth.isDead.Value) { RejectShot(shotSeq, "shooter is dead"); return; }
+
+            // Weapon: must be the one the server has equipped (or the previous one right after a switch).
+            bool current = weaponIdx == netWeaponIndex.Value;
+            bool recentPrev = weaponIdx == svPrevWeapon && Time.unscaledTime - svSwitchTime < SWITCH_GRACE;
+            if (weaponIdx < 0 || weaponIdx >= weapons.Length || !(current || recentPrev))
+            { RejectShot(shotSeq, "weapon " + weaponIdx + " not equipped"); return; }
+            var w = weapons[weaponIdx];
+
+            // Fire rate: each trigger pull costs a token; pellets of the same shot share it.
+            float now = Time.unscaledTime;
+            float cap = 1f + SHOT_BURST_WINDOW * w.fireRate;
+            svShotTokens = svShotTokens < 0f ? cap
+                : Mathf.Min(cap, svShotTokens + (now - svTokenTime) * w.fireRate * (1f + FIRE_RATE_TOLERANCE));
+            svTokenTime = now;
+            if (svShotTokens < 1f) { RejectShot(shotSeq, "firing faster than " + w.fireRate + "/s"); return; }
+            svShotTokens -= 1f;
+
+            if (!IsFinite(origin) || !IsFinite(dir) || dir.sqrMagnitude < 0.25f || dir.sqrMagnitude > 4f)
+            { RejectShot(shotSeq, "bad origin/direction"); return; }
+            if (!OriginPlausible(origin)) { RejectShot(shotSeq, "origin too far from shooter"); return; }
+
+            rec.valid = true;
+            rec.weapon = weaponIdx;
+            rec.origin = origin;
+            rec.dir = dir.normalized;
+            rec.seed = seed;
+            rec.aimed = aimed;
+            rec.time = now;
+            rec.usedPellets = 0;
+
+            ShootEffectsRpc(weaponIdx, origin, rec.dir, seed, aimed);
         }
 
+        static bool IsFinite(Vector3 v) =>
+            !(float.IsNaN(v.x) || float.IsNaN(v.y) || float.IsNaN(v.z) ||
+              float.IsInfinity(v.x) || float.IsInfinity(v.y) || float.IsInfinity(v.z));
+
         [Rpc(SendTo.Everyone)]
-        void ShootEffectsRpc(Vector3 tracerStart, Vector3 tracerEnd)
+        void ShootEffectsRpc(int weaponIdx, Vector3 origin, Vector3 dir, uint seed, bool aimed)
         {
-            // Remote players see the tracer (the owner already drew its own locally).
-            if (!IsOwner) SpawnTracer(tracerStart, tracerEnd);
+            // Remote players fly a visual-only copy of the same BBs (the owner already has its own).
+            if (!IsOwner && weapons != null && weaponIdx >= 0 && weaponIdx < weapons.Length)
+                SpawnBBs(weapons[weaponIdx], origin, dir, seed, aimed, null);
 
             // Visible muzzle flash on every client (disabled by the timer in Update)
             muzzleFlashTimer = 0.05f;
@@ -589,37 +617,25 @@ namespace AirsoftFPS
         }
 
         // The client only says which object it hit, with which shot/weapon, from where and at what
-        // point. Damage, weapon name and whether the hit counts at all are decided here.
+        // point. Damage, weapon name and whether the hit counts at all are decided here, against
+        // the shot announced by ShootRpc.
         [Rpc(SendTo.Server)]
         void HitRpc(ulong networkObjId, int shotSeq, int weaponIdx, Vector3 origin, Vector3 hitPoint,
                     RpcParams rpcParams = default)
         {
             if (rpcParams.Receive.SenderClientId != OwnerClientId) return;   // no shooting "as" someone else
-            if (ownHealth != null && ownHealth.isDead.Value) { RejectHit("shooter is dead"); return; }
 
-            // Weapon: must be the one the server has equipped (or the previous one right after a switch).
-            bool current = weaponIdx == netWeaponIndex.Value;
-            bool recentPrev = weaponIdx == svPrevWeapon && Time.unscaledTime - svSwitchTime < SWITCH_GRACE;
-            if (weaponIdx < 0 || weaponIdx >= weapons.Length || !(current || recentPrev))
-            { RejectHit("weapon " + weaponIdx + " not equipped"); return; }
-            var w = weapons[weaponIdx];
-
-            // Fire rate: each new shot id costs a token; pellets of the same shot share it.
-            if (shotSeq < svLastShot) { RejectHit("stale shot"); return; }
-            if (shotSeq > svLastShot)
-            {
-                float now = Time.unscaledTime;
-                float cap = 1f + SHOT_BURST_WINDOW * w.fireRate;
-                svShotTokens = svShotTokens < 0f ? cap
-                    : Mathf.Min(cap, svShotTokens + (now - svTokenTime) * w.fireRate * (1f + FIRE_RATE_TOLERANCE));
-                svTokenTime = now;
-                svLastShot = shotSeq;
-                if (svShotTokens < 1f) { svPelletsLeft = 0; RejectHit("firing faster than " + w.fireRate + "/s"); return; }
-                svShotTokens -= 1f;
-                svPelletsLeft = Mathf.Max(1, w.pelletsPerShot);
-            }
-            if (svPelletsLeft <= 0) { RejectHit("more hits than pellets in shot " + shotSeq); return; }
-            svPelletsLeft--;
+            // Shot: announced earlier (RPCs from one client arrive in order), passed the fire-time
+            // checks (alive, weapon, fire rate, origin) and still remembered. A BB that left the gun
+            // while its shooter was alive still counts if it lands after the shooter died.
+            ref var rec = ref svShots[shotSeq & (SHOT_HISTORY - 1)];
+            if (shotSeq <= 0 || rec.seq != shotSeq) { RejectHit("unknown or stale shot " + shotSeq); return; }
+            if (!rec.valid) { RejectHit("shot " + shotSeq + " was rejected when fired"); return; }
+            if (weaponIdx != rec.weapon) { RejectHit("weapon " + weaponIdx + " is not the one shot " + shotSeq + " was fired with"); return; }
+            if ((origin - rec.origin).sqrMagnitude > 0.01f) { RejectHit("origin differs from the fired shot"); return; }
+            var w = weapons[rec.weapon];
+            float flight = Time.unscaledTime - rec.time;
+            if (flight > BBBallistics.MAX_FLIGHT_TIME + LATE_TOLERANCE) { RejectHit("hit arrived after the BB was spent"); return; }
 
             // Target: must exist, be damageable, alive and not the shooter.
             if (!NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(networkObjId, out var netObj)) return;
@@ -627,17 +643,48 @@ namespace AirsoftFPS
             var health = netObj.GetComponent<Health>();
             if (health == null || health.isDead.Value) return;
 
-            // Geometry: plausible origin, in range, near the target, and no wall in between.
-            if (!OriginPlausible(origin)) { RejectHit("origin too far from shooter"); return; }
-            if (Vector3.Distance(origin, hitPoint) > w.range + RANGE_TOLERANCE) { RejectHit("out of range"); return; }
+            // Geometry: in range, near the target, on a BB path with no wall before the hit.
+            if (Vector3.Distance(rec.origin, hitPoint) > w.range + RANGE_TOLERANCE) { RejectHit("out of range"); return; }
             if (!NearTarget(netObj, hitPoint)) { RejectHit("hit point not near target"); return; }
-            if (WorldBlocks(origin, hitPoint)) { RejectHit("no line of sight"); return; }
+
+            // Re-fly each pellet of the shot that hasn't scored yet; one of them must pass through the
+            // hit point before any static geometry (this is the line-of-sight check, along the arc).
+            int pellets = Mathf.Clamp(w.pelletsPerShot, 1, 31);
+            int match = -1;
+            float tof = 0f, bestMiss = float.MaxValue;
+            bool blocked = false;
+            for (int p = 0; p < pellets; p++)
+            {
+                if ((rec.usedPellets & (1 << p)) != 0) continue;
+                Vector3 pd = BBBallistics.PelletDirection(w, rec.dir, rec.seed, p, rec.aimed);
+                var r = BBBallistics.TracePath(w, rec.origin, pd, hitPoint, hitMask, PATH_TOLERANCE, LOS_END_MARGIN,
+                                               out float t, out float miss);
+                if (r == BBBallistics.PathResult.Hit && miss < bestMiss) { match = p; tof = t; bestMiss = miss; }
+                else if (r == BBBallistics.PathResult.Blocked) blocked = true;
+            }
+            if (match < 0)
+            {
+                if (rec.usedPellets == (1 << pellets) - 1) RejectHit("more hits than pellets in shot " + shotSeq);
+                else RejectHit(blocked ? "no line of sight along the BB path" : "hit point not on any BB path");
+                return;
+            }
+
+            // Time of flight: the BB needs `tof` seconds to get there; a hit can't be reported sooner.
+            if (flight < tof - TOF_TOLERANCE)
+            { RejectHit($"hit after {flight:0.00}s, BB needs {tof:0.00}s"); return; }
+            rec.usedPellets |= 1 << match;
 
             // Team Deathmatch: no friendly fire between teammates.
             if (MatchNet.Instance != null && MatchNet.Instance.BlocksDamage(OwnerClientId, netObj.OwnerClientId))
                 return;
             health.TakeDamage(w.damage, OwnerClientId, w.weaponName);
             HitConfirmRpc(hitPoint, RpcTarget.Single(OwnerClientId, RpcTargetUse.Temp));
+        }
+
+        void RejectShot(int shotSeq, string reason)
+        {
+            if (Debug.isDebugBuild)
+                Debug.Log($"[Airsoft] Shot {shotSeq} from client {OwnerClientId} rejected: {reason}");
         }
 
         // The reported eye position must be close to where the server sees this player
@@ -707,13 +754,6 @@ namespace AirsoftFPS
         public void RefreshHUD() => NotifyAmmo();
 
         // ───── Shared runtime materials ─────
-        static Material TracerMat()
-        {
-            if (s_tracerMat == null)
-                s_tracerMat = new Material(Shader.Find("Sprites/Default"));
-            return s_tracerMat;
-        }
-
         static Material GlowMat()
         {
             if (s_glowMat == null)
