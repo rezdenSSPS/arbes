@@ -598,34 +598,16 @@ namespace AirsoftFPS.Editor
             AirsoftMapBuilder.BuildEnvironment();
 
             // ── Spawn Points ──
-            Vector3[] spawnPositions = {
-                new Vector3(-30, 1, 30),  new Vector3(30, 1, 30),
-                new Vector3(-30, 1, -30), new Vector3(30, 1, -30),
-                new Vector3(0, 1, 35),    new Vector3(0, 1, -35),
-                new Vector3(-35, 1, 0),   new Vector3(35, 1, 0)
-            };
-            var spawnParent = new GameObject("SpawnPoints");
-            foreach (var pos in spawnPositions)
-            {
-                var sp = new GameObject("SpawnPoint");
-                sp.transform.SetParent(spawnParent.transform);
-                sp.transform.position = pos;
-                sp.tag = "SpawnPoint";
-            }
+            CreatePlayerSpawns(new GameObject("SpawnPoints").transform);
 
             // Enemy spawn points
-            Vector3[] enemySpawns = {
-                new Vector3(-25, 1, 25), new Vector3(25, 1, -25),
-                new Vector3(-25, 1, -10), new Vector3(25, 1, 10),
-                new Vector3(0, 1, 0)
-            };
             var enemySpawnParent = new GameObject("EnemySpawnPoints");
-            Transform[] enemySpawnTransforms = new Transform[enemySpawns.Length];
-            for (int i = 0; i < enemySpawns.Length; i++)
+            Transform[] enemySpawnTransforms = new Transform[EnemySpawns.Length];
+            for (int i = 0; i < EnemySpawns.Length; i++)
             {
                 var esp = new GameObject($"EnemySpawn_{i}");
                 esp.transform.SetParent(enemySpawnParent.transform);
-                esp.transform.position = enemySpawns[i];
+                esp.transform.position = EnemySpawns[i];
                 enemySpawnTransforms[i] = esp.transform;
             }
 
@@ -653,6 +635,101 @@ namespace AirsoftFPS.Editor
             BuildHUDCanvas();
 
             EditorSceneManager.SaveScene(scene, ArenaPath);
+        }
+
+        // ────────── SPAWN POINTS ──────────
+        // Player spawns: Red (team 1) holds the north half, Blue (team 2) the south half. The four old
+        // road-end spawns moved off the roads (out of the 80 m sightline) to spots the enemy half can
+        // hardly see ("Check Spawn Points"): behind the crate stack, the green container, the small
+        // building and under a park tree. AirsoftMapBuilder.Keep uses these.
+        public static readonly (Vector3 pos, int team)[] PlayerSpawns =
+        {
+            (new Vector3(-30, 1, 30), 1), (new Vector3(30, 1, 30), 1), (new Vector3(-10, 1, 30), 1), (new Vector3(-34, 1, 15), 1),
+            (new Vector3(30, 1, -30), 2), (new Vector3(-30, 1, -30), 2), (new Vector3(-18, 1, -31), 2), (new Vector3(35, 1, -14), 2),
+        };
+
+        // Co-op bot spawns (the old (0,0) crossroads spawn moved to the container yard edge).
+        public static readonly Vector3[] EnemySpawns =
+        {
+            new Vector3(-25, 1, 25), new Vector3(25, 1, -25),
+            new Vector3(-25, 1, -10), new Vector3(25, 1, 10),
+            new Vector3(-15, 1, 21)
+        };
+
+        static void CreatePlayerSpawns(Transform parent)
+        {
+            int n = 0;
+            foreach (var (pos, team) in PlayerSpawns)
+            {
+                var sp = new GameObject($"SpawnPoint_{(team == 1 ? "Red" : "Blue")}_{n++}");
+                sp.transform.SetParent(parent);
+                sp.transform.position = pos;
+                Vector3 toCentre = -pos; toCentre.y = 0;
+                sp.transform.rotation = Quaternion.LookRotation(toCentre);
+                sp.tag = "SpawnPoint";
+                sp.AddComponent<SpawnPoint>().team = team;
+            }
+        }
+
+        // Updates only the spawn objects of the existing arena scene (it also holds the new UI and
+        // hand-made changes, so it is not rebuilt): player spawns are recreated with their team, and
+        // the enemy spawns keep their objects (EnemySpawner references them) but get the new positions.
+        [MenuItem("Tools/Airsoft/Update Arena Spawn Points")]
+        public static void UpdateArenaSpawnPoints()
+        {
+            var scene = EditorSceneManager.OpenScene(ArenaPath, OpenSceneMode.Single);
+            var parent = GameObject.Find("SpawnPoints");
+            if (parent == null) parent = new GameObject("SpawnPoints");
+            for (int i = parent.transform.childCount - 1; i >= 0; i--)
+                Object.DestroyImmediate(parent.transform.GetChild(i).gameObject);
+            foreach (var stray in GameObject.FindGameObjectsWithTag("SpawnPoint"))
+                Object.DestroyImmediate(stray);
+            CreatePlayerSpawns(parent.transform);
+
+            var enemyParent = GameObject.Find("EnemySpawnPoints");
+            for (int i = 0; i < EnemySpawns.Length; i++)
+            {
+                var t = enemyParent ? enemyParent.transform.Find($"EnemySpawn_{i}") : null;
+                if (t) t.position = EnemySpawns[i];
+                else Debug.LogWarning($"[Airsoft] EnemySpawn_{i} not found in the arena scene");
+            }
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+            Debug.Log("[Airsoft] Arena spawn points updated (" + PlayerSpawns.Length + " player, " + EnemySpawns.Length + " enemy).");
+            ReportSpawnPoints();
+        }
+
+        // Prints, for each spawn in the open arena: whether a player fits there, how far it is from the
+        // road, and how exposed it is (share of a 2 m grid over the arena that can see a standing player
+        // there). Old positions are listed for comparison.
+        [MenuItem("Tools/Airsoft/Check Spawn Points")]
+        public static void ReportSpawnPoints()
+        {
+            Physics.SyncTransforms();
+            var sb = new System.Text.StringBuilder("[Airsoft] Spawn check (exposure = % of arena that sees the spawn)\n");
+            void Row(string label, Vector3 p)
+            {
+                Vector3 g = new Vector3(p.x, 0, p.z);
+                bool blocked = Physics.CheckCapsule(g + Vector3.up * 0.45f, g + Vector3.up * 1.55f, 0.4f, ~0, QueryTriggerInteraction.Ignore);
+                float road = Mathf.Min(Mathf.Abs(p.x), Mathf.Abs(p.z)) - 6.2f;   // road half-width 4 + sidewalk 2.2
+                int seen = 0, total = 0;
+                for (float x = -39; x <= 39; x += 2)
+                    for (float z = -39; z <= 39; z += 2)
+                    {
+                        var eye = new Vector3(x, 1.6f, z);
+                        if (Physics.CheckSphere(eye, 0.2f, ~0, QueryTriggerInteraction.Ignore)) continue;   // inside a prop
+                        total++;
+                        var tgt = g + Vector3.up * 1.4f;
+                        if (!Physics.Linecast(eye, tgt, ~0, QueryTriggerInteraction.Ignore)) seen++;
+                    }
+                sb.AppendLine($"  {label,-14} {p.x,6:0.#} {p.z,6:0.#}  fits={(!blocked ? "yes" : "NO ")}  offRoad={road,5:0.0} m  exposure={(100f * seen / Mathf.Max(1, total)),5:0.0}%");
+            }
+            foreach (var (pos, team) in PlayerSpawns) Row(team == 1 ? "Red" : "Blue", pos);
+            for (int i = 0; i < EnemySpawns.Length; i++) Row("Enemy" + i, EnemySpawns[i]);
+            foreach (var old in new[] { new Vector3(0, 1, 35), new Vector3(0, 1, -35), new Vector3(-35, 1, 0), new Vector3(35, 1, 0), new Vector3(0, 1, 0) })
+                Row("(old)", old);
+            Debug.Log(sb.ToString());
         }
 
         static void BuildHUDCanvas()
