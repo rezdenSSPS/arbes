@@ -158,6 +158,23 @@ namespace AirsoftFPS
             if (deathText) deathText.text = "ELIMINATED\nRespawning...";
         }
 
+        bool slotNamesSet;
+
+        // Slot labels come from the weapon list (so the HUD always matches the guns).
+        void SetSlotNames()
+        {
+            slotNamesSet = true;
+            if (weaponSlots == null || weaponCtrl.weapons == null) return;
+            for (int i = 0; i < weaponSlots.Length && i < weaponCtrl.weapons.Length; i++)
+            {
+                if (weaponSlots[i] == null) continue;
+                var t = weaponSlots[i].transform.Find("Name");
+                var tmp = t ? t.GetComponent<TextMeshProUGUI>() : null;
+                if (tmp && !string.IsNullOrEmpty(weaponCtrl.weapons[i].shortName))
+                    tmp.text = weaponCtrl.weapons[i].shortName;
+            }
+        }
+
         void HideDeath()
         {
             if (deathOverlay) deathOverlay.alpha = 0f;
@@ -168,6 +185,8 @@ namespace AirsoftFPS
             if (!wired) TryAutoWire();
 
             // Pull live ammo every frame (robust to spawn-order timing in builds).
+            if (weaponCtrl != null && weaponCtrl.AmmoReady && !slotNamesSet)
+                SetSlotNames();
             if (weaponCtrl != null && weaponCtrl.AmmoReady)
                 UpdateAmmo(weaponCtrl.CurrentWeaponName, weaponCtrl.CurrentMag,
                            weaponCtrl.CurrentReserve, weaponCtrl.CurrentSlot);

@@ -37,11 +37,23 @@ namespace AirsoftFPS
         {
             cc = GetComponent<CharacterController>();
 
+            // Customisable low-poly character (visual only)
+            if (GetComponent<PlayerAvatar>() == null) gameObject.AddComponent<PlayerAvatar>();
+
             if (IsOwner)
             {
                 Cursor.lockState = CursorLockMode.Locked;
                 Cursor.visible = false;
-                if (playerCamera) playerCamera.gameObject.SetActive(true);
+                if (playerCamera)
+                {
+                    playerCamera.gameObject.SetActive(true);
+                    // post-processing (bloom / tonemapping from the map's global Volume)
+                    var urp = playerCamera.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
+                    if (urp == null) urp = playerCamera.gameObject.AddComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
+                    urp.renderPostProcessing = true;
+                    urp.antialiasing = UnityEngine.Rendering.Universal.AntialiasingMode.FastApproximateAntialiasing;
+                    playerCamera.farClipPlane = 400f;
+                }
             }
             else
             {

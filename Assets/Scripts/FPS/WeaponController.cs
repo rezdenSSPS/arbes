@@ -55,6 +55,10 @@ namespace AirsoftFPS
         GameObject muzzleFlashObj;
         float muzzleFlashTimer;
 
+        // Low-poly models (owner view): muzzle position per weapon slot, in slot space
+        Vector3[] modelMuzzle;
+        bool[] hasModel;
+
         static Material s_tracerMat;
         static Material s_glowMat;
 
@@ -108,8 +112,39 @@ namespace AirsoftFPS
                 BuildMuzzleFlash();
             }
 
+            if (IsOwner) ApplyWeaponModels();
+
             netWeaponIndex.OnValueChanged += OnWeaponChanged;
             SwitchToWeapon(netWeaponIndex.Value);
+        }
+
+        // Swap the primitive placeholder guns for the low-poly models from Resources/ArbesGuns.
+        void ApplyWeaponModels()
+        {
+            if (weaponHolder == null) return;
+            modelMuzzle = new Vector3[weapons.Length];
+            hasModel = new bool[weapons.Length];
+            for (int i = 0; i < weapons.Length && i < weaponHolder.childCount; i++)
+            {
+                var slot = weaponHolder.GetChild(i);
+                if (muzzleFlashObj != null && slot == muzzleFlashObj.transform) continue;
+                ArbesGuns.Gun g = null;
+                try { g = ArbesGuns.Build(weapons[i].model, weapons[i].modelLength, slot); }
+                catch (System.Exception e) { Debug.LogWarning("[Arbes] gun model " + weapons[i].model + ": " + e.Message); }
+                if (g == null) continue;
+
+                // hide the old placeholder parts
+                foreach (var r in slot.GetComponentsInChildren<Renderer>(true))
+                    if (!r.transform.IsChildOf(g.root.transform)) r.enabled = false;
+
+                foreach (var r in g.root.GetComponentsInChildren<Renderer>(true))
+                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+                // the slot origin is the hand position: nudge the grip slightly back/down
+                g.root.transform.localPosition = new Vector3(0f, -0.02f, 0.05f);
+                modelMuzzle[i] = g.root.transform.localPosition + g.muzzleLocal;
+                hasModel[i] = true;
+            }
         }
 
         void BuildMuzzleFlash()
@@ -187,6 +222,10 @@ namespace AirsoftFPS
 
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
+
+            if (muzzlePoint && hasModel != null && currentIndex < hasModel.Length && hasModel[currentIndex]
+                && currentIndex < weaponHolder.childCount)
+                muzzlePoint.position = weaponHolder.GetChild(currentIndex).TransformPoint(modelMuzzle[currentIndex]);
 
             // Recoil recovery
             recoilPos = Vector3.Lerp(recoilPos, Vector3.zero, dt * 11f);

@@ -39,3 +39,4 @@ netdiag_*.txt
 # ---- OS ----
 .DS_Store
 Thumbs.db
+AssetSources/

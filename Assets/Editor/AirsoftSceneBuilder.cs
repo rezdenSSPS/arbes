@@ -1027,7 +1027,7 @@ namespace AirsoftFPS.Editor
             pausePanel.SetActive(false);
 
             // ── Weapon Selector (bottom center) ──
-            string[] shortNames = { "M1911","Glock","MP5","P90","M4A1","AK47","SCAR","M870","AWP","M249" };
+            string[] shortNames = { "Pistol","Revolv","RayGun","PulseSMG","P90","AK-47","PulseRf","M870","Lightng","AWP" };
             string[] slotDigits = { "1","2","3","4","5","6","7","8","9","0" };
             var selRoot = new GameObject("WeaponSelector");
             selRoot.transform.SetParent(canvasObj.transform);

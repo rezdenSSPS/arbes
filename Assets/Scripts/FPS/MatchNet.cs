@@ -26,6 +26,7 @@ namespace AirsoftFPS
             public int kills;
             public int deaths;
             public int team;   // 0 = none, 1 = Red, 2 = Blue (Team Deathmatch)
+            public int look;   // packed ArbesLook (-1 = not chosen yet)
         }
 
         public static MatchNet Instance { get; private set; }
@@ -44,6 +45,7 @@ namespace AirsoftFPS
         const string MSG_READY = "mn_ready";  // client -> server
         const string MSG_STATE = "mn_state";  // server -> clients
         const string MSG_KILL  = "mn_kill";   // server -> clients (kill feed)
+        const string MSG_LOOK  = "mn_look";   // client -> server (character look)
 
         // Shared view (valid on everyone; authoritative copy lives on the server)
         public GameModeType Mode { get; private set; } = GameModeType.Coop;
@@ -64,6 +66,7 @@ namespace AirsoftFPS
         // The name this local player wants to use (sent to the server on connect).
         string localName = "";
         bool localReadyWanted;
+        int localLook = -1;
 
         NetworkManager nm;
         bool serverHandlersUp;
@@ -83,6 +86,7 @@ namespace AirsoftFPS
             if (Instance != null && Instance != this) { Destroy(gameObject); return; }
             Instance = this;
             localName = PlayerPrefs.GetString("Airsoft.PlayerName", "");
+            localLook = ArbesLook.LoadLocal();
         }
 
         void Update()
@@ -115,6 +119,41 @@ namespace AirsoftFPS
         }
 
         public string LocalName => localName;
+
+        public int LocalLook => localLook;
+
+        // Character customizer calls this; the look is saved locally and synced to everyone.
+        public void SetLocalLook(int look)
+        {
+            localLook = look;
+            ArbesLook.SaveLocal(look);
+            if (nm != null && nm.IsClient && nm.IsConnectedClient)
+                SendLookToServer();
+        }
+
+        public int LookOf(ulong clientId)
+        {
+            foreach (var e in roster) if (e.clientId == clientId) return e.look;
+            if (nm != null && clientId == nm.LocalClientId) return localLook;
+            return -1;
+        }
+
+        void SendLookToServer()
+        {
+            if (nm == null || !nm.IsConnectedClient) return;
+            using var w = new FastBufferWriter(8, Allocator.Temp);
+            w.WriteValueSafe(localLook);
+            nm.CustomMessagingManager.SendNamedMessage(MSG_LOOK, NetworkManager.ServerClientId, w, NetworkDelivery.Reliable);
+        }
+
+        void OnServerRecvLook(ulong sender, FastBufferReader reader)
+        {
+            reader.ReadValueSafe(out int look);
+            EnsureEntry(sender);
+            for (int i = 0; i < roster.Count; i++)
+                if (roster[i].clientId == sender) { var e = roster[i]; e.look = look; roster[i] = e; }
+            BroadcastState();
+        }
 
         public bool LocalReady
         {
@@ -247,6 +286,7 @@ namespace AirsoftFPS
             var cm = nm.CustomMessagingManager;
             cm.RegisterNamedMessageHandler(MSG_NAME,  OnServerRecvName);
             cm.RegisterNamedMessageHandler(MSG_READY, OnServerRecvReady);
+            cm.RegisterNamedMessageHandler(MSG_LOOK,  OnServerRecvLook);
             serverHandlersUp = true;
 
             // Make sure the host's own entry exists.
@@ -275,6 +315,7 @@ namespace AirsoftFPS
             {
                 RegisterClientHandlers();
                 SendNameToServer();
+                SendLookToServer();
             }
         }
 
@@ -327,7 +368,7 @@ namespace AirsoftFPS
         void EnsureEntry(ulong clientId)
         {
             foreach (var e in roster) if (e.clientId == clientId) return;
-            roster.Add(new Entry { clientId = clientId, name = DefaultName(clientId), ready = false, kills = 0, deaths = 0 });
+            roster.Add(new Entry { clientId = clientId, name = DefaultName(clientId), ready = false, kills = 0, deaths = 0, look = (nm != null && clientId == nm.LocalClientId) ? localLook : -1 });
         }
 
         void BroadcastState()
@@ -350,6 +391,7 @@ namespace AirsoftFPS
                 w.WriteValueSafe(e.kills);
                 w.WriteValueSafe(e.deaths);
                 w.WriteValueSafe(e.team);
+                w.WriteValueSafe(e.look);
             }
             nm.CustomMessagingManager.SendNamedMessageToAll(MSG_STATE, w, NetworkDelivery.Reliable);
         }
@@ -374,7 +416,8 @@ namespace AirsoftFPS
                 reader.ReadValueSafe(out int kills);
                 reader.ReadValueSafe(out int deaths);
                 reader.ReadValueSafe(out int team);
-                roster.Add(new Entry { clientId = cid, name = nm2, ready = ready, kills = kills, deaths = deaths, team = team });
+                reader.ReadValueSafe(out int look);
+                roster.Add(new Entry { clientId = cid, name = nm2, ready = ready, kills = kills, deaths = deaths, team = team, look = look });
             }
 
             Mode = (GameModeType)modeB;
