@@ -313,10 +313,13 @@ namespace AirsoftFPS
             float h = Mathf.Max(0.01f, top - minY);
             float k = height / h;
 
-            // Facing: toes point forward
-            if (toeL && ankL)
+            // Facing: square to the shoulder line (the Quaternius feet are splayed outward, so the
+            // toes point ~19° off); fall back to the left toe when there are no arm bones.
+            Transform armL = FindDeep(t, "UpperArm.L"), armR = FindDeep(t, "UpperArm.R");
             {
-                Vector3 fwd = toeL.position - ankL.position; fwd.y = 0;
+                Vector3 fwd = armL && armR ? Vector3.Cross(armR.position - armL.position, Vector3.up) : Vector3.zero;
+                fwd.y = 0;
+                if (fwd.sqrMagnitude < 1e-6f && toeL && ankL) { fwd = toeL.position - ankL.position; fwd.y = 0; }
                 Vector3 want = holder.transform.forward; want.y = 0;
                 if (fwd.sqrMagnitude > 1e-6f && want.sqrMagnitude > 1e-6f)
                 {
