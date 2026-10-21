@@ -1,0 +1,173 @@
+# Automatické buildy hry Airsoft (macOS + Windows) a volitelné nahrání na itch.io.
+# Návod k nastavení: docs/BUILD.md
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Nahrát build na itch.io (potřebuje BUTLER_API_KEY a proměnné ITCH_USER / ITCH_GAME)
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  config:
+    name: Check configuration
+    runs-on: ubuntu-latest
+    outputs:
+      itch: ${{ steps.check.outputs.itch }}
+    steps:
+      - name: Check secrets and variables
+        id: check
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          ITCH_USER: ${{ vars.ITCH_USER }}
+          ITCH_GAME: ${{ vars.ITCH_GAME }}
+        run: |
+          if [ -z "$UNITY_LICENSE" ] && [ -z "$UNITY_SERIAL" ]; then
+            echo "::error::Chybí secret UNITY_LICENSE (Personal licence) nebo UNITY_SERIAL (Plus/Pro). Viz docs/BUILD.md."
+            exit 1
+          fi
+          if [ -z "$UNITY_EMAIL" ] || [ -z "$UNITY_PASSWORD" ]; then
+            echo "::error::Chybí secrety UNITY_EMAIL a/nebo UNITY_PASSWORD. Viz docs/BUILD.md."
+            exit 1
+          fi
+          if [ -n "$BUTLER_API_KEY" ] && [ -n "$ITCH_USER" ] && [ -n "$ITCH_GAME" ]; then
+            echo "itch=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "itch=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::itch.io není nastavené (BUTLER_API_KEY / ITCH_USER / ITCH_GAME), nahrávání se přeskočí."
+          fi
+
+  build:
+    name: Build ${{ matrix.targetPlatform }}
+    needs: config
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - targetPlatform: StandaloneOSX
+            channel: mac
+          - targetPlatform: StandaloneWindows64
+            channel: windows
+    outputs:
+      version: ${{ steps.build.outputs.buildVersion }}
+    steps:
+      # Unity image + Library zabere hodně místa, runner má volných jen ~14 GB.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # verzování "Semantic" potřebuje historii a tagy
+
+      - name: Cache Library
+        uses: actions/cache@v6
+        with:
+          path: Library
+          key: Library-${{ matrix.targetPlatform }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-${{ matrix.targetPlatform }}-
+
+      - name: Build with Unity
+        id: build
+        uses: game-ci/unity-builder@v6
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: ${{ matrix.targetPlatform }}
+          buildName: Airsoft
+          versioning: Semantic
+
+      # Složky *_DoNotShip / *_ButDontShipItWithYourGame se k hráčům nedávají.
+      - name: Clean build output
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" build
+          find build -maxdepth 2 -type d \( -name '*_DoNotShip' -o -name '*_ButDontShipItWithYourGame' \) -prune -exec rm -rf {} +
+          ls -la "build/${{ matrix.targetPlatform }}"
+
+      # Artefakty v GitHubu jsou zip bez unixových práv, proto .app balíme do tar.gz.
+      - name: Package macOS build
+        if: matrix.targetPlatform == 'StandaloneOSX'
+        run: |
+          chmod +x build/StandaloneOSX/Airsoft.app/Contents/MacOS/*
+          tar -czf Airsoft-mac.tar.gz -C build/StandaloneOSX Airsoft.app
+
+      - name: Upload macOS artifact
+        if: matrix.targetPlatform == 'StandaloneOSX'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Airsoft-${{ matrix.channel }}
+          path: Airsoft-mac.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows artifact
+        if: matrix.targetPlatform == 'StandaloneWindows64'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Airsoft-${{ matrix.channel }}
+          path: build/StandaloneWindows64
+          if-no-files-found: error
+          retention-days: 14
+
+  itch:
+    name: Publish to itch.io
+    needs: [config, build]
+    if: needs.config.outputs.itch == 'true' && (github.ref_type == 'tag' || inputs.publish)
+    runs-on: ubuntu-latest
+    env:
+      BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+      ITCH_USER: ${{ vars.ITCH_USER }}
+      ITCH_GAME: ${{ vars.ITCH_GAME }}
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - name: Download builds
+        uses: actions/download-artifact@v8
+        with:
+          pattern: Airsoft-*
+          path: artifacts
+
+      - name: Prepare upload folders
+        run: |
+          mkdir -p upload/mac upload/windows
+          tar -xzf artifacts/Airsoft-mac/Airsoft-mac.tar.gz -C upload/mac
+          cp -R artifacts/Airsoft-windows/. upload/windows/
+          ls -la upload/mac upload/windows
+
+      - name: Install butler
+        run: |
+          curl -fsSL -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -q butler.zip -d "$RUNNER_TEMP/butler"
+          chmod +x "$RUNNER_TEMP/butler/butler"
+          echo "$RUNNER_TEMP/butler" >> "$GITHUB_PATH"
+
+      - name: Push to itch.io
+        run: |
+          butler -V
+          target="$(echo "$ITCH_USER/$ITCH_GAME" | tr '[:upper:]' '[:lower:]')"
+          butler push upload/mac "$target:mac" --userversion "$VERSION" --if-changed
+          butler push upload/windows "$target:windows" --userversion "$VERSION" --if-changed
+          echo "Nahráno na https://${ITCH_USER,,}.itch.io/${ITCH_GAME,,} (verze $VERSION)" >> "$GITHUB_STEP_SUMMARY"
