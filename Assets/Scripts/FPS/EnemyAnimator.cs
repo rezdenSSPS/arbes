@@ -16,6 +16,7 @@ namespace AirsoftFPS
         float walkPhase;
         bool dead;
         Quaternion modelRest;
+        ArbesLook.Avatar avatar;   // low-poly soldier (replaces the primitive body when available)
 
         void Start()
         {
@@ -28,12 +29,55 @@ namespace AirsoftFPS
                 health.isDead.OnValueChanged += OnDeadChanged;
                 dead = health.isDead.Value;
             }
+
+            BuildLowPoly();
+        }
+
+        void BuildLowPoly()
+        {
+            var no = GetComponent<NetworkObject>();
+            int seed = no != null ? (int)no.NetworkObjectId : Random.Range(0, 9999);
+            var rng = new System.Random(seed * 31 + 7);
+            var look = new LookData
+            {
+                body = rng.Next(4),                 // male bodies
+                hat = 3,                            // helmet
+                hatColor = rng.Next(2) == 0 ? 9 : 6,
+                shirt = rng.Next(3) switch { 0 => 6, 1 => 9, _ => 8 },
+                pants = rng.Next(2) == 0 ? 6 : 10,
+                skin = rng.Next(ArbesLook.SkinTones.Length),
+                hair = rng.Next(3)
+            };
+            try { avatar = ArbesLook.BuildAvatar(transform, ArbesLook.Pack(look)); }
+            catch (System.Exception e) { Debug.LogWarning("[Arbes] enemy avatar: " + e.Message); avatar = null; }
+            if (avatar == null) return;
+
+            if (model) foreach (var r in model.GetComponentsInChildren<Renderer>(true)) r.enabled = false;
+
+            if (avatar.rightHand)
+            {
+                ArbesGuns.Gun g = null;
+                try { g = ArbesGuns.Build("Rifle", 0.75f, null); } catch { }
+                if (g != null)
+                {
+                    g.root.transform.SetPositionAndRotation(avatar.rightHand.position, transform.rotation);
+                    g.root.transform.SetParent(avatar.rightHand, true);
+                }
+            }
         }
 
         void OnDeadChanged(bool prev, bool curr) => dead = curr;
 
         void Update()
         {
+            if (avatar != null)
+            {
+                float sp = (agent != null && agent.enabled && agent.isOnNavMesh) ? agent.velocity.magnitude : 0f;
+                // enemies move at ~3.5 m/s: map that to the run clip
+                ArbesLook.Animate(avatar, sp > 2.5f ? 7f : sp, dead);
+                return;
+            }
+
             if (model == null) return;
 
             if (dead)

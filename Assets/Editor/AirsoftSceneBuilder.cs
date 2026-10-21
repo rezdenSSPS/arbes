@@ -52,6 +52,18 @@ namespace AirsoftFPS.Editor
             Debug.Log("[Airsoft] All scenes and prefabs built. AirsoftLobby set as the Play start scene.");
         }
 
+        [MenuItem("Tools/Airsoft/Rebuild Arena Only")]
+        public static void BuildArenaOnly()
+        {
+            EnsureFolders();
+            CreateMaterials();
+            BuildArenaScene();
+            UpdateBuildSettings();
+            EditorSceneManager.OpenScene(ArenaPath);
+            SetLobbyAsStartScene();
+            Debug.Log("[Airsoft] Arena rebuilt (new low-poly map).");
+        }
+
         static void EnsureFolders()
         {
             if (!AssetDatabase.IsValidFolder("Assets/Scenes"))
@@ -706,78 +718,8 @@ namespace AirsoftFPS.Editor
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
-            // ── Lighting ──
-            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.3f, 0.3f, 0.35f);
-
-            var light = new GameObject("Directional Light");
-            var dl = light.AddComponent<Light>();
-            dl.type = LightType.Directional;
-            dl.color = new Color(1f, 0.95f, 0.85f);
-            dl.intensity = 1.2f;
-            dl.shadows = LightShadows.Soft;
-            light.transform.rotation = Quaternion.Euler(45, -30, 0);
-
-            // ── Floor ──
-            var floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            floor.name = "Floor";
-            floor.transform.position = new Vector3(0, -0.5f, 0);
-            floor.transform.localScale = new Vector3(80, 1, 80);
-            floor.GetComponent<Renderer>().sharedMaterial = matFloor;
-            floor.isStatic = true;
-
-            // ── Perimeter Walls ──
-            CreateWall("WallN", new Vector3(0, 3, 40),   new Vector3(80, 6, 1));
-            CreateWall("WallS", new Vector3(0, 3, -40),  new Vector3(80, 6, 1));
-            CreateWall("WallE", new Vector3(40, 3, 0),   new Vector3(1, 6, 80));
-            CreateWall("WallW", new Vector3(-40, 3, 0),  new Vector3(1, 6, 80));
-
-            // ── Interior Walls (create rooms/corridors) ──
-            // Central divider with gap
-            CreateWall("DividerL", new Vector3(-12, 2, 0), new Vector3(20, 4, 0.5f));
-            CreateWall("DividerR", new Vector3(12, 2, 0),  new Vector3(20, 4, 0.5f));
-
-            // Side rooms
-            CreateWall("Room1_W", new Vector3(-25, 2, 15), new Vector3(0.5f, 4, 15));
-            CreateWall("Room1_N", new Vector3(-30, 2, 22), new Vector3(10, 4, 0.5f));
-            CreateWall("Room2_W", new Vector3(25, 2, -15), new Vector3(0.5f, 4, 15));
-            CreateWall("Room2_N", new Vector3(30, 2, -22), new Vector3(10, 4, 0.5f));
-
-            // Corridors
-            CreateWall("Corridor1", new Vector3(0, 2, 20), new Vector3(8, 4, 0.5f));
-            CreateWall("Corridor2", new Vector3(0, 2, -20), new Vector3(8, 4, 0.5f));
-
-            // L-shaped walls
-            CreateWall("L1a", new Vector3(-15, 2, -15), new Vector3(12, 4, 0.5f));
-            CreateWall("L1b", new Vector3(-9, 2, -12), new Vector3(0.5f, 4, 6));
-            CreateWall("L2a", new Vector3(15, 2, 15), new Vector3(12, 4, 0.5f));
-            CreateWall("L2b", new Vector3(9, 2, 12), new Vector3(0.5f, 4, 6));
-
-            // ── Crates / Cover ──
-            CreateCrate(new Vector3(-5, 0.75f, 5), new Vector3(1.5f, 1.5f, 1.5f));
-            CreateCrate(new Vector3(-5, 2.0f, 5), new Vector3(1.5f, 1.0f, 1.5f));
-            CreateCrate(new Vector3(6, 0.75f, -8), new Vector3(2f, 1.5f, 1f));
-            CreateCrate(new Vector3(6, 0.75f, -6), new Vector3(2f, 1.5f, 1f));
-            CreateCrate(new Vector3(-20, 0.5f, 0), new Vector3(1, 1, 1));
-            CreateCrate(new Vector3(-19, 0.5f, 0), new Vector3(1, 1, 1));
-            CreateCrate(new Vector3(-19.5f, 1.5f, 0), new Vector3(1, 1, 1));
-            CreateCrate(new Vector3(18, 0.75f, 10), new Vector3(2, 1.5f, 2));
-            CreateCrate(new Vector3(-10, 0.75f, -25), new Vector3(3, 1.5f, 1));
-            CreateCrate(new Vector3(10, 0.75f, 25), new Vector3(3, 1.5f, 1));
-            CreateCrate(new Vector3(30, 0.5f, 5), new Vector3(1, 1, 3));
-            CreateCrate(new Vector3(-30, 0.5f, -5), new Vector3(1, 1, 3));
-
-            // ── Barrels ──
-            for (int i = 0; i < 6; i++)
-            {
-                var barrel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                barrel.name = $"Barrel_{i}";
-                float angle = i * 60 * Mathf.Deg2Rad;
-                barrel.transform.position = new Vector3(Mathf.Cos(angle) * 8, 0.75f, Mathf.Sin(angle) * 8);
-                barrel.transform.localScale = new Vector3(0.8f, 0.75f, 0.8f);
-                barrel.GetComponent<Renderer>().sharedMaterial = matMetal;
-                barrel.isStatic = true;
-            }
+            // ── Environment: low-poly town (ground, roads, buildings, props, sky, post-processing) ──
+            ArbesMapBuilder.BuildEnvironment();
 
             // ── Spawn Points ──
             Vector3[] spawnPositions = {
