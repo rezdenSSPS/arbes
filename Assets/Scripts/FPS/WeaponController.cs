@@ -118,7 +118,7 @@ namespace AirsoftFPS
             SwitchToWeapon(netWeaponIndex.Value);
         }
 
-        // Swap the primitive placeholder guns for the low-poly models from Resources/ArbesGuns.
+        // Swap the primitive placeholder guns for the low-poly models from Resources/AirsoftGuns.
         void ApplyWeaponModels()
         {
             if (weaponHolder == null) return;
@@ -128,9 +128,9 @@ namespace AirsoftFPS
             {
                 var slot = weaponHolder.GetChild(i);
                 if (muzzleFlashObj != null && slot == muzzleFlashObj.transform) continue;
-                ArbesGuns.Gun g = null;
-                try { g = ArbesGuns.Build(weapons[i].model, weapons[i].modelLength, slot); }
-                catch (System.Exception e) { Debug.LogWarning("[Arbes] gun model " + weapons[i].model + ": " + e.Message); }
+                AirsoftGuns.Gun g = null;
+                try { g = AirsoftGuns.Build(weapons[i].model, weapons[i].modelLength, slot); }
+                catch (System.Exception e) { Debug.LogWarning("[Airsoft] gun model " + weapons[i].model + ": " + e.Message); }
                 if (g == null) continue;
 
                 // hide the old placeholder parts

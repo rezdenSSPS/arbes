@@ -26,7 +26,7 @@ namespace AirsoftFPS
             public int kills;
             public int deaths;
             public int team;   // 0 = none, 1 = Red, 2 = Blue (Team Deathmatch)
-            public int look;   // packed ArbesLook (-1 = not chosen yet)
+            public int look;   // packed AirsoftLook (-1 = not chosen yet)
         }
 
         public static MatchNet Instance { get; private set; }
@@ -86,7 +86,7 @@ namespace AirsoftFPS
             if (Instance != null && Instance != this) { Destroy(gameObject); return; }
             Instance = this;
             localName = PlayerPrefs.GetString("Airsoft.PlayerName", "");
-            localLook = ArbesLook.LoadLocal();
+            localLook = AirsoftLook.LoadLocal();
         }
 
         void Update()
@@ -126,7 +126,7 @@ namespace AirsoftFPS
         public void SetLocalLook(int look)
         {
             localLook = look;
-            ArbesLook.SaveLocal(look);
+            AirsoftLook.SaveLocal(look);
             if (nm != null && nm.IsClient && nm.IsConnectedClient)
                 SendLookToServer();
         }

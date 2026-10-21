@@ -8,7 +8,7 @@ namespace AirsoftFPS.Editor
     //  - characters: Legacy animation (so the runtime can play Idle/Walk/Run/Death by name)
     //  - guns: readable meshes (the runtime measures them to orient/scale the model)
     //  - map props: static, no animation
-    public class ArbesModelPostprocessor : AssetPostprocessor
+    public class AirsoftModelPostprocessor : AssetPostprocessor
     {
         const string Root = "Assets/ThirdParty/Quaternius/";
 
@@ -19,13 +19,13 @@ namespace AirsoftFPS.Editor
             mi.materialImportMode = ModelImporterMaterialImportMode.ImportViaMaterialDescription;
             mi.addCollider = false;
 
-            if (assetPath.Contains("/ArbesCharacters/"))
+            if (assetPath.Contains("/AirsoftCharacters/"))
             {
                 mi.animationType = ModelImporterAnimationType.Legacy;
                 mi.importAnimation = true;
                 mi.isReadable = false;
             }
-            else if (assetPath.Contains("/ArbesGuns/"))
+            else if (assetPath.Contains("/AirsoftGuns/"))
             {
                 mi.animationType = ModelImporterAnimationType.None;
                 mi.importAnimation = false;
@@ -41,11 +41,11 @@ namespace AirsoftFPS.Editor
     }
 
     [InitializeOnLoad]
-    static class ArbesAssetSetup
+    static class AirsoftAssetSetup
     {
-        const string DoneKey = "Arbes.QuaterniusImport.v1";
+        const string DoneKey = "Airsoft.QuaterniusImport.v1";
 
-        static ArbesAssetSetup() { EditorApplication.delayCall += RunOnce; }
+        static AirsoftAssetSetup() { EditorApplication.delayCall += RunOnce; }
 
         static void RunOnce()
         {
@@ -60,7 +60,7 @@ namespace AirsoftFPS.Editor
             if (!AssetDatabase.IsValidFolder("Assets/ThirdParty/Quaternius")) return;
             AssetDatabase.ImportAsset("Assets/ThirdParty/Quaternius",
                 ImportAssetOptions.ImportRecursive | ImportAssetOptions.ForceUpdate);
-            Debug.Log("[Arbes] Quaternius models re-imported with Arbes settings.");
+            Debug.Log("[Airsoft] Quaternius models re-imported with Airsoft settings.");
         }
     }
 }

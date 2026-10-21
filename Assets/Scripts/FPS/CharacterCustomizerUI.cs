@@ -20,7 +20,7 @@ namespace AirsoftFPS
         Transform stage;
         Camera previewCam;
         RenderTexture rt;
-        ArbesLook.Avatar avatar;
+        AirsoftLook.Avatar avatar;
         float spin = 160f;
         bool dragging;
         GameObject canvasRoot;
@@ -46,9 +46,9 @@ namespace AirsoftFPS
 
         void Start()
         {
-            int packed = MatchNet.Instance != null ? MatchNet.Instance.LocalLook : ArbesLook.LoadLocal();
-            if (packed < 0) packed = ArbesLook.LoadLocal();
-            look = ArbesLook.Unpack(packed);
+            int packed = MatchNet.Instance != null ? MatchNet.Instance.LocalLook : AirsoftLook.LoadLocal();
+            if (packed < 0) packed = AirsoftLook.LoadLocal();
+            look = AirsoftLook.Unpack(packed);
             BuildStage();
             BuildUI();
             RebuildAvatar();
@@ -86,8 +86,8 @@ namespace AirsoftFPS
             plat.transform.SetParent(stage, false);
             plat.transform.localPosition = new Vector3(0, -0.03f, 0);
             plat.transform.localScale = new Vector3(1.3f, 0.03f, 1.3f);
-            plat.GetComponent<Renderer>().sharedMaterial = ArbesLook.MakeMat(new Color(1f, 0.55f, 0.15f));
-            ArbesLook.SetLayer(plat, PreviewLayer);
+            plat.GetComponent<Renderer>().sharedMaterial = AirsoftLook.MakeMat(new Color(1f, 0.55f, 0.15f));
+            AirsoftLook.SetLayer(plat, PreviewLayer);
         }
 
         void AddLight(Vector3 local, Color c, float intensity)
@@ -113,9 +113,9 @@ namespace AirsoftFPS
                 turn.SetParent(stage, false);
                 turn.localRotation = Quaternion.Euler(0, spin, 0);
             }
-            try { avatar = ArbesLook.BuildAvatar(turn, ArbesLook.Pack(look)); }
-            catch (System.Exception e) { Debug.LogWarning("[Arbes] preview failed: " + e.Message); }
-            if (avatar != null) ArbesLook.SetLayer(avatar.root, PreviewLayer);
+            try { avatar = AirsoftLook.BuildAvatar(turn, AirsoftLook.Pack(look)); }
+            catch (System.Exception e) { Debug.LogWarning("[Airsoft] preview failed: " + e.Message); }
+            if (avatar != null) AirsoftLook.SetLayer(avatar.root, PreviewLayer);
         }
 
         // Only visible once the player is in a lobby (hosting or connected), not on the connect screen.
@@ -145,7 +145,7 @@ namespace AirsoftFPS
                 if (!dragging) spin += Time.deltaTime * 25f;
                 turn.localRotation = Quaternion.Euler(0, spin, 0);
             }
-            if (avatar != null) ArbesLook.Animate(avatar, 0f, false);
+            if (avatar != null) AirsoftLook.Animate(avatar, 0f, false);
         }
 
         // ───────────── UI ─────────────
@@ -193,17 +193,17 @@ namespace AirsoftFPS
             drag.owner = this;
 
             float y = -520;
-            AddRow(panel, ref y, "BODY", () => ArbesLook.BodyNames[look.body], d => look.body = Wrap(look.body + d, ArbesLook.Bodies.Length));
-            AddRow(panel, ref y, "HAT", () => ArbesLook.Hats[look.hat], d => look.hat = Wrap(look.hat + d, ArbesLook.Hats.Length));
-            AddRow(panel, ref y, "HAT COLOR", () => ArbesLook.PaletteNames[look.hatColor], d => look.hatColor = Wrap(look.hatColor + d, ArbesLook.Palette.Length), () => ArbesLook.Palette[look.hatColor]);
-            AddRow(panel, ref y, "SHIRT", () => ArbesLook.PaletteNames[look.shirt], d => look.shirt = Wrap(look.shirt + d, ArbesLook.Palette.Length), () => ArbesLook.Palette[look.shirt]);
-            AddRow(panel, ref y, "PANTS", () => ArbesLook.PaletteNames[look.pants], d => look.pants = Wrap(look.pants + d, ArbesLook.Palette.Length), () => ArbesLook.Palette[look.pants]);
-            AddRow(panel, ref y, "SKIN", () => ArbesLook.SkinNames[look.skin], d => look.skin = Wrap(look.skin + d, ArbesLook.SkinTones.Length), () => ArbesLook.SkinTones[look.skin]);
-            AddRow(panel, ref y, "HAIR", () => ArbesLook.HairNames[look.hair], d => look.hair = Wrap(look.hair + d, ArbesLook.HairColors.Length), () => ArbesLook.HairColors[look.hair]);
+            AddRow(panel, ref y, "BODY", () => AirsoftLook.BodyNames[look.body], d => look.body = Wrap(look.body + d, AirsoftLook.Bodies.Length));
+            AddRow(panel, ref y, "HAT", () => AirsoftLook.Hats[look.hat], d => look.hat = Wrap(look.hat + d, AirsoftLook.Hats.Length));
+            AddRow(panel, ref y, "HAT COLOR", () => AirsoftLook.PaletteNames[look.hatColor], d => look.hatColor = Wrap(look.hatColor + d, AirsoftLook.Palette.Length), () => AirsoftLook.Palette[look.hatColor]);
+            AddRow(panel, ref y, "SHIRT", () => AirsoftLook.PaletteNames[look.shirt], d => look.shirt = Wrap(look.shirt + d, AirsoftLook.Palette.Length), () => AirsoftLook.Palette[look.shirt]);
+            AddRow(panel, ref y, "PANTS", () => AirsoftLook.PaletteNames[look.pants], d => look.pants = Wrap(look.pants + d, AirsoftLook.Palette.Length), () => AirsoftLook.Palette[look.pants]);
+            AddRow(panel, ref y, "SKIN", () => AirsoftLook.SkinNames[look.skin], d => look.skin = Wrap(look.skin + d, AirsoftLook.SkinTones.Length), () => AirsoftLook.SkinTones[look.skin]);
+            AddRow(panel, ref y, "HAIR", () => AirsoftLook.HairNames[look.hair], d => look.hair = Wrap(look.hair + d, AirsoftLook.HairColors.Length), () => AirsoftLook.HairColors[look.hair]);
 
             var rnd = Button(panel, "RandomBtn", "RANDOMIZE", () =>
             {
-                look = ArbesLook.Unpack(ArbesLook.Random());
+                look = AirsoftLook.Unpack(AirsoftLook.Random());
                 Changed();
             });
             Place(rnd, 0, y - 8, 360, 48);
@@ -259,9 +259,9 @@ namespace AirsoftFPS
                 string s = r.get();
                 if (r.txt != null) r.txt.text = s;
             }
-            int packed = ArbesLook.Pack(look);
+            int packed = AirsoftLook.Pack(look);
             if (MatchNet.Instance != null) MatchNet.Instance.SetLocalLook(packed);
-            else ArbesLook.SaveLocal(packed);
+            else AirsoftLook.SaveLocal(packed);
             RebuildAvatar();
         }
 

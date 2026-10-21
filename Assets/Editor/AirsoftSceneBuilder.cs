@@ -593,7 +593,7 @@ namespace AirsoftFPS.Editor
             var bg = CreateUIPanel(canvasObj.transform, "BG", Color.clear, true);
 
             // Title
-            var titleObj = CreateText(bg.transform, "Title", "ARBES AIRSOFT", 72,
+            var titleObj = CreateText(bg.transform, "Title", "AIRSOFT", 72,
                 new Color(1f, 0.55f, 0.15f), TextAlignmentOptions.Center);
             var titleRT = titleObj.GetComponent<RectTransform>();
             titleRT.anchorMin = new Vector2(0.5f, 1); titleRT.anchorMax = new Vector2(0.5f, 1);
@@ -719,7 +719,7 @@ namespace AirsoftFPS.Editor
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
             // ── Environment: low-poly town (ground, roads, buildings, props, sky, post-processing) ──
-            ArbesMapBuilder.BuildEnvironment();
+            AirsoftMapBuilder.BuildEnvironment();
 
             // ── Spawn Points ──
             Vector3[] spawnPositions = {

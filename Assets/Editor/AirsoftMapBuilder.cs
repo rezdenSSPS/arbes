@@ -11,7 +11,7 @@ namespace AirsoftFPS.Editor
     // sidewalks, houses / containers / park, a skyline of buildings outside the play area,
     // street furniture, sky, fog and post-processing.  Gameplay objects (spawns, NavMesh,
     // GameManager, HUD) are still created by AirsoftSceneBuilder.BuildArenaScene.
-    public static class ArbesMapBuilder
+    public static class AirsoftMapBuilder
     {
         const string Q = "Assets/ThirdParty/Quaternius/";
         const float Half = 40f;     // playable area is -40..40
@@ -153,7 +153,7 @@ namespace AirsoftFPS.Editor
         static GameObject Place(string rel, Vector3 pos, float yaw, float size, bool byHeight = true, bool collide = true, Transform parent = null)
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(Q + rel);
-            if (prefab == null) { Debug.LogWarning("[Arbes] missing model " + rel); return null; }
+            if (prefab == null) { Debug.LogWarning("[Airsoft] missing model " + rel); return null; }
             var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
             go.transform.SetParent(parent ? parent : root, false);
             go.transform.rotation = Quaternion.Euler(0, yaw, 0) * prefab.transform.rotation;
@@ -209,7 +209,7 @@ namespace AirsoftFPS.Editor
 
         static void Sky()
         {
-            string path = "Assets/Materials/Env/ArbesSky.mat";
+            string path = "Assets/Materials/Env/AirsoftSky.mat";
             var sky = AssetDatabase.LoadAssetAtPath<Material>(path);
             var sh = Shader.Find("Skybox/Procedural");
             if (sky == null && sh != null) { sky = new Material(sh); AssetDatabase.CreateAsset(sky, path); }
@@ -579,7 +579,7 @@ namespace AirsoftFPS.Editor
 
         static void PostProcessing()
         {
-            string path = "Assets/Settings/ArbesArenaProfile.asset";
+            string path = "Assets/Settings/AirsoftArenaProfile.asset";
             if (AssetDatabase.LoadAssetAtPath<VolumeProfile>(path) != null) AssetDatabase.DeleteAsset(path);
             var profile = ScriptableObject.CreateInstance<VolumeProfile>();
             AssetDatabase.CreateAsset(profile, path);

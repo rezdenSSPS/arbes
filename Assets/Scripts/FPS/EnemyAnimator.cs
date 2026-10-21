@@ -16,7 +16,7 @@ namespace AirsoftFPS
         float walkPhase;
         bool dead;
         Quaternion modelRest;
-        ArbesLook.Avatar avatar;   // low-poly soldier (replaces the primitive body when available)
+        AirsoftLook.Avatar avatar;   // low-poly soldier (replaces the primitive body when available)
 
         void Start()
         {
@@ -45,19 +45,19 @@ namespace AirsoftFPS
                 hatColor = rng.Next(2) == 0 ? 9 : 6,
                 shirt = rng.Next(3) switch { 0 => 6, 1 => 9, _ => 8 },
                 pants = rng.Next(2) == 0 ? 6 : 10,
-                skin = rng.Next(ArbesLook.SkinTones.Length),
+                skin = rng.Next(AirsoftLook.SkinTones.Length),
                 hair = rng.Next(3)
             };
-            try { avatar = ArbesLook.BuildAvatar(transform, ArbesLook.Pack(look)); }
-            catch (System.Exception e) { Debug.LogWarning("[Arbes] enemy avatar: " + e.Message); avatar = null; }
+            try { avatar = AirsoftLook.BuildAvatar(transform, AirsoftLook.Pack(look)); }
+            catch (System.Exception e) { Debug.LogWarning("[Airsoft] enemy avatar: " + e.Message); avatar = null; }
             if (avatar == null) return;
 
             if (model) foreach (var r in model.GetComponentsInChildren<Renderer>(true)) r.enabled = false;
 
             if (avatar.rightHand)
             {
-                ArbesGuns.Gun g = null;
-                try { g = ArbesGuns.Build("Rifle", 0.75f, null); } catch { }
+                AirsoftGuns.Gun g = null;
+                try { g = AirsoftGuns.Build("Rifle", 0.75f, null); } catch { }
                 if (g != null)
                 {
                     g.root.transform.SetPositionAndRotation(avatar.rightHand.position, transform.rotation);
@@ -74,7 +74,7 @@ namespace AirsoftFPS
             {
                 float sp = (agent != null && agent.enabled && agent.isOnNavMesh) ? agent.velocity.magnitude : 0f;
                 // enemies move at ~3.5 m/s: map that to the run clip
-                ArbesLook.Animate(avatar, sp > 2.5f ? 7f : sp, dead);
+                AirsoftLook.Animate(avatar, sp > 2.5f ? 7f : sp, dead);
                 return;
             }
 

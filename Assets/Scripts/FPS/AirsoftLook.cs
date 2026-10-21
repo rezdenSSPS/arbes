@@ -11,7 +11,7 @@ namespace AirsoftFPS
         public int body, hat, hatColor, shirt, pants, skin, hair;
     }
 
-    public static class ArbesLook
+    public static class AirsoftLook
     {
         // ───────────── options ─────────────
         public static readonly string[] Bodies =
@@ -111,7 +111,7 @@ namespace AirsoftFPS
         {
             get
             {
-                if (s_base == null) s_base = Resources.Load<Material>("ArbesLit");
+                if (s_base == null) s_base = Resources.Load<Material>("AirsoftLit");
                 if (s_base == null)
                 {
                     var sh = Shader.Find("Universal Render Pipeline/Lit");
@@ -122,7 +122,7 @@ namespace AirsoftFPS
             }
         }
 
-        public static Material MakeMat(Color c, Texture tex = null, string name = "ArbesMat")
+        public static Material MakeMat(Color c, Texture tex = null, string name = "AirsoftMat")
         {
             var m = new Material(BaseMaterial) { name = name };
             if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
@@ -210,8 +210,8 @@ namespace AirsoftFPS
         public static Avatar BuildAvatar(Transform parent, int packedLook, int team = 0, float height = 1.8f)
         {
             var l = Unpack(packedLook);
-            var prefab = Resources.Load<GameObject>("ArbesCharacters/" + Bodies[l.body]);
-            if (prefab == null) prefab = Resources.Load<GameObject>("ArbesCharacters/" + Bodies[0]);
+            var prefab = Resources.Load<GameObject>("AirsoftCharacters/" + Bodies[l.body]);
+            if (prefab == null) prefab = Resources.Load<GameObject>("AirsoftCharacters/" + Bodies[0]);
             if (prefab == null) return null;
 
             var holder = new GameObject("Avatar");

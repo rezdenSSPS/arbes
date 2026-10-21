@@ -12,7 +12,7 @@ namespace AirsoftFPS
         NetworkObject netObj;
         Health health;
         WeaponController weapons;
-        ArbesLook.Avatar avatar;
+        AirsoftLook.Avatar avatar;
         GameObject handGun;
         int builtLook = int.MinValue, builtTeam = -1, builtGun = -1;
         float nextCheck;
@@ -39,7 +39,7 @@ namespace AirsoftFPS
         {
             int look = MatchNet.Instance != null ? MatchNet.Instance.LookOf(Owner) : -1;
             if (look < 0 && IsMine && MatchNet.Instance != null) look = MatchNet.Instance.LocalLook;
-            if (look < 0) look = ArbesLook.DefaultFor(Owner);
+            if (look < 0) look = AirsoftLook.DefaultFor(Owner);
             return look;
         }
 
@@ -68,7 +68,7 @@ namespace AirsoftFPS
             bool dead = health != null && health.isDead.Value;
             if (avatar != null)
             {
-                ArbesLook.Animate(avatar, speed, dead);
+                AirsoftLook.Animate(avatar, speed, dead);
                 // characters without a death clip just tip over
                 if (string.IsNullOrEmpty(avatar.death))
                 {
@@ -87,8 +87,8 @@ namespace AirsoftFPS
             builtLook = look; builtTeam = team; builtGun = -1;
             if (avatar != null && avatar.root) Destroy(avatar.root);
             handGun = null;
-            try { avatar = ArbesLook.BuildAvatar(transform, look, team); }
-            catch (System.Exception e) { Debug.LogWarning("[Arbes] avatar build failed: " + e.Message); avatar = null; }
+            try { avatar = AirsoftLook.BuildAvatar(transform, look, team); }
+            catch (System.Exception e) { Debug.LogWarning("[Airsoft] avatar build failed: " + e.Message); avatar = null; }
             if (avatar == null)
             {
                 // fall back to the capsule
@@ -96,7 +96,7 @@ namespace AirsoftFPS
                 if (body) foreach (var r in body.GetComponentsInChildren<Renderer>(true)) r.enabled = true;
                 return;
             }
-            if (IsMine) ArbesLook.SetShadowsOnly(avatar.root, true);
+            if (IsMine) AirsoftLook.SetShadowsOnly(avatar.root, true);
         }
 
         void AttachGun(int idx)
@@ -107,14 +107,14 @@ namespace AirsoftFPS
             if (idx < 0 || weapons == null || weapons.weapons == null || idx >= weapons.weapons.Length) return;
             if (avatar.rightHand == null) return;
             var w = weapons.weapons[idx];
-            ArbesGuns.Gun g = null;
-            try { g = ArbesGuns.Build(w.model, w.modelLength, null); } catch { }
+            AirsoftGuns.Gun g = null;
+            try { g = AirsoftGuns.Build(w.model, w.modelLength, null); } catch { }
             if (g == null) return;
             handGun = g.root;
             // point the barrel where the character faces, grip in the right hand
             handGun.transform.SetPositionAndRotation(avatar.rightHand.position, transform.rotation);
             handGun.transform.SetParent(avatar.rightHand, true);
-            if (IsMine) ArbesLook.SetShadowsOnly(handGun, true);
+            if (IsMine) AirsoftLook.SetShadowsOnly(handGun, true);
         }
 
         void OnDestroy()

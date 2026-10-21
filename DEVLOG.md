@@ -1,4 +1,4 @@
-# Arbes — Vývojový deník (DPM)
+# Airsoft — Vývojový deník (DPM)
 
 Multiplayerová FPS aréna. Unity 6.6 (URP), Netcode for GameObjects 2.13.3.
 

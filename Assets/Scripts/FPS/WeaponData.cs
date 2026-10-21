@@ -20,7 +20,7 @@ namespace AirsoftFPS
         public float aimFOV;          // 0 = no scope
         public float moveSpeedMult;   // 1 = normal
 
-        // Low-poly model (Resources/ArbesGuns/<model>.fbx) + display
+        // Low-poly model (Resources/AirsoftGuns/<model>.fbx) + display
         public string model;
         public string shortName;
         public float modelLength = 0.6f; // metres, barrel tip to stock

@@ -3,10 +3,10 @@ using UnityEngine;
 
 namespace AirsoftFPS
 {
-    // Loads a low-poly gun model (Resources/ArbesGuns/<model>) and normalises it:
+    // Loads a low-poly gun model (Resources/AirsoftGuns/<model>) and normalises it:
     //  pivot = grip, +Z = barrel direction, +Y = up, overall length = `length` metres.
     // Works for any model orientation by measuring the mesh.
-    public static class ArbesGuns
+    public static class AirsoftGuns
     {
         public class Gun
         {
@@ -17,7 +17,7 @@ namespace AirsoftFPS
         public static Gun Build(string model, float length, Transform parent)
         {
             if (string.IsNullOrEmpty(model)) return null;
-            var prefab = Resources.Load<GameObject>("ArbesGuns/" + model);
+            var prefab = Resources.Load<GameObject>("AirsoftGuns/" + model);
             if (prefab == null) return null;
 
             var root = new GameObject("GunModel_" + model);
@@ -106,7 +106,7 @@ namespace AirsoftFPS
 
             var g = new Gun { root = root, muzzleLocal = toFwd * ((muzzle - grip) * k) + Vector3.forward * 0.02f };
 
-            ArbesLook.FixMaterials(inst);
+            AirsoftLook.FixMaterials(inst);
             foreach (var c in inst.GetComponentsInChildren<Collider>(true)) Object.Destroy(c);
             foreach (var a in inst.GetComponentsInChildren<Animation>(true)) a.enabled = false;
             foreach (var a in inst.GetComponentsInChildren<Animator>(true)) a.enabled = false;
