@@ -57,6 +57,7 @@ namespace AirsoftFPS
         // ───────── built UI ─────────
         Canvas canvas;
         GameObject hudRoot, scoreboard, deathScreen, killcamScreen, pauseScreen, resultsScreen;
+        GameObject hitScreen;   // Milsim HIT overlay
         SettingsScreen settings;
         KillCam killCam;
 
@@ -93,6 +94,12 @@ namespace AirsoftFPS
         readonly List<ListRow> sbRows = new List<ListRow>();
         float sbTimer;
 
+        // Milsim HIT overlay
+        TextMeshProUGUI hitBy, hitInstr, hitDist, hitCount;
+        RectTransform hitArrow;
+        GameObject hitWalk, hitRespawn;
+        Image hitFill;
+
         // death
         Image deathSwatch;
         TextMeshProUGUI deathBy, deathHp, deathSeconds;
@@ -116,7 +123,7 @@ namespace AirsoftFPS
 
         class FeedRow { public GameObject go; public Image bg, frame; public TextMeshProUGUI killer, weapon, victim; }
         class SlotView { public Image bg, frame; public TextMeshProUGUI key, name; }
-        class TeamView { public Image header; public TextMeshProUGUI name, score; public readonly List<(GameObject go, Image bg, TextMeshProUGUI n, TextMeshProUGUI k, TextMeshProUGUI d)> rows = new(); }
+        class TeamView { public Image header; public TextMeshProUGUI name, score, headK, headD; public readonly List<(GameObject go, Image bg, TextMeshProUGUI n, TextMeshProUGUI k, TextMeshProUGUI d)> rows = new(); }
         class ListRow { public GameObject go; public Image bg, bar; public TextMeshProUGUI rank, name, progress, a, b; public GameObject barBack; }
         class PodiumView { public RectTransform rt; public Image bg, frame; public TextMeshProUGUI rank, name, stat; }
 
@@ -198,7 +205,7 @@ namespace AirsoftFPS
         static int TeamByName(string name)
         {
             var mnet = MatchNet.Instance;
-            if (mnet == null || string.IsNullOrEmpty(name) || mnet.Mode != MatchNet.GameModeType.TeamDeathmatch) return 0;
+            if (mnet == null || string.IsNullOrEmpty(name) || !mnet.TeamMode) return 0;
             foreach (var e in mnet.Roster) if (e.name == name) return e.team;
             return 0;
         }
@@ -229,6 +236,7 @@ namespace AirsoftFPS
             if (!dead) deathTime = -1f;
             bool showScores = kb != null && kb.tabKey.isPressed && mnet != null && !results && !isPaused;
             bool killcam = dead && killCam != null && killCam.Playing;
+            bool hit = playerHealth != null && playerHealth.IsOut;
 
             hudRoot.SetActive(!results && !isPaused && !killcam);
             resultsScreen.SetActive(results);
@@ -236,16 +244,18 @@ namespace AirsoftFPS
             deathScreen.SetActive(dead && !killcam && !results && !isPaused && !showScores);
             killcamScreen.SetActive(killcam && !results && !isPaused && !showScores);
             scoreboard.SetActive(showScores);
+            hitScreen.SetActive(hit && !results && !isPaused && !showScores);
 
             InputBlocked = isPaused || results || settings.IsOpen;
             bool wantCursor = InputBlocked;
             if (wantCursor && Cursor.lockState != CursorLockMode.None) { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; }
             else if (!wantCursor && wired && Cursor.lockState != CursorLockMode.Locked) { Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false; }
 
-            if (!results) UpdateHud(mnet, dead);
+            if (!results) UpdateHud(mnet, dead || hit);
             if (showScores) { sbTimer -= Time.unscaledDeltaTime; if (sbTimer <= 0f) { sbTimer = 0.2f; UpdateScoreboard(mnet); } }
             else sbTimer = 0f;
             if (dead && !results) UpdateDeath(killcam);
+            if (hit && !results) UpdateHit(mnet);
             if (isPaused) UpdatePause(mnet);
             if (results) UpdateResults(mnet);
         }
@@ -271,7 +281,7 @@ namespace AirsoftFPS
             }
 
             // top widget per mode
-            tdmWidget.SetActive(mode == MatchNet.GameModeType.TeamDeathmatch);
+            tdmWidget.SetActive(MatchNet.IsTeamMode(mode));
             ffaWidget.SetActive(mode == MatchNet.GameModeType.FreeForAll);
             ggWidget.SetActive(mode == MatchNet.GameModeType.GunGame);
             coopWidget.SetActive(mode == MatchNet.GameModeType.Coop);
@@ -292,11 +302,11 @@ namespace AirsoftFPS
 
             if (mnet != null)
             {
-                if (mode == MatchNet.GameModeType.TeamDeathmatch)
+                if (MatchNet.IsTeamMode(mode))
                 {
                     tdmRed.text = mnet.TeamScore(1).ToString();
                     tdmBlue.text = mnet.TeamScore(2).ToString();
-                    tdmTarget.text = MatchNet.TDM_KILL_TARGET.ToString();
+                    tdmTarget.text = mnet.TeamTarget.ToString();
                     int team = mnet.TeamOf(me);
                     tdmYou.text = team == 0 ? "" : $"YOU ARE <color={Html(TeamColor(team))}>{(team == 1 ? "RED" : "BLUE")}</color>";
                     tdmYou.transform.parent.gameObject.SetActive(team != 0);
@@ -367,6 +377,18 @@ namespace AirsoftFPS
             hpValue.color = hpUnit.color = low ? Hex("#FFD2CC") : Fg;
             hpFill.color = low ? Danger : Fg;
             SetBar(hpFill, hp / (float)max);
+            if (mode == MatchNet.GameModeType.Milsim)
+            {
+                // no HP in Milsim: you're either in the game or HIT
+                bool out_ = playerHealth != null && playerHealth.IsOut;
+                hpValue.text = out_ ? "HIT" : "IN";
+                hpUnit.text = "";
+                hpValue.color = out_ ? Danger : Fg;
+                hpFill.color = out_ ? Danger : Fg;
+                SetBar(hpFill, out_ ? 0f : 1f);
+                low = false;
+            }
+            else hpUnit.text = "HP";
             vignette.gameObject.SetActive(low && !dead);
             if (low) vignette.color = A(Hex("#C8281E"), 0.4f + 0.12f * Mathf.Sin(Time.unscaledTime * 4f));
 
@@ -412,11 +434,14 @@ namespace AirsoftFPS
                 row.go.SetActive(true);
                 bool envDeath = string.IsNullOrEmpty(k.killer);
                 row.killer.gameObject.SetActive(!envDeath);
-                row.weapon.gameObject.SetActive(!envDeath && !string.IsNullOrEmpty(k.weapon));
+                bool milsim = mode == MatchNet.GameModeType.Milsim;
+                row.weapon.gameObject.SetActive(!envDeath && (milsim || !string.IsNullOrEmpty(k.weapon)));
                 row.killer.text = k.killer;
                 row.killer.color = TeamColor(k.killerTeam);
-                row.weapon.text = k.weapon;
-                row.victim.text = envDeath ? k.victim + " was eliminated" : k.victim;
+                // Milsim: "X hit Y" (weapon small after it)
+                row.weapon.text = !milsim ? k.weapon : string.IsNullOrEmpty(k.weapon) ? "hit"
+                    : $"hit <size=80%><color={Html(Muted)}>{k.weapon}</color></size>";
+                row.victim.text = envDeath ? k.victim + (milsim ? " is hit" : " was eliminated") : k.victim;
                 row.victim.color = envDeath ? DangerSoft : (k.victimTeam != 0 ? TeamColor(k.victimTeam) : Fg);
                 row.bg.color = k.me ? A(Accent, 0.22f) : Scrim(0.72f);
                 row.frame.enabled = k.me;
@@ -437,7 +462,8 @@ namespace AirsoftFPS
             sbFooterRight.text = mnet.Roster.Count + " / 8 players";
 
             var list = new List<MatchNet.Entry>(mnet.Roster);
-            bool tdm = mode == MatchNet.GameModeType.TeamDeathmatch;
+            bool tdm = MatchNet.IsTeamMode(mode);
+            bool milsimSb = mode == MatchNet.GameModeType.Milsim;
             sbTeams.SetActive(tdm);
             sbList.SetActive(!tdm);
             if (tdm)
@@ -447,6 +473,8 @@ namespace AirsoftFPS
                 {
                     var tv = sbTeamViews[t];
                     tv.score.text = mnet.TeamScore(t + 1).ToString();
+                    tv.headK.text = milsimSb ? "HITS" : "KILLS";
+                    tv.headD.text = milsimSb ? "OUT" : "DEATHS";
                     int r = 0;
                     foreach (var e in list)
                     {
@@ -513,6 +541,7 @@ namespace AirsoftFPS
             MatchNet.GameModeType.TeamDeathmatch => "first team to " + MatchNet.TDM_KILL_TARGET,
             MatchNet.GameModeType.FreeForAll => "first to " + MatchNet.FFA_KILL_TARGET + " kills",
             MatchNet.GameModeType.GunGame => "finish all " + MatchNet.GUNGAME_WEAPONS + " weapons",
+            MatchNet.GameModeType.Milsim => "first team to " + MatchNet.MILSIM_HIT_TARGET + " hits",
             _ => "survive the waves together"
         };
 
@@ -562,6 +591,7 @@ namespace AirsoftFPS
             switch (mnet.Mode)
             {
                 case MatchNet.GameModeType.TeamDeathmatch:
+                case MatchNet.GameModeType.Milsim:
                     pauseScore.text = $"<color={Html(Red)}>{mnet.TeamScore(1)}</color> <color={Html(Faint)}>:</color> <color={Html(Blue)}>{mnet.TeamScore(2)}</color>";
                     break;
                 case MatchNet.GameModeType.GunGame:
@@ -588,7 +618,8 @@ namespace AirsoftFPS
             var nm = NetworkManager.Singleton;
             ulong me = nm != null ? nm.LocalClientId : 0;
             var mode = mnet.Mode;
-            bool tdm = mode == MatchNet.GameModeType.TeamDeathmatch;
+            bool tdm = MatchNet.IsTeamMode(mode);
+            bool milsim = mode == MatchNet.GameModeType.Milsim;
             bool onTime = mnet.EndedOnTime;
             resMode.text = ModeName(mode).ToUpperInvariant() + (onTime ? " · TIME'S UP" : " · MATCH OVER");
             if (mnet.IsDraw)
@@ -603,7 +634,7 @@ namespace AirsoftFPS
                 resWinner.text = mnet.WinnerTeam == 1 ? "RED TEAM WINS" : "BLUE TEAM WINS";
                 resBanner.color = TeamColor(mnet.WinnerTeam);
                 resSub.text = $"{mnet.TeamScore(1)} : {mnet.TeamScore(2)} · " +
-                              (onTime ? "higher score when time ran out" : $"first team to {MatchNet.TDM_KILL_TARGET}");
+                              (onTime ? "higher score when time ran out" : $"first team to {mnet.TeamTarget}" + (milsim ? " hits" : ""));
             }
             else
             {
@@ -629,6 +660,7 @@ namespace AirsoftFPS
                 p.name.color = tdm ? TeamColor(e.team) : Fg;
                 p.stat.text = mode == MatchNet.GameModeType.GunGame
                     ? $"{WeaponNameAt(Mathf.Min(e.kills, MatchNet.GUNGAME_WEAPONS - 1))} · {Mathf.Min(e.kills, MatchNet.GUNGAME_WEAPONS)} / {MatchNet.GUNGAME_WEAPONS}"
+                    : milsim ? $"{e.kills} hits · {e.deaths} out"
                     : $"{e.kills} kills · {e.deaths} deaths";
                 p.bg.color = you ? Surface : Raised;
                 p.frame.color = you ? Accent : Line;
@@ -640,9 +672,9 @@ namespace AirsoftFPS
                 if (list[i].clientId == me) { kills = list[i].kills; deaths = list[i].deaths; place = i + 1; }
             if (tdm)
             {
-                SetStat(0, kills.ToString(), "KILLS");
-                SetStat(1, deaths.ToString(), "DEATHS");
-                SetStat(2, (deaths == 0 ? kills : kills / (float)deaths).ToString("0.0"), "K/D");
+                SetStat(0, kills.ToString(), milsim ? "HITS" : "KILLS");
+                SetStat(1, deaths.ToString(), milsim ? "TIMES HIT" : "DEATHS");
+                SetStat(2, (deaths == 0 ? kills : kills / (float)deaths).ToString("0.0"), milsim ? "H/O" : "K/D");
             }
             else
             {
@@ -719,6 +751,8 @@ namespace AirsoftFPS
             BuildHud(hudRoot.transform);
             deathScreen = BuildDeath(root);
             killcamScreen = BuildKillcam(root);
+            hitScreen = BuildHitOverlay(root);
+            hitScreen.SetActive(false);
             scoreboard = BuildScoreboard(root);
             pauseScreen = BuildPause(root);
             resultsScreen = BuildResults(root);
@@ -960,6 +994,87 @@ namespace AirsoftFPS
             return screen.gameObject;
         }
 
+        // Milsim HIT overlay: the HUD stays up (you can still walk), this sits on top of it.
+        GameObject BuildHitOverlay(Transform root)
+        {
+            var screen = Rect(root, "HitOverlay").Fill();
+            var v = Box(screen, "Vignette", A(Hex("#C8281E"), 0.38f)); v.sprite = VignetteSprite; v.rectTransform.Fill();
+            v.raycastTarget = false;
+
+            var col = VCol(screen, "Column", 8, TextAnchor.UpperCenter, false);
+            col.GetComponent<RectTransform>().At(0.5f, 1f, 0, -170, 760, 300);
+            Label(col.transform, "YOU'RE OUT", F.BodyBold, 12, Hex("#FFB3AA"), TextAlignmentOptions.Center, 0.24f);
+            Label(col.transform, "HIT!", F.CondBlack, 96, Fg, TextAlignmentOptions.Center, 0.04f).LE(-1, 88);
+            hitBy = Label(col.transform, "", F.BodySemi, 16, TextSoft, TextAlignmentOptions.Center);
+
+            var card = VCol(col.transform, "Card", 8, TextAnchor.MiddleCenter, false);
+            card.padding = new RectOffset(22, 22, 12, 12);
+            card.gameObject.AddComponent<Image>().color = Scrim(0.82f);
+            var fit = card.gameObject.AddComponent<ContentSizeFitter>();
+            fit.horizontalFit = fit.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            hitInstr = Label(card.transform, "", F.Body, 15, Fg, TextAlignmentOptions.Center);
+
+            // walking back: arrow towards the zone + distance
+            var walk = HRow(card.transform, "Walk", 10, TextAnchor.MiddleCenter);
+            hitWalk = walk.gameObject;
+            hitArrow = Rect(walk.transform, "Arrow").LE(28, 28).GetComponent<RectTransform>();
+            Box(hitArrow, "Stem", Accent).rectTransform.At(0.5f, 0.5f, 0, -3, 3, 16);
+            var l = Box(hitArrow, "L", Accent).rectTransform; l.At(0.5f, 0.5f, -4, 4, 12, 3); l.localRotation = Quaternion.Euler(0, 0, 45);
+            var r = Box(hitArrow, "R", Accent).rectTransform; r.At(0.5f, 0.5f, 4, 4, 12, 3); r.localRotation = Quaternion.Euler(0, 0, -45);
+            hitDist = Label(walk.transform, "", F.CondBold, 24, Accent, TextAlignmentOptions.MidlineLeft);
+
+            // in the zone: countdown
+            var resp = VCol(card.transform, "Respawn", 6, TextAnchor.MiddleCenter, true);
+            resp.LE(320, -1);
+            hitRespawn = resp.gameObject;
+            hitCount = Label(resp.transform, "", F.CondBold, 22, Ready, TextAlignmentOptions.Center);
+            hitFill = Bar(resp.transform, "Bar", Line, Ready);
+            hitFill.transform.parent.GetComponent<Image>().LE(-1, 6);
+            return screen.gameObject;
+        }
+
+        void UpdateHit(MatchNet mnet)
+        {
+            var nm = NetworkManager.Singleton;
+            ulong me = nm != null ? nm.LocalClientId : 0;
+            int team = mnet != null ? mnet.TeamOf(me) : 0;
+            string teamName = team == 1 ? "RED" : team == 2 ? "BLUE" : "YOUR";
+            string tc = Html(team != 0 ? TeamColor(team) : Accent);
+
+            hitBy.text = string.IsNullOrEmpty(lastKiller) ? "" :
+                $"by <color={Html(lastKillerTeam != 0 ? TeamColor(lastKillerTeam) : Fg)}>{lastKiller}</color>" +
+                (string.IsNullOrEmpty(lastKillerWeapon) ? "" : $" <color={Html(Muted)}>· {lastKillerWeapon}</color>");
+
+            Vector3 pos = playerHealth.transform.position;
+            float outside = MilsimZone.DistanceOutside(team, pos, out Vector3 zone);
+            double at = playerHealth.hitRespawnAt.Value;
+            bool counting = at > 0 && nm != null;
+            hitWalk.SetActive(!counting && outside > 0f);
+            hitRespawn.SetActive(counting);
+
+            if (counting)
+            {
+                float left = Mathf.Max(0f, (float)(at - nm.ServerTime.Time));
+                float total = Mathf.Max(0.01f, playerHealth.hitRespawnTime);
+                hitInstr.text = $"In the <color={tc}>{teamName} BASE</color>. Stay here.";
+                hitCount.text = "BACK IN " + Mathf.CeilToInt(left);
+                SetBar(hitFill, 1f - left / total);
+                return;
+            }
+
+            hitInstr.text = $"Raise your hand, don't shoot. Walk back to the <color={tc}>{teamName} BASE</color> to respawn.";
+            if (outside > 0f)
+            {
+                hitDist.text = Mathf.CeilToInt(outside) + " m";
+                var cam = Camera.main;
+                Vector3 fwd = cam != null ? cam.transform.forward : playerHealth.transform.forward;
+                fwd.y = 0;
+                Vector3 to = zone - pos; to.y = 0;
+                float ang = fwd.sqrMagnitude > 1e-6f && to.sqrMagnitude > 1e-6f ? Vector3.SignedAngle(fwd, to, Vector3.up) : 0f;
+                hitArrow.localRotation = Quaternion.Euler(0, 0, -ang);
+            }
+        }
+
         // Cinematic bands while the killcam watches the killer (the full death screen follows).
         GameObject BuildKillcam(Transform root)
         {
@@ -1043,7 +1158,8 @@ namespace AirsoftFPS
                 Label(th.transform, t == 0 ? "RED" : "BLUE", F.BodyBold, 13, Ground, TextAlignmentOptions.MidlineLeft, 0.16f).rectTransform.Fill(14, 0, 14, 0);
                 tv.score = Label(th.transform, "0", F.CondBlack, 32, Ground, TextAlignmentOptions.MidlineRight);
                 tv.score.rectTransform.Fill(14, 0, 14, 0);
-                ColumnHeads(tc.transform, 34, ("PLAYER", -1f, false), ("KILLS", 60f, true), ("DEATHS", 60f, true));
+                var th2 = ColumnHeads(tc.transform, 34, ("PLAYER", -1f, false), ("KILLS", 60f, true), ("DEATHS", 60f, true));
+                tv.headK = th2[1]; tv.headD = th2[2];
                 for (int r = 0; r < 8; r++)
                 {
                     var row = Box(tc.transform, "Row", Color.clear);

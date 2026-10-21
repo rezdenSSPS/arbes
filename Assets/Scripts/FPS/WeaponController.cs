@@ -247,9 +247,9 @@ namespace AirsoftFPS
 
             if (!IsOwner) return;
             if (Time.timeScale == 0) return;
-            if (HUDManager.InputBlocked)
+            if (HUDManager.InputBlocked || (ownHealth != null && ownHealth.IsOut))
             {
-                // a menu is open: no shooting/switching, drop out of the scope
+                // a menu is open (or Milsim HIT): no shooting/switching, drop out of the scope
                 isAiming = false;
                 if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, GameSettings.FieldOfView, Time.deltaTime * 10f);
                 return;
@@ -556,6 +556,7 @@ namespace AirsoftFPS
             rec = new ShotRecord { seq = shotSeq, valid = false };
 
             if (ownHealth != null && ownHealth.isDead.Value) { RejectShot(shotSeq, "shooter is dead"); return; }
+            if (ownHealth != null && ownHealth.IsOut) { RejectShot(shotSeq, "shooter is HIT (Milsim)"); return; }
 
             // Weapon: must be the one the server has equipped (or the previous one right after a switch).
             bool current = weaponIdx == netWeaponIndex.Value;
@@ -642,7 +643,7 @@ namespace AirsoftFPS
             if (!NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(networkObjId, out var netObj)) return;
             if (netObj == NetworkObject) return;
             var health = netObj.GetComponent<Health>();
-            if (health == null || health.isDead.Value) return;
+            if (health == null || health.isDead.Value || health.IsOut) return;
 
             // Geometry: in range, near the target, on a BB path with no wall before the hit.
             if (Vector3.Distance(rec.origin, hitPoint) > w.range + RANGE_TOLERANCE) { RejectHit("out of range"); return; }
@@ -675,7 +676,7 @@ namespace AirsoftFPS
             { RejectHit($"hit after {flight:0.00}s, BB needs {tof:0.00}s"); return; }
             rec.usedPellets |= 1 << match;
 
-            // Team Deathmatch: no friendly fire between teammates.
+            // Team modes: no friendly fire between teammates.
             if (MatchNet.Instance != null && MatchNet.Instance.BlocksDamage(OwnerClientId, netObj.OwnerClientId))
                 return;
             health.TakeDamage(w.damage, OwnerClientId, w.weaponName);

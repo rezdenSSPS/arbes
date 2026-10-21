@@ -75,14 +75,14 @@ namespace AirsoftFPS
 
         // ────────── spawn selection (server; also usable by Milsim walk-back and bots) ──────────
 
-        // Where a player should (re)spawn right now. Team Deathmatch: one of the player's own team's
+        // Where a player should (re)spawn right now. Team modes (TDM, Milsim): one of the player's own team's
         // points (Red north, Blue south). Every mode: the point farthest from living enemies, avoiding
         // points someone is already standing on. A little randomness spreads players over equal points.
         public static Pose GetSpawnFor(ulong clientId)
         {
             var mn = MatchNet.Instance;
             var mode = mn != null ? mn.Mode : MatchNet.GameModeType.Coop;
-            int team = mode == MatchNet.GameModeType.TeamDeathmatch && mn != null ? mn.TeamOf(clientId) : 0;
+            int team = MatchNet.IsTeamMode(mode) && mn != null ? mn.TeamOf(clientId) : 0;
 
             var points = Candidates(team);
             if (points.Count == 0)

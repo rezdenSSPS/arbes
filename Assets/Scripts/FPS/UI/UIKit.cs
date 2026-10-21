@@ -640,6 +640,7 @@ namespace AirsoftFPS
             MatchNet.GameModeType.FreeForAll => "Free-for-All",
             MatchNet.GameModeType.TeamDeathmatch => "Team Deathmatch",
             MatchNet.GameModeType.GunGame => "Gun Game",
+            MatchNet.GameModeType.Milsim => "Milsim",
             _ => "Co-op Survival"
         };
 
@@ -648,6 +649,7 @@ namespace AirsoftFPS
             MatchNet.GameModeType.FreeForAll => $"Every player for themselves. First to {MatchNet.FFA_KILL_TARGET} kills.",
             MatchNet.GameModeType.TeamDeathmatch => $"Red vs Blue. First team to {MatchNet.TDM_KILL_TARGET} kills.",
             MatchNet.GameModeType.GunGame => $"Each kill = next weapon. Finish all {MatchNet.GUNGAME_WEAPONS}.",
+            MatchNet.GameModeType.Milsim => $"Red vs Blue. One BB = out: walk back to respawn. First to {MatchNet.MILSIM_HIT_TARGET}.",
             _ => "Team up against waves of AI enemies."
         };
 

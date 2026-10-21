@@ -210,6 +210,10 @@ namespace AirsoftFPS
             public Transform head, rightHand;
             public Quaternion faceFrame = Quaternion.identity; // head-bone-relative rotation of the face (rest pose)
             public float scale = 1f;
+            // left arm bones for the Milsim "hand up" pose (looked up on first use)
+            public Transform armL, foreArmL, handL;
+            public bool armSearched, armPosed;
+            public Quaternion armRest, foreArmRest;   // pose before the hand went up (restored after)
         }
 
         // Builds the character under `parent` (feet at parent's origin, facing parent's +Z).
@@ -558,6 +562,50 @@ namespace AirsoftFPS
             string want = dead ? av.death : speed > 6.5f ? av.run : speed > 0.4f ? av.walk : av.idle;
             if (string.IsNullOrEmpty(want)) return;
             if (!av.anim.IsPlaying(want)) av.anim.CrossFade(want, dead ? 0.1f : 0.2f);
+        }
+
+        // Milsim HIT pose: left arm straight up over the head. Call in LateUpdate (after the
+        // animation has posed the bones); weight 0..1 blends from the animated pose.
+        public static void RaiseHand(Avatar av, float weight)
+        {
+            if (av == null || av.root == null) return;
+            if (weight <= 0.001f)
+            {
+                // put the arm back: a culled Animation doesn't re-pose the bones by itself
+                if (av.armPosed && av.armL && av.foreArmL)
+                { av.armL.localRotation = av.armRest; av.foreArmL.localRotation = av.foreArmRest; }
+                av.armPosed = false;
+                return;
+            }
+            if (!av.armSearched)
+            {
+                av.armSearched = true;
+                var t = av.root.transform;
+                av.armL = FindDeep(t, "UpperArm.L");
+                av.foreArmL = FindDeep(t, "LowerArm.L");
+                av.handL = FindDeep(t, "Hand.L") ?? FindDeep(t, "Palm.L");
+            }
+            if (av.armL == null || av.foreArmL == null) return;
+            if (!av.armPosed)
+            {
+                av.armPosed = true;
+                av.armRest = av.armL.localRotation;
+                av.foreArmRest = av.foreArmL.localRotation;
+            }
+            var rt = av.root.transform;
+            // up, a little out to the character's left and forward
+            Vector3 dir = (rt.up - rt.right * 0.22f + rt.forward * 0.12f).normalized;
+            AimBone(av.armL, av.foreArmL.position, dir, weight);
+            if (av.handL) AimBone(av.foreArmL, av.handL.position, dir, weight);
+        }
+
+        // Rotates `bone` so the direction to its child points along `dir` (blended by `weight`).
+        static void AimBone(Transform bone, Vector3 childPos, Vector3 dir, float weight)
+        {
+            Vector3 cur = childPos - bone.position;
+            if (cur.sqrMagnitude < 1e-8f) return;
+            var delta = Quaternion.FromToRotation(cur.normalized, dir);
+            bone.rotation = Quaternion.Slerp(Quaternion.identity, delta, Mathf.Clamp01(weight)) * bone.rotation;
         }
 
         public static void SetShadowsOnly(GameObject go, bool shadowsOnly)

@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace AirsoftFPS
 {
-    // A player spawn point in the arena. In Team Deathmatch each team only uses its own side
+    // A player spawn point in the arena. In team modes (TDM, Milsim) each team only uses its own side
     // (Red = north half, Blue = south half); the other modes use every point.
     // PlayerSpawner picks between them.
     public class SpawnPoint : MonoBehaviour

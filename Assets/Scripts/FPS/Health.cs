@@ -28,6 +28,23 @@ namespace AirsoftFPS
             ? Mathf.Max(0f, (float)(spawnProtectedUntil.Value - NetworkManager.ServerTime.Time)) : 0f;
         public bool IsSpawnProtected => SpawnProtectionLeft > 0f;
 
+        // Milsim: one BB hit = out. The player stays alive but is HIT until they walk back to
+        // their team's zone (MilsimZone) and wait there hitRespawnTime seconds.
+        [Header("Milsim")]
+        public float hitRespawnTime = 3f;
+
+        public NetworkVariable<bool> isHit = new NetworkVariable<bool>(false,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Server);
+
+        // Server time (NetworkManager.ServerTime) when the in-zone respawn finishes; 0 = not in the zone yet.
+        public NetworkVariable<double> hitRespawnAt = new NetworkVariable<double>(0,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Server);
+
+        public bool IsOut => isHit.Value;
+        public System.Action<bool> OnHitChanged;   // true = just got hit, false = back in the game
+
         public System.Action<int, int> OnHealthChanged; // current, max
         public System.Action OnDeath;
         public System.Action OnRespawn;
@@ -54,8 +71,18 @@ namespace AirsoftFPS
                 else OnRespawn?.Invoke();
             };
 
+            isHit.OnValueChanged += (prev, curr) => OnHitChanged?.Invoke(curr);
+
             // Initial notification
             OnHealthChanged?.Invoke(currentHealth.Value, maxHealth);
+        }
+
+        // HIT players don't stop BBs: the BB flies on through them (BBBallistics.CastSegment).
+        public static bool PassesBBs(Collider c)
+        {
+            if (c == null) return false;
+            var h = c.GetComponentInParent<Health>();
+            return h != null && h.IsSpawned && h.isHit.Value;
         }
 
         public void TakeDamage(int amount, ulong attackerClientId) => TakeDamage(amount, attackerClientId, "");
@@ -63,8 +90,14 @@ namespace AirsoftFPS
         public void TakeDamage(int amount, ulong attackerClientId, string weapon, NetworkObject attackerObject = null)
         {
             if (!IsServer) return;
-            if (isDead.Value) return;
+            if (isDead.Value || isHit.Value) return;
             if (IsSpawnProtected) return;
+
+            if (isPlayer && MatchNet.Instance != null && MatchNet.Instance.IsMilsim)
+            {
+                MarkHit(attackerClientId, weapon);
+                return;
+            }
 
             lastAttackerClientId = attackerClientId;
             lastAttackerWeapon = weapon;
@@ -128,6 +161,44 @@ namespace AirsoftFPS
         public void EndSpawnProtection()
         {
             if (IsServer && spawnProtectedUntil.Value > 0) spawnProtectedUntil.Value = 0;
+        }
+
+        // ───── Milsim ─────
+        void MarkHit(ulong shooterClientId, string weapon)
+        {
+            isHit.Value = true;
+            hitRespawnAt.Value = 0;
+            MatchNet.Instance?.ReportHit(OwnerClientId, shooterClientId, weapon);
+        }
+
+        void Update()
+        {
+            if (IsServer && IsSpawned && isHit.Value) TickHitRespawn();
+        }
+
+        // Server: once the HIT player stands in their team's zone, count down and bring them back.
+        // Leaving the zone cancels the countdown.
+        void TickHitRespawn()
+        {
+            var mn = MatchNet.Instance;
+            var nm = NetworkManager;
+            if (nm == null) return;
+            double now = nm.ServerTime.Time;
+            int team = mn != null ? mn.TeamOf(OwnerClientId) : 0;
+            float outside = MilsimZone.DistanceOutside(team, transform.position, out _);
+            bool inZone = outside <= 0f;   // no zone in this arena (-1): respawn where they stand
+
+            if (!inZone) { if (hitRespawnAt.Value != 0) hitRespawnAt.Value = 0; return; }
+            if (hitRespawnAt.Value == 0) { hitRespawnAt.Value = now + hitRespawnTime; return; }
+            if (now >= hitRespawnAt.Value) ClearHit();
+        }
+
+        void ClearHit()
+        {
+            currentHealth.Value = maxHealth;
+            hitRespawnAt.Value = 0;
+            isHit.Value = false;
+            StartSpawnProtection();
         }
 
         void DespawnEnemy()
