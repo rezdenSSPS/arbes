@@ -50,6 +50,53 @@ namespace AirsoftFPS
             new Color(0.20f, 0.40f, 0.90f), new Color(0.95f, 0.45f, 0.70f)
         };
 
+        // ───────────── unlocks ─────────────
+        // Player level (PlayerProfile) needed for each item, index-aligned with the lists above.
+        // Missing entries (an item added later) count as level 1. Bodies and skin tones are never locked.
+        public static readonly int[] HatLevels = { 1, 1, 1, 3, 6, 9, 12 };
+        public static readonly int[] EyewearLevels = { 1, 1, 2, 4, 7 };
+        // Palette colours (hat colour, shirt, pants): Yellow 2, Orange 5, Purple 8, Pink 10.
+        public static readonly int[] PaletteLevels = { 1, 1, 1, 2, 5, 8, 1, 1, 1, 1, 1, 10 };
+        // Hair: Blue 4, Pink 7.
+        public static readonly int[] HairLevels = { 1, 1, 1, 1, 1, 1, 4, 7 };
+
+        public enum Slot { Body, Hat, HatColor, Eyewear, Shirt, Pants, Skin, Hair }
+
+        public static int LevelFor(int[] levels, int index) => index >= 0 && index < levels.Length ? levels[index] : 1;
+
+        public static int RequiredLevel(Slot slot, int index) => slot switch
+        {
+            Slot.Hat => LevelFor(HatLevels, index),
+            Slot.Eyewear => LevelFor(EyewearLevels, index),
+            Slot.HatColor or Slot.Shirt or Slot.Pants => LevelFor(PaletteLevels, index),
+            Slot.Hair => LevelFor(HairLevels, index),
+            _ => 1
+        };
+
+        public static int Get(LookData l, Slot slot) => slot switch
+        {
+            Slot.Body => l.body, Slot.Hat => l.hat, Slot.HatColor => l.hatColor, Slot.Eyewear => l.eyewear,
+            Slot.Shirt => l.shirt, Slot.Pants => l.pants, Slot.Skin => l.skin, _ => l.hair
+        };
+
+        public static string ItemName(Slot slot, int index) => slot switch
+        {
+            Slot.Body => BodyNames[index], Slot.Hat => Hats[index], Slot.Eyewear => Eyewear[index],
+            Slot.Skin => SkinNames[index], Slot.Hair => HairNames[index] + " hair",
+            _ => PaletteNames[index]
+        };
+
+        // Display names of everything that unlocks exactly at `level` (for the level-up notice).
+        public static List<string> UnlocksAt(int level)
+        {
+            var list = new List<string>();
+            for (int i = 0; i < Hats.Length; i++) if (LevelFor(HatLevels, i) == level && level > 1) list.Add(Hats[i]);
+            for (int i = 0; i < Eyewear.Length; i++) if (LevelFor(EyewearLevels, i) == level && level > 1) list.Add(Eyewear[i]);
+            for (int i = 0; i < Palette.Length; i++) if (LevelFor(PaletteLevels, i) == level && level > 1) list.Add(PaletteNames[i] + " colour");
+            for (int i = 0; i < HairColors.Length; i++) if (LevelFor(HairLevels, i) == level && level > 1) list.Add(HairNames[i] + " hair");
+            return list;
+        }
+
         // Team armband colours = the UI kit's team colours.
         public static Color TeamRed => UIKit.Red;
         public static Color TeamBlue => UIKit.Blue;
@@ -82,26 +129,38 @@ namespace AirsoftFPS
             return l;
         }
 
-        public static int Random(System.Random rng = null)
+        // A random look using only items unlocked at `level` (default: everything).
+        public static int Random(System.Random rng = null, int level = int.MaxValue)
         {
             rng ??= new System.Random();
             return Pack(new LookData
             {
-                body = rng.Next(Bodies.Length), hat = rng.Next(Hats.Length), hatColor = rng.Next(Palette.Length),
-                shirt = rng.Next(Palette.Length), pants = rng.Next(Palette.Length),
-                skin = rng.Next(SkinTones.Length), hair = rng.Next(HairColors.Length), eyewear = rng.Next(Eyewear.Length)
+                body = rng.Next(Bodies.Length), hat = Pick(rng, HatLevels, Hats.Length, level),
+                hatColor = Pick(rng, PaletteLevels, Palette.Length, level),
+                shirt = Pick(rng, PaletteLevels, Palette.Length, level), pants = Pick(rng, PaletteLevels, Palette.Length, level),
+                skin = rng.Next(SkinTones.Length), hair = Pick(rng, HairLevels, HairColors.Length, level),
+                eyewear = Pick(rng, EyewearLevels, Eyewear.Length, level)
             });
+        }
+
+        static int Pick(System.Random rng, int[] levels, int count, int level)
+        {
+            int n = 0;
+            for (int i = 0; i < count; i++) if (LevelFor(levels, i) <= level) n++;
+            int k = rng.Next(Mathf.Max(1, n));
+            for (int i = 0; i < count; i++) if (LevelFor(levels, i) <= level && k-- == 0) return i;
+            return 0;
         }
 
         // A stable look for players who never opened the customizer.
         public static int DefaultFor(ulong clientId) => Random(new System.Random((int)clientId * 7919 + 17));
 
-        const string PrefKey = "Airsoft.Look";
+        public const string PrefKey = "Airsoft.Look";
 
         public static int LoadLocal()
         {
             int v = PlayerPrefs.GetInt(PrefKey, -1);
-            if (v < 0) { v = Random(); SaveLocal(v); }
+            if (v < 0) { v = Random(null, 1); SaveLocal(v); }   // first run: level-1 items only
             return v;
         }
 
