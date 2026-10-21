@@ -586,6 +586,7 @@ namespace AirsoftFPS
             rec.time = now;
             rec.usedPellets = 0;
 
+            if (ownHealth != null) ownHealth.EndSpawnProtection();   // firing ends spawn protection
             ShootEffectsRpc(weaponIdx, origin, rec.dir, seed, aimed);
         }
 

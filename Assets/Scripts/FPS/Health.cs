@@ -18,6 +18,16 @@ namespace AirsoftFPS
             NetworkVariableReadPermission.Everyone,
             NetworkVariableWritePermission.Server);
 
+        // Spawn protection: invulnerable for a few seconds after (re)spawning, ends early when the
+        // player fires (WeaponController.ShootRpc). Server time; 0 = not protected.
+        public const float SPAWN_PROTECTION_SECONDS = 3f;
+        public NetworkVariable<double> spawnProtectedUntil = new NetworkVariable<double>(0,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Server);
+        public float SpawnProtectionLeft => IsSpawned && isPlayer
+            ? Mathf.Max(0f, (float)(spawnProtectedUntil.Value - NetworkManager.ServerTime.Time)) : 0f;
+        public bool IsSpawnProtected => SpawnProtectionLeft > 0f;
+
         public System.Action<int, int> OnHealthChanged; // current, max
         public System.Action OnDeath;
         public System.Action OnRespawn;
@@ -25,12 +35,13 @@ namespace AirsoftFPS
         ulong lastAttackerClientId;
         string lastAttackerWeapon = "";
         NetworkObject lastAttackerObject;   // who dealt the last hit (AI enemies pass themselves), for the killcam
-        Transform[] spawnPoints;
 
         public override void OnNetworkSpawn()
         {
             if (IsServer)
                 currentHealth.Value = maxHealth;
+            if (IsServer && isPlayer) StartSpawnProtection();
+            if (isPlayer && GetComponent<SpawnProtectionFX>() == null) gameObject.AddComponent<SpawnProtectionFX>();
 
             currentHealth.OnValueChanged += (prev, curr) =>
             {
@@ -53,6 +64,7 @@ namespace AirsoftFPS
         {
             if (!IsServer) return;
             if (isDead.Value) return;
+            if (IsSpawnProtected) return;
 
             lastAttackerClientId = attackerClientId;
             lastAttackerWeapon = weapon;
@@ -86,34 +98,36 @@ namespace AirsoftFPS
         {
             if (!IsServer) return;
 
-            // Find spawn point
-            if (spawnPoints == null || spawnPoints.Length == 0)
-            {
-                var spawns = GameObject.FindGameObjectsWithTag("SpawnPoint");
-                spawnPoints = new Transform[spawns.Length];
-                for (int i = 0; i < spawns.Length; i++)
-                    spawnPoints[i] = spawns[i].transform;
-            }
-
-            Vector3 pos = new Vector3(Random.Range(-15f, 15f), 1.5f, Random.Range(-15f, 15f));
-            if (spawnPoints != null && spawnPoints.Length > 0)
-                pos = spawnPoints[Random.Range(0, spawnPoints.Length)].position;
-
-            // Teleport player
-            var cc = GetComponent<CharacterController>();
-            if (cc)
-            {
-                cc.enabled = false;
-                transform.position = pos;
-                cc.enabled = true;
-            }
-            else
-            {
-                transform.position = pos;
-            }
+            // Team side / away from enemies (PlayerSpawner). The owner moves the player: its
+            // ClientNetworkTransform is owner-authoritative, so a server-side move would be undone.
+            var spawn = PlayerSpawner.GetSpawnFor(OwnerClientId);
+            RespawnTeleportRpc(spawn.position, spawn.rotation);
 
             currentHealth.Value = maxHealth;
+            StartSpawnProtection();
             isDead.Value = false;
+        }
+
+        [Rpc(SendTo.Owner)]
+        void RespawnTeleportRpc(Vector3 pos, Quaternion rot)
+        {
+            var cc = GetComponent<CharacterController>();
+            if (cc) cc.enabled = false;
+            var nt = GetComponent<Unity.Netcode.Components.NetworkTransform>();
+            if (nt != null && nt.CanCommitToTransform) nt.Teleport(pos, rot, transform.localScale);
+            else transform.SetPositionAndRotation(pos, rot);
+            if (cc) cc.enabled = true;
+        }
+
+        void StartSpawnProtection()
+        {
+            spawnProtectedUntil.Value = NetworkManager.ServerTime.Time + SPAWN_PROTECTION_SECONDS;
+        }
+
+        // Server: firing ends spawn protection early.
+        public void EndSpawnProtection()
+        {
+            if (IsServer && spawnProtectedUntil.Value > 0) spawnProtectedUntil.Value = 0;
         }
 
         void DespawnEnemy()

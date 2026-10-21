@@ -18,14 +18,16 @@ namespace AirsoftFPS.Editor
         const float Road = 4f;      // road half-width
         const float Walk = 2.2f;    // sidewalk width
 
-        static readonly Vector3[] Keep =
+        // spawn positions (player + enemy, from AirsoftSceneBuilder) where no props may be scattered
+        static readonly Vector3[] Keep = KeepPositions();
+
+        static Vector3[] KeepPositions()
         {
-            // player spawns
-            new Vector3(-30,0,30), new Vector3(30,0,30), new Vector3(-30,0,-30), new Vector3(30,0,-30),
-            new Vector3(0,0,35), new Vector3(0,0,-35), new Vector3(-35,0,0), new Vector3(35,0,0),
-            // enemy spawns
-            new Vector3(-25,0,25), new Vector3(25,0,-25), new Vector3(-25,0,-10), new Vector3(25,0,10), new Vector3(0,0,0)
-        };
+            var list = new List<Vector3>();
+            foreach (var (pos, _) in AirsoftSceneBuilder.PlayerSpawns) list.Add(new Vector3(pos.x, 0, pos.z));
+            foreach (var pos in AirsoftSceneBuilder.EnemySpawns) list.Add(new Vector3(pos.x, 0, pos.z));
+            return list.ToArray();
+        }
 
         static Transform root;
         static System.Random rng;
