@@ -12,6 +12,7 @@ namespace AirsoftFPS
 
         Health health;
         Camera mainCam;
+        bool graphicsShown = true;
 
         void Start()
         {
@@ -60,6 +61,14 @@ namespace AirsoftFPS
                 if (slider) { slider.maxValue = max; slider.value = cur; }
                 if (fillImage)
                     fillImage.color = Color.Lerp(Color.red, Color.green, max > 0 ? (float)cur / max : 0f);
+            }
+
+            // Settings > Gameplay > Show enemy health bars
+            bool show = GameSettings.ShowHealthBars;
+            if (show != graphicsShown)
+            {
+                graphicsShown = show;
+                foreach (var g in GetComponentsInChildren<Graphic>(true)) g.enabled = show;
             }
 
             if (mainCam == null) mainCam = Camera.main;

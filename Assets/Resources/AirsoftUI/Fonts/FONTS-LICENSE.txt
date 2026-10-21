@@ -1,0 +1,6 @@
+UI fonts used by UIKit (loaded at runtime as dynamic TextMeshPro font assets):
+
+- Barlow, Barlow Condensed - Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)
+  SIL Open Font License 1.1, see Barlow-OFL.txt. Source: https://github.com/google/fonts (ofl/barlow, ofl/barlowcondensed)
+- JetBrains Mono - Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+  SIL Open Font License 1.1 (https://openfontlicense.org)

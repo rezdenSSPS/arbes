@@ -187,6 +187,7 @@ namespace AirsoftFPS.Editor
 
             // Save prefab
             PrefabUtility.SaveAsPrefabAsset(root, PlayerPrefabPath);
+            SaveNetworkHash(PlayerPrefabPath);
             Object.DestroyImmediate(root);
         }
 
@@ -528,6 +529,7 @@ namespace AirsoftFPS.Editor
 
             // Save
             PrefabUtility.SaveAsPrefabAsset(root, EnemyPrefabPath);
+            SaveNetworkHash(EnemyPrefabPath);
             Object.DestroyImmediate(root);
         }
 
@@ -579,136 +581,10 @@ namespace AirsoftFPS.Editor
             esObj.AddComponent<UnityEngine.EventSystems.EventSystem>();
             esObj.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
 
-            // ─── CANVAS ───
-            var canvasObj = new GameObject("Canvas");
-            var canvas = canvasObj.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            var scaler = canvasObj.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920, 1080);
-            scaler.matchWidthOrHeight = 0.5f;
-            canvasObj.AddComponent<GraphicRaycaster>();
-
-            // Background panel
-            var bg = CreateUIPanel(canvasObj.transform, "BG", Color.clear, true);
-
-            // Title
-            var titleObj = CreateText(bg.transform, "Title", "AIRSOFT", 72,
-                new Color(1f, 0.55f, 0.15f), TextAlignmentOptions.Center);
-            var titleRT = titleObj.GetComponent<RectTransform>();
-            titleRT.anchorMin = new Vector2(0.5f, 1); titleRT.anchorMax = new Vector2(0.5f, 1);
-            titleRT.anchoredPosition = new Vector2(0, -120);
-            titleRT.sizeDelta = new Vector2(800, 100);
-
-            // Subtitle
-            var subObj = CreateText(bg.transform, "Sub", "LAN CO-OP  ·  10 WEAPONS  ·  WAVE SURVIVAL", 24,
-                new Color(0.7f, 0.7f, 0.7f), TextAlignmentOptions.Center);
-            var subRT = subObj.GetComponent<RectTransform>();
-            subRT.anchorMin = new Vector2(0.5f, 1); subRT.anchorMax = new Vector2(0.5f, 1);
-            subRT.anchoredPosition = new Vector2(0, -200);
-            subRT.sizeDelta = new Vector2(800, 40);
-
-            // -- CONNECT PANEL (host/join screen) --
-            var connectPanel = CreateUIPanel(bg.transform, "ConnectPanel", Color.clear, true);
-
-            var ipLabel = CreateText(connectPanel.transform, "ConnectLabel", "Join code (Online)   or   Host IP (LAN):", 20,
-                new Color(0.75f, 0.75f, 0.75f), TextAlignmentOptions.Center);
-            var ipLabelRT = ipLabel.GetComponent<RectTransform>();
-            ipLabelRT.anchorMin = new Vector2(0.5f, 0.5f); ipLabelRT.anchorMax = new Vector2(0.5f, 0.5f);
-            ipLabelRT.anchoredPosition = new Vector2(0, 210);
-            ipLabelRT.sizeDelta = new Vector2(640, 30);
-
-            var ipField = CreateInputField(connectPanel.transform, "ConnectInput", "code or IP");
-            var ipRT = ipField.GetComponent<RectTransform>();
-            ipRT.anchorMin = new Vector2(0.5f, 0.5f); ipRT.anchorMax = new Vector2(0.5f, 0.5f);
-            ipRT.anchoredPosition = new Vector2(0, 165);
-
-            var mainPanel = CreateUIPanel(connectPanel.transform, "MainPanel", Color.clear, false);
-            var mainLayout = mainPanel.AddComponent<VerticalLayoutGroup>();
-            mainLayout.spacing = 10;
-            mainLayout.childAlignment = TextAnchor.MiddleCenter;
-            mainLayout.childControlWidth = false; mainLayout.childControlHeight = false;
-            var mainRT = mainPanel.GetComponent<RectTransform>();
-            mainRT.anchorMin = new Vector2(0.5f, 0.5f); mainRT.anchorMax = new Vector2(0.5f, 0.5f);
-            mainRT.anchoredPosition = new Vector2(0, -55);
-            mainRT.sizeDelta = new Vector2(460, 380);
-
-            var hostOnlineBtn = CreateButton(mainPanel.transform, "HostOnlineButton", "HOST ONLINE");
-            var joinOnlineBtn = CreateButton(mainPanel.transform, "JoinOnlineButton", "JOIN ONLINE");
-            var hostLanBtn = CreateButton(mainPanel.transform, "HostLanButton", "HOST LAN");
-            var joinLanBtn = CreateButton(mainPanel.transform, "JoinLanButton", "JOIN LAN");
-            var quitBtn = CreateButton(mainPanel.transform, "QuitButton", "QUIT");
-
-            var statusObj = CreateText(connectPanel.transform, "StatusText", "", 19,
-                new Color(0.85f, 0.72f, 0.4f), TextAlignmentOptions.Center);
-            var statusRT = statusObj.GetComponent<RectTransform>();
-            statusRT.anchorMin = new Vector2(0.5f, 0); statusRT.anchorMax = new Vector2(0.5f, 0);
-            statusRT.anchoredPosition = new Vector2(0, 110);
-            statusRT.sizeDelta = new Vector2(1100, 60);
-
-            var hintObj = CreateText(connectPanel.transform, "Hint",
-                "WASD Move · Shift Sprint · C Crouch · Space Jump · 1-0 Weapons · R Reload · RMB Aim",
-                16, new Color(0.5f, 0.5f, 0.5f), TextAlignmentOptions.Center);
-            var hintRT = hintObj.GetComponent<RectTransform>();
-            hintRT.anchorMin = new Vector2(0.5f, 0); hintRT.anchorMax = new Vector2(0.5f, 0);
-            hintRT.anchoredPosition = new Vector2(0, 50);
-            hintRT.sizeDelta = new Vector2(900, 30);
-
-            // -- WAITING ROOM PANEL (hidden until you host/join) --
-            var waitingPanel = CreateUIPanel(bg.transform, "WaitingPanel", Color.clear, true);
-
-            var waitTitle = CreateText(waitingPanel.transform, "WaitTitle", "WAITING ROOM", 40,
-                new Color(1f, 0.55f, 0.15f), TextAlignmentOptions.Center);
-            var waitTitleRT = waitTitle.GetComponent<RectTransform>();
-            waitTitleRT.anchorMin = new Vector2(0.5f, 0.5f); waitTitleRT.anchorMax = new Vector2(0.5f, 0.5f);
-            waitTitleRT.anchoredPosition = new Vector2(0, 170);
-            waitTitleRT.sizeDelta = new Vector2(700, 60);
-
-            var waitCode = CreateText(waitingPanel.transform, "WaitCode", "", 34,
-                new Color(0.35f, 0.9f, 0.5f), TextAlignmentOptions.Center);
-            var waitCodeRT = waitCode.GetComponent<RectTransform>();
-            waitCodeRT.anchorMin = new Vector2(0.5f, 0.5f); waitCodeRT.anchorMax = new Vector2(0.5f, 0.5f);
-            waitCodeRT.anchoredPosition = new Vector2(0, 90);
-            waitCodeRT.sizeDelta = new Vector2(1000, 60);
-            waitCode.AddComponent<ClickToCopy>();
-
-            var waitPlayers = CreateText(waitingPanel.transform, "WaitPlayers", "", 24,
-                new Color(0.8f, 0.8f, 0.8f), TextAlignmentOptions.Center);
-            var waitPlayersRT = waitPlayers.GetComponent<RectTransform>();
-            waitPlayersRT.anchorMin = new Vector2(0.5f, 0.5f); waitPlayersRT.anchorMax = new Vector2(0.5f, 0.5f);
-            waitPlayersRT.anchoredPosition = new Vector2(0, 20);
-            waitPlayersRT.sizeDelta = new Vector2(700, 40);
-
-            var waitBtnPanel = CreateUIPanel(waitingPanel.transform, "WaitButtons", Color.clear, false);
-            var waitLayout = waitBtnPanel.AddComponent<VerticalLayoutGroup>();
-            waitLayout.spacing = 12;
-            waitLayout.childAlignment = TextAnchor.MiddleCenter;
-            waitLayout.childControlWidth = false; waitLayout.childControlHeight = false;
-            var waitBtnRT = waitBtnPanel.GetComponent<RectTransform>();
-            waitBtnRT.anchorMin = new Vector2(0.5f, 0.5f); waitBtnRT.anchorMax = new Vector2(0.5f, 0.5f);
-            waitBtnRT.anchoredPosition = new Vector2(0, -90);
-            waitBtnRT.sizeDelta = new Vector2(460, 160);
-
-            var startBtn = CreateButton(waitBtnPanel.transform, "StartButton", "START GAME");
-            var leaveBtn = CreateButton(waitBtnPanel.transform, "LeaveButton", "LEAVE");
-
-            waitingPanel.SetActive(false);
-
-            // -- NetworkUI Script --
-            var netUI = canvasObj.AddComponent<NetworkUI>();
-            netUI.connectPanel = connectPanel;
-            netUI.waitingPanel = waitingPanel;
-            netUI.hostOnlineButton = hostOnlineBtn.GetComponent<Button>();
-            netUI.joinOnlineButton = joinOnlineBtn.GetComponent<Button>();
-            netUI.hostLanButton = hostLanBtn.GetComponent<Button>();
-            netUI.joinLanButton = joinLanBtn.GetComponent<Button>();
-            netUI.quitButton = quitBtn.GetComponent<Button>();
-            netUI.codeInput = ipField;
-            netUI.statusText = statusObj.GetComponent<TextMeshProUGUI>();
-            netUI.waitCodeText = waitCode.GetComponent<TextMeshProUGUI>();
-            netUI.waitPlayersText = waitPlayers.GetComponent<TextMeshProUGUI>();
-            netUI.startButton = startBtn.GetComponent<Button>();
-            netUI.leaveButton = leaveBtn.GetComponent<Button>();
+            // ─── UI ───
+            // NetworkUI builds the menu, connecting and lobby screens at runtime (UIKit).
+            var uiObj = new GameObject("NetworkUI");
+            uiObj.AddComponent<NetworkUI>();
 
             EditorSceneManager.SaveScene(scene, LobbyPath);
         }
@@ -781,266 +657,60 @@ namespace AirsoftFPS.Editor
 
         static void BuildHUDCanvas()
         {
-            var canvasObj = new GameObject("HUDCanvas");
-            var canvas = canvasObj.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 10;
-            var scaler = canvasObj.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920, 1080);
-            scaler.matchWidthOrHeight = 0.5f;
-            canvasObj.AddComponent<GraphicRaycaster>();
-
-            // ── Crosshair ──
-            var crosshair = new GameObject("Crosshair");
-            crosshair.transform.SetParent(canvasObj.transform);
-            var chRT = crosshair.AddComponent<RectTransform>();
-            chRT.anchorMin = new Vector2(0.5f, 0.5f); chRT.anchorMax = new Vector2(0.5f, 0.5f);
-            chRT.anchoredPosition = Vector2.zero;
-            chRT.sizeDelta = new Vector2(20, 20);
-
-            // Cross lines
-            string[] dirs = { "Top", "Bot", "Left", "Right" };
-            Vector2[] positions = { new(0, 8), new(0, -8), new(-8, 0), new(8, 0) };
-            Vector2[] sizes = { new(2, 10), new(2, 10), new(10, 2), new(10, 2) };
-            for (int i = 0; i < 4; i++)
-            {
-                var line = new GameObject(dirs[i]);
-                line.transform.SetParent(crosshair.transform);
-                var lrt = line.AddComponent<RectTransform>();
-                lrt.anchorMin = new Vector2(0.5f, 0.5f); lrt.anchorMax = new Vector2(0.5f, 0.5f);
-                lrt.anchoredPosition = positions[i];
-                lrt.sizeDelta = sizes[i];
-                var img = line.AddComponent<Image>();
-                img.color = new Color(1, 1, 1, 0.8f);
-            }
-
-            // Center dot
-            var dot = new GameObject("Dot");
-            dot.transform.SetParent(crosshair.transform);
-            var dotRT = dot.AddComponent<RectTransform>();
-            dotRT.anchorMin = new Vector2(0.5f, 0.5f); dotRT.anchorMax = new Vector2(0.5f, 0.5f);
-            dotRT.anchoredPosition = Vector2.zero;
-            dotRT.sizeDelta = new Vector2(3, 3);
-            dot.AddComponent<Image>().color = Color.white;
-
-            // ── Hit Marker ──
-            var hitMarker = new GameObject("HitMarker");
-            hitMarker.transform.SetParent(canvasObj.transform);
-            var hmRT = hitMarker.AddComponent<RectTransform>();
-            hmRT.anchorMin = new Vector2(0.5f, 0.5f); hmRT.anchorMax = new Vector2(0.5f, 0.5f);
-            hmRT.anchoredPosition = Vector2.zero;
-            hmRT.sizeDelta = new Vector2(30, 30);
-            var hmGroup = hitMarker.AddComponent<CanvasGroup>();
-            hmGroup.alpha = 0;
-
-            // X shape for hit marker
-            for (int i = 0; i < 4; i++)
-            {
-                var hml = new GameObject($"HM{i}");
-                hml.transform.SetParent(hitMarker.transform);
-                var hmlRT = hml.AddComponent<RectTransform>();
-                hmlRT.anchorMin = new Vector2(0.5f, 0.5f); hmlRT.anchorMax = new Vector2(0.5f, 0.5f);
-                float angle = 45 + i * 90;
-                float rad = angle * Mathf.Deg2Rad;
-                hmlRT.anchoredPosition = new Vector2(Mathf.Cos(rad) * 8, Mathf.Sin(rad) * 8);
-                hmlRT.sizeDelta = new Vector2(2, 10);
-                hmlRT.localRotation = Quaternion.Euler(0, 0, angle);
-                hml.AddComponent<Image>().color = Color.white;
-            }
-
-            // ── Health bar (bottom left) ──
-            var healthPanel = new GameObject("HealthPanel");
-            healthPanel.transform.SetParent(canvasObj.transform);
-            var hpRT = healthPanel.AddComponent<RectTransform>();
-            hpRT.anchorMin = new Vector2(0, 0); hpRT.anchorMax = new Vector2(0, 0);
-            hpRT.pivot = new Vector2(0, 0);
-            hpRT.anchoredPosition = new Vector2(30, 30);
-            hpRT.sizeDelta = new Vector2(300, 50);
-
-            // Health BG
-            var hpBg = new GameObject("HealthBG");
-            hpBg.transform.SetParent(healthPanel.transform);
-            var hpBgRT = hpBg.AddComponent<RectTransform>();
-            hpBgRT.anchorMin = Vector2.zero; hpBgRT.anchorMax = Vector2.one;
-            hpBgRT.offsetMin = Vector2.zero; hpBgRT.offsetMax = Vector2.zero;
-            hpBg.AddComponent<Image>().color = new Color(0.1f, 0.1f, 0.1f, 0.7f);
-
-            // Health Slider
-            var hpSliderObj = new GameObject("HealthSlider");
-            hpSliderObj.transform.SetParent(healthPanel.transform);
-            var hpSliderRT = hpSliderObj.AddComponent<RectTransform>();
-            hpSliderRT.anchorMin = Vector2.zero; hpSliderRT.anchorMax = Vector2.one;
-            hpSliderRT.offsetMin = new Vector2(4, 4); hpSliderRT.offsetMax = new Vector2(-60, -4);
-            var hpSlider = hpSliderObj.AddComponent<Slider>();
-            hpSlider.transition = Selectable.Transition.None;
-            hpSlider.interactable = false;
-
-            var hpFillArea = new GameObject("FillArea");
-            hpFillArea.transform.SetParent(hpSliderObj.transform);
-            var hpFART = hpFillArea.AddComponent<RectTransform>();
-            hpFART.anchorMin = Vector2.zero; hpFART.anchorMax = Vector2.one;
-            hpFART.offsetMin = Vector2.zero; hpFART.offsetMax = Vector2.zero;
-            var hpFill = new GameObject("Fill");
-            hpFill.transform.SetParent(hpFillArea.transform);
-            var hpFillRT = hpFill.AddComponent<RectTransform>();
-            hpFillRT.anchorMin = Vector2.zero; hpFillRT.anchorMax = Vector2.one;
-            hpFillRT.offsetMin = Vector2.zero; hpFillRT.offsetMax = Vector2.zero;
-            var hpFillImg = hpFill.AddComponent<Image>();
-            hpFillImg.color = new Color(0.1f, 0.8f, 0.2f);
-            hpSlider.fillRect = hpFillRT;
-            hpSlider.maxValue = 100;
-            hpSlider.value = 100;
-
-            // Health text
-            var hpTextObj = CreateText(healthPanel.transform, "HealthText", "100", 24,
-                Color.white, TextAlignmentOptions.Right);
-            var hpTextRT = hpTextObj.GetComponent<RectTransform>();
-            hpTextRT.anchorMin = new Vector2(1, 0); hpTextRT.anchorMax = new Vector2(1, 1);
-            hpTextRT.offsetMin = new Vector2(-55, 0); hpTextRT.offsetMax = new Vector2(-5, 0);
-
-            // ── Ammo (bottom right) ──
-            var ammoText = CreateText(canvasObj.transform, "AmmoText", "30 / 120", 36,
-                Color.white, TextAlignmentOptions.Right);
-            var ammoRT = ammoText.GetComponent<RectTransform>();
-            ammoRT.anchorMin = new Vector2(1, 0); ammoRT.anchorMax = new Vector2(1, 0);
-            ammoRT.pivot = new Vector2(1, 0);
-            ammoRT.anchoredPosition = new Vector2(-30, 30);
-            ammoRT.sizeDelta = new Vector2(300, 50);
-
-            // Weapon name
-            var weaponText = CreateText(canvasObj.transform, "WeaponName", "[1] M1911", 20,
-                new Color(0.8f, 0.8f, 0.8f), TextAlignmentOptions.Right);
-            var weapRT = weaponText.GetComponent<RectTransform>();
-            weapRT.anchorMin = new Vector2(1, 0); weapRT.anchorMax = new Vector2(1, 0);
-            weapRT.pivot = new Vector2(1, 0);
-            weapRT.anchoredPosition = new Vector2(-30, 80);
-            weapRT.sizeDelta = new Vector2(300, 30);
-
-            // ── Wave text (top center) ──
-            var waveText = CreateText(canvasObj.transform, "WaveText", "WAVE 1", 32,
-                new Color(1f, 0.55f, 0.15f), TextAlignmentOptions.Center);
-            var waveRT = waveText.GetComponent<RectTransform>();
-            waveRT.anchorMin = new Vector2(0.5f, 1); waveRT.anchorMax = new Vector2(0.5f, 1);
-            waveRT.anchoredPosition = new Vector2(0, -30);
-            waveRT.sizeDelta = new Vector2(300, 50);
-
-            // Online join code (top-left; only shows when hosting online)
-            var codeText = CreateText(canvasObj.transform, "JoinCodeText", "", 26,
-                new Color(0.35f, 0.9f, 0.5f), TextAlignmentOptions.Left);
-            var codeRT = codeText.GetComponent<RectTransform>();
-            codeRT.anchorMin = new Vector2(0, 1); codeRT.anchorMax = new Vector2(0, 1);
-            codeRT.pivot = new Vector2(0, 1);
-            codeRT.anchoredPosition = new Vector2(30, -24);
-            codeRT.sizeDelta = new Vector2(520, 40);
-            codeText.AddComponent<ClickToCopy>();
-
-            // ── Death overlay ──
-            var deathPanel = new GameObject("DeathOverlay");
-            deathPanel.transform.SetParent(canvasObj.transform);
-            var dpRT = deathPanel.AddComponent<RectTransform>();
-            dpRT.anchorMin = Vector2.zero; dpRT.anchorMax = Vector2.one;
-            dpRT.offsetMin = Vector2.zero; dpRT.offsetMax = Vector2.zero;
-            deathPanel.AddComponent<Image>().color = new Color(0.5f, 0, 0, 0.5f);
-            var deathGroup = deathPanel.AddComponent<CanvasGroup>();
-            deathGroup.alpha = 0;
-            deathGroup.blocksRaycasts = false;
-
-            var deathText = CreateText(deathPanel.transform, "DeathText", "ELIMINATED\nRespawning...", 48,
-                Color.white, TextAlignmentOptions.Center);
-            var dtRT = deathText.GetComponent<RectTransform>();
-            dtRT.anchorMin = Vector2.zero; dtRT.anchorMax = Vector2.one;
-            dtRT.offsetMin = Vector2.zero; dtRT.offsetMax = Vector2.zero;
-
-            // ── Pause Panel ──
-            var pausePanel = CreateUIPanel(canvasObj.transform, "PausePanel", new Color(0, 0, 0, 0.8f), true);
-            var pauseLayout = pausePanel.AddComponent<VerticalLayoutGroup>();
-            pauseLayout.spacing = 16;
-            pauseLayout.childAlignment = TextAnchor.MiddleCenter;
-            pauseLayout.childControlWidth = false; pauseLayout.childControlHeight = false;
-
-            var pauseTitle = CreateText(pausePanel.transform, "PauseTitle", "PAUSED", 48,
-                new Color(1f, 0.55f, 0.15f), TextAlignmentOptions.Center);
-            pauseTitle.GetComponent<RectTransform>().sizeDelta = new Vector2(400, 60);
-
-            var resumeBtn = CreateButton(pausePanel.transform, "ResumeBtn", "RESUME");
-            var menuBtn = CreateButton(pausePanel.transform, "MenuBtn", "MAIN MENU");
-            var quitBtn = CreateButton(pausePanel.transform, "QuitBtn", "QUIT");
-            pausePanel.SetActive(false);
-
-            // ── Weapon Selector (bottom center) ──
-            string[] shortNames = { "Pistol","Revolv","RayGun","PulseSMG","P90","AK-47","PulseRf","M870","Lightng","AWP" };
-            string[] slotDigits = { "1","2","3","4","5","6","7","8","9","0" };
-            var selRoot = new GameObject("WeaponSelector");
-            selRoot.transform.SetParent(canvasObj.transform);
-            var selRT = selRoot.AddComponent<RectTransform>();
-            selRT.anchorMin = new Vector2(0.5f, 0); selRT.anchorMax = new Vector2(0.5f, 0);
-            selRT.pivot = new Vector2(0.5f, 0);
-            selRT.anchoredPosition = new Vector2(0, 42);
-            selRT.sizeDelta = new Vector2(10 * 66, 48);
-
-            var slotImages = new Image[10];
-            var slotLabels = new TextMeshProUGUI[10];
-            for (int i = 0; i < 10; i++)
-            {
-                var slot = new GameObject($"Slot{i}");
-                slot.transform.SetParent(selRoot.transform);
-                var sRT = slot.AddComponent<RectTransform>();
-                sRT.anchorMin = new Vector2(0.5f, 0.5f); sRT.anchorMax = new Vector2(0.5f, 0.5f);
-                sRT.anchoredPosition = new Vector2(-297 + i * 66, 0);
-                sRT.sizeDelta = new Vector2(60, 44);
-                var sImg = slot.AddComponent<Image>();
-                sImg.color = (i == 0) ? new Color(1f, 0.55f, 0.15f, 0.95f) : new Color(0.12f, 0.12f, 0.15f, 0.6f);
-                slotImages[i] = sImg;
-
-                var digit = CreateText(slot.transform, "Digit", slotDigits[i], 18,
-                    (i == 0) ? Color.white : new Color(0.65f, 0.65f, 0.65f, 0.9f), TextAlignmentOptions.Center);
-                var dRT = digit.GetComponent<RectTransform>();
-                dRT.anchorMin = new Vector2(0, 0.5f); dRT.anchorMax = new Vector2(1, 1);
-                dRT.offsetMin = Vector2.zero; dRT.offsetMax = Vector2.zero;
-                slotLabels[i] = digit.GetComponent<TextMeshProUGUI>();
-
-                var nm = CreateText(slot.transform, "Name", shortNames[i], 11,
-                    new Color(0.85f, 0.85f, 0.85f, 0.9f), TextAlignmentOptions.Center);
-                var nRT = nm.GetComponent<RectTransform>();
-                nRT.anchorMin = new Vector2(0, 0); nRT.anchorMax = new Vector2(1, 0.5f);
-                nRT.offsetMin = Vector2.zero; nRT.offsetMax = Vector2.zero;
-            }
-
-            // ── HUDManager Script ──
-            var hud = canvasObj.AddComponent<HUDManager>();
-            hud.healthSlider = hpSlider;
-            hud.healthFill = hpFillImg;
-            hud.healthText = hpTextObj.GetComponent<TextMeshProUGUI>();
-            hud.ammoText = ammoText.GetComponent<TextMeshProUGUI>();
-            hud.weaponNameText = weaponText.GetComponent<TextMeshProUGUI>();
-            hud.hitMarkerGroup = hmGroup;
-            hud.deathOverlay = deathGroup;
-            hud.deathText = deathText.GetComponent<TextMeshProUGUI>();
-            hud.waveText = waveText.GetComponent<TextMeshProUGUI>();
-            hud.joinCodeText = codeText.GetComponent<TextMeshProUGUI>();
-            hud.pausePanel = pausePanel;
-            hud.weaponSlots = slotImages;
-            hud.weaponSlotLabels = slotLabels;
-
-            // Wire pause buttons
-            resumeBtn.GetComponent<Button>().onClick.AddListener(() => hud.ResumeGame());
-            menuBtn.GetComponent<Button>().onClick.AddListener(() => hud.QuitToMenu());
-            quitBtn.GetComponent<Button>().onClick.AddListener(() => hud.QuitGame());
-
-            // ── Controls hint ──
-            var hint = CreateText(canvasObj.transform, "ControlsHint",
-                "WASD Move · Shift Sprint · C Crouch · Space Jump · 1-0 Weapons · R Reload · RMB Aim · Scroll Switch",
-                14, new Color(0.6f, 0.6f, 0.6f, 0.6f), TextAlignmentOptions.Center);
-            var hintRT = hint.GetComponent<RectTransform>();
-            hintRT.anchorMin = new Vector2(0.5f, 0); hintRT.anchorMax = new Vector2(0.5f, 0);
-            hintRT.anchoredPosition = new Vector2(0, 10);
-            hintRT.sizeDelta = new Vector2(1000, 20);
+            // HUDManager builds the HUD, scoreboard, death, pause and results screens at runtime (UIKit).
+            var hudObj = new GameObject("HUD");
+            hudObj.AddComponent<HUDManager>();
 
             // ── EventSystem ──
             var esObj = new GameObject("EventSystem");
             esObj.AddComponent<UnityEngine.EventSystems.EventSystem>();
             esObj.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+        }
+
+        // A prefab saved from a scene object keeps that object's GlobalObjectIdHash on disk.
+        // Netcode recomputes the real hash in OnValidate, but only in memory -- a second
+        // process (MPPM virtual player, a build) then reads the stale value and can't spawn
+        // the prefab. Reimport so OnValidate runs on the asset, then write the hash back.
+        static void SaveNetworkHash(string path)
+        {
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+            var go = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            var no = go != null ? go.GetComponent<NetworkObject>() : null;
+            if (no == null) return;
+            EditorUtility.SetDirty(no);
+            AssetDatabase.SaveAssetIfDirty(go);
+        }
+
+        [MenuItem("Tools/Airsoft/Fix Network Prefab IDs")]
+        public static void FixNetworkPrefabIds()
+        {
+            SaveNetworkHash(PlayerPrefabPath);
+            SaveNetworkHash(EnemyPrefabPath);
+            AssetDatabase.SaveAssets();
+            Debug.Log("[Airsoft] Network prefab IDs written to disk. Restart the MPPM virtual players.");
+        }
+
+        // Swaps the old scene-built UI objects for the runtime-built UI without
+        // regenerating the map, prefabs or navmesh.
+        [MenuItem("Tools/Airsoft/Rebuild UI Only")]
+        public static void RebuildUIOnly()
+        {
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+
+            var lobby = EditorSceneManager.OpenScene(LobbyPath);
+            foreach (var n in Object.FindObjectsByType<NetworkUI>(FindObjectsInactive.Include))
+                Object.DestroyImmediate(n.gameObject);
+            new GameObject("NetworkUI").AddComponent<NetworkUI>();
+            EditorSceneManager.SaveScene(lobby);
+
+            var arena = EditorSceneManager.OpenScene(ArenaPath);
+            foreach (var h in Object.FindObjectsByType<HUDManager>(FindObjectsInactive.Include))
+                Object.DestroyImmediate(h.gameObject);
+            new GameObject("HUD").AddComponent<HUDManager>();
+            EditorSceneManager.SaveScene(arena);
+
+            EditorSceneManager.OpenScene(LobbyPath);
+            Debug.Log("[Airsoft] Lobby and arena UI replaced with the runtime-built UI.");
         }
 
         // ────────── HELPERS ──────────

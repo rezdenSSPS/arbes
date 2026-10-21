@@ -38,6 +38,7 @@ namespace AirsoftFPS
         public const int FFA_KILL_TARGET = 15;
         public const int TDM_KILL_TARGET = 40;
         public const int GUNGAME_WEAPONS = 10;
+        public const float RESULTS_SECONDS = 6f;   // results screen, then everyone returns to the lobby
         const string MATCH_SCENE = "AirsoftArena";
         const string LOBBY_SCENE = "AirsoftLobby";
 
@@ -183,6 +184,14 @@ namespace AirsoftFPS
             BroadcastState();
         }
 
+        // Host picks a mode directly (lobby mode cards).
+        public void HostSetMode(GameModeType mode)
+        {
+            if (!IsHost || Mode == mode) return;
+            Mode = mode;
+            BroadcastState();
+        }
+
         public bool AllReady()
         {
             if (roster.Count == 0) return false;
@@ -258,7 +267,15 @@ namespace AirsoftFPS
             CurrentPhase = Phase.Results;
             WinnerClientId = winnerClient;
             WinnerTeam = winnerTeam;
-            Invoke(nameof(ReturnToLobby), 6f);
+            Invoke(nameof(ReturnToLobby), RESULTS_SECONDS);
+        }
+
+        // Host skips the rest of the results countdown.
+        public void HostReturnToLobbyNow()
+        {
+            if (!IsHost || CurrentPhase != Phase.Results) return;
+            CancelInvoke(nameof(ReturnToLobby));
+            ReturnToLobby();
         }
 
         void ReturnToLobby()

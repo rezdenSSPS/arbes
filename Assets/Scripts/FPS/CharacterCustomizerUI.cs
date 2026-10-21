@@ -3,29 +3,41 @@ using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.EventSystems;
 using TMPro;
-using Unity.Netcode;
+using static AirsoftFPS.UIKit;
 
 namespace AirsoftFPS
 {
-    // Lobby character creator: left-side panel with a live 3D preview and
-    // < > pickers for body, hat, colours, skin and hair.  Builds itself whenever
-    // the AirsoftLobby scene is loaded; the chosen look is saved and synced via MatchNet.
+    // Character editor: full-screen modal with a live 3D preview, steppers for body
+    // and hat, and colour swatch rows. Builds itself whenever the AirsoftLobby scene
+    // is loaded; the lobby screen shows the same 3D preview (PreviewTexture). The
+    // chosen look is saved locally and synced to everyone via MatchNet.
     public class CharacterCustomizerUI : MonoBehaviour
     {
         const string LobbyScene = "AirsoftLobby";
         const int PreviewLayer = 31;
         static readonly Vector3 StagePos = new Vector3(0f, -500f, 0f);
 
-        LookData look;
+        public static CharacterCustomizerUI Instance { get; private set; }
+
+        LookData look;        // what the preview shows (working copy while the editor is open)
+        LookData savedLook;   // what is saved / synced
         Transform stage;
         Camera previewCam;
         RenderTexture rt;
         AirsoftLook.Avatar avatar;
         float spin = 160f;
         bool dragging;
-        GameObject canvasRoot;
-        bool shown = true;
-        readonly System.Collections.Generic.List<(TextMeshProUGUI txt, System.Func<string> get)> rows = new();
+        GameObject modal;
+        readonly System.Collections.Generic.List<System.Action> refreshers = new();
+
+        public Texture PreviewTexture => rt;
+        public bool IsOpen => modal != null && modal.activeSelf;
+        // Set by the lobby screen while its small preview is visible.
+        public bool PreviewWanted { get; set; }
+        public string BodyName => AirsoftLook.BodyNames[look.body];
+        public Color ShirtColor => AirsoftLook.Palette[savedLook.shirt];
+
+        public event System.Action Closed;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Init()
@@ -44,15 +56,41 @@ namespace AirsoftFPS
             go.AddComponent<CharacterCustomizerUI>();
         }
 
-        void Start()
+        void Awake()
         {
+            Instance = this;
             int packed = MatchNet.Instance != null ? MatchNet.Instance.LocalLook : AirsoftLook.LoadLocal();
             if (packed < 0) packed = AirsoftLook.LoadLocal();
-            look = AirsoftLook.Unpack(packed);
+            savedLook = look = AirsoftLook.Unpack(packed);
             BuildStage();
             BuildUI();
             RebuildAvatar();
-            SetShown(InLobby());
+        }
+
+        public void Open()
+        {
+            look = savedLook;
+            RebuildAvatar();
+            Refresh();
+            modal.SetActive(true);
+        }
+
+        public void Close(bool save)
+        {
+            if (save)
+            {
+                savedLook = look;
+                int packed = AirsoftLook.Pack(savedLook);
+                if (MatchNet.Instance != null) MatchNet.Instance.SetLocalLook(packed);
+                else AirsoftLook.SaveLocal(packed);
+            }
+            else
+            {
+                look = savedLook;
+                RebuildAvatar();
+            }
+            modal.SetActive(false);
+            Closed?.Invoke();
         }
 
         // ───────────── 3D preview ─────────────
@@ -62,7 +100,7 @@ namespace AirsoftFPS
             stage.SetParent(transform, false);
             stage.position = StagePos;
 
-            rt = new RenderTexture(640, 800, 24) { name = "CharacterPreview", antiAliasing = 4 };
+            rt = new RenderTexture(640, 820, 24) { name = "CharacterPreview", antiAliasing = 4 };
             var camGo = new GameObject("PreviewCam");
             camGo.transform.SetParent(stage, false);
             camGo.transform.localPosition = new Vector3(0f, 1.15f, 3.4f);
@@ -70,23 +108,24 @@ namespace AirsoftFPS
             previewCam = camGo.AddComponent<Camera>();
             previewCam.cullingMask = 1 << PreviewLayer;
             previewCam.clearFlags = CameraClearFlags.SolidColor;
-            previewCam.backgroundColor = new Color(0.10f, 0.11f, 0.14f, 1f);
+            previewCam.backgroundColor = Scenery;
             previewCam.fieldOfView = 34f;
             previewCam.nearClipPlane = 0.1f; previewCam.farClipPlane = 20f;
             previewCam.targetTexture = rt;
             previewCam.depth = -10;
+            previewCam.enabled = false;
 
             AddLight(new Vector3(1.6f, 2.6f, 2.4f), new Color(1f, 0.95f, 0.88f), 9f);
             AddLight(new Vector3(-2.2f, 1.4f, 1.5f), new Color(0.6f, 0.75f, 1f), 5f);
             AddLight(new Vector3(0f, 2.2f, -2.2f), new Color(1f, 0.7f, 0.4f), 6f);
 
-            // little round platform
+            // round orange platform
             var plat = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             Destroy(plat.GetComponent<Collider>());
             plat.transform.SetParent(stage, false);
             plat.transform.localPosition = new Vector3(0, -0.03f, 0);
             plat.transform.localScale = new Vector3(1.3f, 0.03f, 1.3f);
-            plat.GetComponent<Renderer>().sharedMaterial = AirsoftLook.MakeMat(new Color(1f, 0.55f, 0.15f));
+            plat.GetComponent<Renderer>().sharedMaterial = AirsoftLook.MakeMat(Accent);
             AirsoftLook.SetLayer(plat, PreviewLayer);
         }
 
@@ -118,27 +157,17 @@ namespace AirsoftFPS
             if (avatar != null) AirsoftLook.SetLayer(avatar.root, PreviewLayer);
         }
 
-        // Only visible once the player is in a lobby (hosting or connected), not on the connect screen.
-        static bool InLobby()
-        {
-            var nm = NetworkManager.Singleton;
-            if (nm == null) return false;
-            return nm.IsServer || nm.IsConnectedClient;
-        }
-
-        void SetShown(bool on)
-        {
-            shown = on;
-            if (canvasRoot) canvasRoot.SetActive(on);
-            if (previewCam) previewCam.enabled = on;
-        }
-
         void Update()
         {
-            bool want = InLobby();
-            if (want != shown) SetShown(want);
-            if (!shown) return;
-            if (stage == null) return;
+            // Never linger over the match if the lobby scene is still loaded underneath.
+            if (UnityEngine.SceneManagement.SceneManager.GetActiveScene() != gameObject.scene)
+            {
+                if (IsOpen) modal.SetActive(false);
+                PreviewWanted = false;
+            }
+            bool render = IsOpen || PreviewWanted;
+            if (previewCam && previewCam.enabled != render) previewCam.enabled = render;
+            if (!render || stage == null) return;
             var turn = stage.Find("Turntable");
             if (turn)
             {
@@ -146,171 +175,174 @@ namespace AirsoftFPS
                 turn.localRotation = Quaternion.Euler(0, spin, 0);
             }
             if (avatar != null) AirsoftLook.Animate(avatar, 0f, false);
+
+            if (IsOpen)
+            {
+                var kb = UnityEngine.InputSystem.Keyboard.current;
+                if (kb != null && kb.escapeKey.wasPressedThisFrame) Close(false);
+            }
         }
 
-        // ───────────── UI ─────────────
-        static readonly Color Accent = new Color(1f, 0.55f, 0.15f, 1f);
-        static readonly Color PanelBg = new Color(0.06f, 0.07f, 0.09f, 0.88f);
-        static readonly Color BtnBg = new Color(0.16f, 0.17f, 0.21f, 1f);
+        public void Rotate(float degrees) => spin += degrees;
+        public void SetDragging(bool on) => dragging = on;
 
+        // ───────────── UI ─────────────
         void BuildUI()
         {
-            if (FindAnyObjectByType<EventSystem>() == null)
+            var canvas = UIKit.Canvas("CustomizerCanvas", 20, transform);
+            modal = Rect(canvas.transform, "Customizer").Fill().gameObject;
+            Box(modal.transform, "BG", Ground, true).rectTransform.Fill();
+            var stageRt = Rect(modal.transform, "Stage").At(0.5f, 0.5f, 0, 0, 1280, 720);
+
+            // left: preview
+            var left = Box(stageRt, "PreviewPane", Scenery, true);
+            left.rectTransform.TL(0, 0, 560, 720);
+            left.gameObject.AddComponent<RectMask2D>();
+            PreviewImage(left.transform).Fill();
+            var head = VCol(left.transform, "Head", 4);
+            head.GetComponent<RectTransform>().TL(32, 28, 400, 60);
+            Caption(head.transform, "PREVIEW", 11, Fg, 0.16f).LE(-1, 14);
+            var bodyName = Label(head.transform, "", F.CondBold, 28, Fg);
+            bodyName.LE(-1, 32);
+            refreshers.Add(() => bodyName.text = AirsoftLook.BodyNames[look.body].ToUpperInvariant());
+
+            var rot = HRow(left.transform, "Rotate", 10, TextAnchor.MiddleCenter);
+            rot.GetComponent<RectTransform>().At(0.5f, 0f, 0, 20, 98, 44);
+            foreach (bool right in new[] { false, true })
             {
-                var es = new GameObject("EventSystem");
-                es.AddComponent<EventSystem>();
-                es.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+                bool r = right;
+                var b = Button(rot.transform, "", Btn.Ghost, 10, () => Rotate(r ? -45f : 45f));
+                b.bgN = Scrim(0.78f); b.bgH = Scrim(0.95f); b.bgP = Ground; b.Refresh();
+                b.LE(44, 44);
+                Chevron(b.transform, Fg, right);
             }
 
-            var canvasGo = new GameObject("CustomizerCanvas");
-            canvasRoot = canvasGo;
-            canvasGo.transform.SetParent(transform, false);
-            var canvas = canvasGo.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 5;
-            var scaler = canvasGo.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920, 1080);
-            scaler.matchWidthOrHeight = 0.5f;
-            canvasGo.AddComponent<GraphicRaycaster>();
+            // right: controls
+            var col = VCol(stageRt, "Controls", 18);
+            col.padding = new RectOffset(48, 48, 36, 32);
+            col.GetComponent<RectTransform>().TL(560, 0, 720, 720);
 
-            var panel = NewRect("Panel", canvasGo.transform);
-            panel.anchorMin = panel.anchorMax = new Vector2(0f, 0.5f);
-            panel.pivot = new Vector2(0f, 0.5f);
-            panel.anchoredPosition = new Vector2(28f, 0f);
-            panel.sizeDelta = new Vector2(400f, 980f);
-            panel.gameObject.AddComponent<Image>().color = PanelBg;
-
-            var title = Text(panel, "Title", "YOUR CHARACTER", 30, Accent, TextAlignmentOptions.Center);
-            Place(title.rectTransform, 0, -14, 380, 44);
-
-            // preview
-            var prev = NewRect("Preview", panel);
-            Place(prev, 0, -62, 360, 450);
-            var raw = prev.gameObject.AddComponent<RawImage>();
-            raw.texture = rt;
-            var drag = prev.gameObject.AddComponent<PreviewDrag>();
-            drag.owner = this;
-
-            float y = -520;
-            AddRow(panel, ref y, "BODY", () => AirsoftLook.BodyNames[look.body], d => look.body = Wrap(look.body + d, AirsoftLook.Bodies.Length));
-            AddRow(panel, ref y, "HAT", () => AirsoftLook.Hats[look.hat], d => look.hat = Wrap(look.hat + d, AirsoftLook.Hats.Length));
-            AddRow(panel, ref y, "HAT COLOR", () => AirsoftLook.PaletteNames[look.hatColor], d => look.hatColor = Wrap(look.hatColor + d, AirsoftLook.Palette.Length), () => AirsoftLook.Palette[look.hatColor]);
-            AddRow(panel, ref y, "SHIRT", () => AirsoftLook.PaletteNames[look.shirt], d => look.shirt = Wrap(look.shirt + d, AirsoftLook.Palette.Length), () => AirsoftLook.Palette[look.shirt]);
-            AddRow(panel, ref y, "PANTS", () => AirsoftLook.PaletteNames[look.pants], d => look.pants = Wrap(look.pants + d, AirsoftLook.Palette.Length), () => AirsoftLook.Palette[look.pants]);
-            AddRow(panel, ref y, "SKIN", () => AirsoftLook.SkinNames[look.skin], d => look.skin = Wrap(look.skin + d, AirsoftLook.SkinTones.Length), () => AirsoftLook.SkinTones[look.skin]);
-            AddRow(panel, ref y, "HAIR", () => AirsoftLook.HairNames[look.hair], d => look.hair = Wrap(look.hair + d, AirsoftLook.HairColors.Length), () => AirsoftLook.HairColors[look.hair]);
-
-            var rnd = Button(panel, "RandomBtn", "RANDOMIZE", () =>
+            var top = Rect(col.transform, "Header").LE(-1, 40);
+            Label(top, "CHARACTER", F.CondBlack, 40, Fg).rectTransform.Fill(0, 0, 200, 0);
+            var rnd = Button(top, "RANDOMIZE", Btn.Quiet, 16, () =>
             {
                 look = AirsoftLook.Unpack(AirsoftLook.Random());
                 Changed();
             });
-            Place(rnd, 0, y - 8, 360, 48);
-            var note = Text(panel, "Note", "Tip: drag the preview to rotate. In Team Deathmatch your shirt shows your team colour.",
-                15, new Color(0.7f, 0.7f, 0.75f), TextAlignmentOptions.Center);
-            note.textWrappingMode = TextWrappingModes.Normal;
-            Place(note.rectTransform, 0, y - 62, 360, 44);
+            rnd.GetComponent<RectTransform>().At(1f, 0.5f, 0, 0, 150, 40);
+            rnd.label.rectTransform.Fill(34, 0, 10, 0);
+            var dice = Rect(rnd.transform, "Dice").At(0f, 0.5f, 16, 0, 16, 16);
+            Frame(dice, Fg, 2f);
+            foreach (var p in new[] { new Vector2(-3.5f, 3.5f), new Vector2(3.5f, -3.5f), new Vector2(3.5f, 3.5f), new Vector2(-3.5f, -3.5f) })
+                Box(dice, "Dot", Fg).rectTransform.At(0.5f, 0.5f, p.x, p.y, 2.4f, 2.4f);
+
+            Stepper(col.transform, "BODY", () => AirsoftLook.BodyNames[look.body], () => look.body, AirsoftLook.Bodies.Length,
+                d => look.body = Wrap(look.body + d, AirsoftLook.Bodies.Length));
+            Stepper(col.transform, "HAT", () => AirsoftLook.Hats[look.hat], () => look.hat, AirsoftLook.Hats.Length,
+                d => look.hat = Wrap(look.hat + d, AirsoftLook.Hats.Length));
+            Swatches(col.transform, "HAT COLOR", AirsoftLook.PaletteNames, AirsoftLook.Palette, () => look.hatColor, i => look.hatColor = i);
+            Swatches(col.transform, "SHIRT", AirsoftLook.PaletteNames, AirsoftLook.Palette, () => look.shirt, i => look.shirt = i);
+            Swatches(col.transform, "PANTS", AirsoftLook.PaletteNames, AirsoftLook.Palette, () => look.pants, i => look.pants = i);
+            Swatches(col.transform, "SKIN", AirsoftLook.SkinNames, AirsoftLook.SkinTones, () => look.skin, i => look.skin = i);
+            Swatches(col.transform, "HAIR", AirsoftLook.HairNames, AirsoftLook.HairColors, () => look.hair, i => look.hair = i);
+
+            Spacer(col.transform);
+            var foot = Rect(col.transform, "Footer").LE(-1, 67);
+            Box(foot, "Line", Line).rectTransform.At(0.5f, 1f, 0, 0, 624, 1);
+            var note = Label(foot, "Saved on this computer and shown to all players. In Team Deathmatch your shirt takes the team color.",
+                F.Body, 13, Muted).Wrap();
+            note.rectTransform.Fill(0, 19, 260, 0);
+            var save = Button(foot, "SAVE", Btn.Primary, 19, () => Close(true), F.CondBlack, 12);
+            save.GetComponent<RectTransform>().At(1f, 0f, 0, 0, 104, 48);
+            var cancel = Button(foot, "CANCEL", Btn.Quiet, 18, () => Close(false));
+            cancel.GetComponent<RectTransform>().At(1f, 0f, -116, 0, 116, 48);
+
+            modal.SetActive(false);
+        }
+
+        // A RawImage showing the 3D preview, cropped to fill its parent, drag to rotate.
+        public RectTransform PreviewImage(Transform parent)
+        {
+            var holder = Rect(parent, "Preview3D");
+            holder.gameObject.AddComponent<RectMask2D>();
+            var img = Rect(holder, "Image");
+            var raw = img.gameObject.AddComponent<RawImage>();
+            raw.texture = rt;
+            var fit = img.gameObject.AddComponent<AspectRatioFitter>();
+            fit.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+            fit.aspectRatio = rt.width / (float)rt.height;
+            var hit = holder.gameObject.AddComponent<Image>();
+            hit.color = Color.clear;
+            holder.gameObject.AddComponent<PreviewDrag>().owner = this;
+            raw.raycastTarget = false;
+            return holder;
         }
 
         static int Wrap(int v, int n) => ((v % n) + n) % n;
 
-        void AddRow(RectTransform panel, ref float y, string label, System.Func<string> get, System.Action<int> step, System.Func<Color> swatch = null)
+        void Stepper(Transform col, string label, System.Func<string> value, System.Func<int> index, int count, System.Action<int> step)
         {
-            var row = NewRect(label + "Row", panel);
-            Place(row, 0, y, 360, 46);
-
-            var lbl = Text(row, "Label", label, 16, new Color(0.65f, 0.67f, 0.72f), TextAlignmentOptions.Left);
-            var lrt = lbl.rectTransform;
-            lrt.anchorMin = new Vector2(0, 0); lrt.anchorMax = new Vector2(0, 1); lrt.pivot = new Vector2(0, 0.5f);
-            lrt.anchoredPosition = new Vector2(0, 0); lrt.sizeDelta = new Vector2(110, 0);
-
-            var prev = Button(row, "Prev", "<", () => { step(-1); Changed(); });
-            var prt = prev; prt.anchorMin = prt.anchorMax = new Vector2(0, 0.5f); prt.pivot = new Vector2(0, 0.5f);
-            prt.anchoredPosition = new Vector2(112, 0); prt.sizeDelta = new Vector2(42, 42);
-
-            var val = Text(row, "Value", get(), 19, Color.white, TextAlignmentOptions.Center);
-            var vrt = val.rectTransform;
-            vrt.anchorMin = vrt.anchorMax = new Vector2(0, 0.5f); vrt.pivot = new Vector2(0, 0.5f);
-            vrt.anchoredPosition = new Vector2(158, 0); vrt.sizeDelta = new Vector2(156, 42);
-            rows.Add((val, get));
-
-            if (swatch != null)
-            {
-                var sw = NewRect("Swatch", row);
-                sw.anchorMin = sw.anchorMax = new Vector2(0, 0.5f); sw.pivot = new Vector2(0, 0.5f);
-                sw.anchoredPosition = new Vector2(160, -17); sw.sizeDelta = new Vector2(152, 5);
-                var img = sw.gameObject.AddComponent<Image>();
-                img.color = swatch();
-                rows.Add((null, () => { img.color = swatch(); return ""; }));
-            }
-
-            var next = Button(row, "Next", ">", () => { step(+1); Changed(); });
-            next.anchorMin = next.anchorMax = new Vector2(0, 0.5f); next.pivot = new Vector2(0, 0.5f);
-            next.anchoredPosition = new Vector2(318, 0); next.sizeDelta = new Vector2(42, 42);
-
-            y -= 52;
+            var row = HRow(col, label + "Row", 16, TextAnchor.MiddleLeft);
+            row.LE(-1, 46);
+            Caption(row.transform, label, 12, Muted, 0.14f).LE(110, 46);
+            var box = Card(row.transform, "Box", Surface, Line, 1f);
+            box.LE(-1, 46, 1);
+            var prev = Button(box.transform, "", Btn.Ghost, 10, () => { step(-1); Changed(); });
+            prev.GetComponent<RectTransform>().At(0f, 0.5f, 0, 0, 44, 44);
+            Chevron(prev.transform, Fg, false);
+            var next = Button(box.transform, "", Btn.Ghost, 10, () => { step(+1); Changed(); });
+            next.GetComponent<RectTransform>().At(1f, 0.5f, 0, 0, 44, 44);
+            Chevron(next.transform, Fg, true);
+            var v = Label(box.transform, "", F.CondBold, 20, Fg, TextAlignmentOptions.Center, 0.04f);
+            v.rectTransform.Fill(44, 0, 44, 0);
+            var pos = Label(box.transform, "", F.Mono, 11, Faint, TextAlignmentOptions.MidlineRight);
+            pos.rectTransform.Fill(44, 0, 52, 0);
+            refreshers.Add(() => { v.text = value().ToUpperInvariant(); pos.text = (index() + 1) + "/" + count; });
         }
+
+        void Swatches(Transform col, string label, string[] names, Color[] colors, System.Func<int> get, System.Action<int> set)
+        {
+            var row = HRow(col, label + "Row", 16, TextAnchor.MiddleLeft);
+            row.LE(-1, 36);
+            var lab = VCol(row.transform, "Label", 2, TextAnchor.MiddleLeft);
+            lab.LE(110, 36);
+            Caption(lab.transform, label, 12, Muted, 0.14f).LE(-1, 15);
+            var cur = Label(lab.transform, "", F.Body, 13, Fg);
+            cur.LE(-1, 16);
+
+            var sw = HRow(row.transform, "Swatches", 6, TextAnchor.MiddleLeft);
+            sw.LE(-1, 36, 1);
+            var rings = new Image[colors.Length];
+            for (int i = 0; i < colors.Length; i++)
+            {
+                int idx = i;
+                var cell = Rect(sw.transform, names[i]).LE(30, 30);
+                var ring = Frame(cell, Accent, 2f, "Ring");
+                ring.rectTransform.Fill(-4, -4, -4, -4);
+                rings[i] = ring;
+                var b = Button(cell, "", Btn.Ghost, 10, () => { set(idx); Changed(); });
+                b.GetComponent<RectTransform>().Fill();
+                b.bgN = b.bgH = b.bgP = colors[i];
+                b.Refresh();
+                Frame(b.transform, Ground, 1f);
+            }
+            refreshers.Add(() =>
+            {
+                int s = get();
+                cur.text = names[s];
+                for (int i = 0; i < rings.Length; i++) rings[i].enabled = i == s;
+            });
+        }
+
+        void Refresh() { foreach (var r in refreshers) r(); }
 
         void Changed()
         {
-            foreach (var r in rows)
-            {
-                string s = r.get();
-                if (r.txt != null) r.txt.text = s;
-            }
-            int packed = AirsoftLook.Pack(look);
-            if (MatchNet.Instance != null) MatchNet.Instance.SetLocalLook(packed);
-            else AirsoftLook.SaveLocal(packed);
+            Refresh();
             RebuildAvatar();
         }
 
-        // ───────────── tiny UI helpers ─────────────
-        static RectTransform NewRect(string name, Transform parent)
-        {
-            var go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(parent, false);
-            return (RectTransform)go.transform;
-        }
-
-        static void Place(RectTransform rt, float x, float y, float w, float h)
-        {
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
-            rt.pivot = new Vector2(0.5f, 1f);
-            rt.anchoredPosition = new Vector2(x, y);
-            rt.sizeDelta = new Vector2(w, h);
-        }
-
-        static TextMeshProUGUI Text(Transform parent, string name, string text, float size, Color c, TextAlignmentOptions align)
-        {
-            var rt = NewRect(name, parent);
-            var t = rt.gameObject.AddComponent<TextMeshProUGUI>();
-            t.text = text; t.fontSize = size; t.color = c; t.alignment = align;
-            t.fontStyle = FontStyles.Bold;
-            t.textWrappingMode = TextWrappingModes.NoWrap;
-            t.overflowMode = TextOverflowModes.Ellipsis;
-            t.raycastTarget = false;
-            return t;
-        }
-
-        static RectTransform Button(Transform parent, string name, string label, UnityEngine.Events.UnityAction onClick)
-        {
-            var rt = NewRect(name, parent);
-            var img = rt.gameObject.AddComponent<Image>();
-            img.color = BtnBg;
-            var b = rt.gameObject.AddComponent<Button>();
-            var cols = b.colors;
-            cols.highlightedColor = new Color(1f, 0.75f, 0.5f);
-            cols.pressedColor = Accent;
-            b.colors = cols;
-            b.onClick.AddListener(onClick);
-            var t = Text(rt, "Text", label, 20, Color.white, TextAlignmentOptions.Center);
-            var trt = t.rectTransform;
-            trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one; trt.offsetMin = trt.offsetMax = Vector2.zero;
-            return rt;
-        }
-
-        // drag-to-rotate on the preview image
+        // drag-to-rotate on a preview image
         class PreviewDrag : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHandler
         {
             public CharacterCustomizerUI owner;
@@ -321,6 +353,7 @@ namespace AirsoftFPS
 
         void OnDestroy()
         {
+            if (Instance == this) Instance = null;
             if (rt != null) { rt.Release(); Destroy(rt); }
         }
     }

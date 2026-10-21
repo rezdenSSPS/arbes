@@ -208,6 +208,13 @@ namespace AirsoftFPS
 
             if (!IsOwner) return;
             if (Time.timeScale == 0) return;
+            if (HUDManager.InputBlocked)
+            {
+                // a menu is open: no shooting/switching, drop out of the scope
+                isAiming = false;
+                if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, GameSettings.FieldOfView, Time.deltaTime * 10f);
+                return;
+            }
 
             HandleWeaponSwitch();
             HandleReload();
@@ -360,7 +367,7 @@ namespace AirsoftFPS
             else
             {
                 isAiming = false;
-                if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, 60f, Time.deltaTime * 10f);
+                if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, GameSettings.FieldOfView, Time.deltaTime * 10f);
             }
         }
 

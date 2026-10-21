@@ -50,7 +50,7 @@ namespace AirsoftFPS
                     // post-processing (bloom / tonemapping from the map's global Volume)
                     var urp = playerCamera.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
                     if (urp == null) urp = playerCamera.gameObject.AddComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
-                    urp.renderPostProcessing = true;
+                    urp.renderPostProcessing = GameSettings.PostProcessing;
                     urp.antialiasing = UnityEngine.Rendering.Universal.AntialiasingMode.FastApproximateAntialiasing;
                     playerCamera.farClipPlane = 400f;
                 }
@@ -72,7 +72,8 @@ namespace AirsoftFPS
                 playerCamera.gameObject.SetActive(true);
             if (Time.timeScale == 0) return;
 
-            HandleLook();
+            // Pause / results menus own the mouse; the match (and gravity) keeps running.
+            if (!HUDManager.InputBlocked) HandleLook();
             HandleMovement();
 
             if (transform.position.y < -30f)
@@ -90,8 +91,12 @@ namespace AirsoftFPS
             var mouse = Mouse.current;
             if (mouse == null) return;
 
-            float mx = mouse.delta.x.ReadValue() * mouseSensitivity * 0.1f;
-            float my = mouse.delta.y.ReadValue() * mouseSensitivity * 0.1f;
+            var wc = GetComponent<WeaponController>();
+            float sens = mouseSensitivity * GameSettings.Sensitivity
+                         * (wc != null && wc.IsAiming ? GameSettings.ScopedSensitivity : 1f);
+            float mx = mouse.delta.x.ReadValue() * sens * 0.1f;
+            float my = mouse.delta.y.ReadValue() * sens * 0.1f;
+            if (GameSettings.InvertY) my = -my;
 
             xRotation -= my;
             xRotation = Mathf.Clamp(xRotation, maxLookDown, maxLookUp);
@@ -110,20 +115,28 @@ namespace AirsoftFPS
             if (grounded && velocity.y < 0)
                 velocity.y = -2f;
 
+            bool input = !HUDManager.InputBlocked;
             float h = 0f;
             float v = 0f;
-            if (kb.dKey.isPressed) h += 1f;
-            if (kb.aKey.isPressed) h -= 1f;
-            if (kb.wKey.isPressed) v += 1f;
-            if (kb.sKey.isPressed) v -= 1f;
+            if (input && kb.dKey.isPressed) h += 1f;
+            if (input && kb.aKey.isPressed) h -= 1f;
+            if (input && kb.wKey.isPressed) v += 1f;
+            if (input && kb.sKey.isPressed) v -= 1f;
 
             // Sprint
-            IsSprinting = kb.leftShiftKey.isPressed && v > 0.1f && !isCrouching;
+            IsSprinting = input && kb.leftShiftKey.isPressed && v > 0.1f && !isCrouching;
 
-            // Crouch
-            if (kb.cKey.wasPressedThisFrame || kb.leftCtrlKey.wasPressedThisFrame)
+            // Crouch: toggle on press, or hold (Settings > Controls)
+            bool crouchKey = kb.cKey.isPressed || kb.leftCtrlKey.isPressed;
+            bool wantCrouch = isCrouching;
+            if (GameSettings.ToggleCrouch)
             {
-                isCrouching = !isCrouching;
+                if (input && (kb.cKey.wasPressedThisFrame || kb.leftCtrlKey.wasPressedThisFrame)) wantCrouch = !isCrouching;
+            }
+            else wantCrouch = input && crouchKey;
+            if (wantCrouch != isCrouching)
+            {
+                isCrouching = wantCrouch;
                 cc.height = isCrouching ? crouchHeight : standHeight;
                 cc.center = new Vector3(0, cc.height / 2f, 0);
                 if (cameraHolder)
@@ -138,7 +151,7 @@ namespace AirsoftFPS
             cc.Move(move * speed * Time.deltaTime);
 
             // Jump
-            if (kb.spaceKey.wasPressedThisFrame && grounded && !isCrouching)
+            if (input && kb.spaceKey.wasPressedThisFrame && grounded && !isCrouching)
                 velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
 
             velocity.y += gravity * Time.deltaTime;
