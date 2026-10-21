@@ -116,7 +116,7 @@ namespace AirsoftFPS
             var c1 = Column(pane, 0);
             SliderRow(c1, "Mouse sensitivity", 0.1f, 5f, false,
                 () => GameSettings.Sensitivity, v => GameSettings.Sensitivity = Mathf.Round(v * 20f) / 20f, v => v.ToString("0.00"));
-            SliderRow(c1, "Scoped sensitivity (AWP)", 10, 100, true,
+            SliderRow(c1, "Scoped sensitivity (sniper)", 10, 100, true,
                 () => GameSettings.ScopedSensitivity * 100f, v => GameSettings.ScopedSensitivity = v / 100f, v => Mathf.RoundToInt(v) + "%");
             Check(c1, "Invert Y axis", () => GameSettings.InvertY, v => GameSettings.InvertY = v);
             Check(c1, "Toggle crouch (instead of hold)", () => GameSettings.ToggleCrouch, v => GameSettings.ToggleCrouch = v);

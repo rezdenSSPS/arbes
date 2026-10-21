@@ -57,7 +57,7 @@ namespace AirsoftFPS
             if (avatar.rightHand)
             {
                 AirsoftGuns.Gun g = null;
-                try { g = AirsoftGuns.Build("Rifle", 0.75f, null); } catch { }
+                try { g = AirsoftGuns.Build("AK47", 0.68f, null); } catch { }
                 if (g != null)
                 {
                     g.root.transform.SetPositionAndRotation(avatar.rightHand.position, transform.rotation);

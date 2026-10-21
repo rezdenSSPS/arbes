@@ -33,78 +33,92 @@ namespace AirsoftFPS
         public float hopTime = 0.45f;       // seconds until the backspin (and its lift) is spent
         public float drag = 0.012f;         // quadratic air drag k (1/m): dv/dt = -k |v| v
 
+        // Airsoft replica lineup. Slot order = keys 1-0 = Gun Game progression (sidearms -> SMGs ->
+        // shotgun -> rifles -> bolt-action sniper). Muzzle velocities are typical 0.20 g BB ratings.
+        // Rough time-to-kill at 100 HP (all hits): GBB 0.6 s, revolver 0.5 s, SMGs/AEGs 0.3-0.4 s,
+        // shotgun 1 pump up close, DMR 0.5 s, bolt rifle 0.8 s, sniper 1 hit.
         public static WeaponData[] GetAllWeapons()
         {
             return new WeaponData[]
             {
+                // 1. Gas blowback pistol, 15-round gas magazine; snappy blowback, short hop.
                 new WeaponData {
-                    weaponName = "Pistol", shortName = "Pistol", model = "Pistol", modelLength = 0.24f,
-                    damage = 22, fireRate = 4f, reloadTime = 1.5f, magSize = 12, maxReserve = 72,
-                    spread = 1.5f, range = 45f, isAutomatic = false, pelletsPerShot = 1,
-                    recoilUp = 3f, recoilSide = 1f, aimFOV = 0f, moveSpeedMult = 1f,
-                    muzzleVelocity = 80f, hopUp = 1f, hopTime = 0.35f, drag = 0.014f
+                    weaponName = "1911 GBB Pistol", shortName = "1911 GBB", model = "Pistol", modelLength = 0.22f,
+                    damage = 25, fireRate = 5f, reloadTime = 1.5f, magSize = 15, maxReserve = 75,
+                    spread = 1.4f, range = 45f, isAutomatic = false, pelletsPerShot = 1,
+                    recoilUp = 3.5f, recoilSide = 1f, aimFOV = 0f, moveSpeedMult = 1f,
+                    muzzleVelocity = 90f, hopUp = 1f, hopTime = 0.35f, drag = 0.014f
                 },
+                // 2. CO2 revolver, 6 shells; hard hitting but slow double-action pull, shell-by-shell reload.
                 new WeaponData {
-                    weaponName = "Revolver", shortName = "Revolv", model = "Revolver", modelLength = 0.3f,
-                    damage = 45, fireRate = 2.2f, reloadTime = 2.2f, magSize = 6, maxReserve = 36,
-                    spread = 1f, range = 50f, isAutomatic = false, pelletsPerShot = 1,
-                    recoilUp = 6f, recoilSide = 1f, aimFOV = 0f, moveSpeedMult = 1f,
-                    muzzleVelocity = 90f, hopUp = 1f, hopTime = 0.4f, drag = 0.013f
+                    weaponName = "CO2 Revolver", shortName = "Revolver", model = "Revolver", modelLength = 0.3f,
+                    damage = 50, fireRate = 2f, reloadTime = 2.4f, magSize = 6, maxReserve = 36,
+                    spread = 0.9f, range = 55f, isAutomatic = false, pelletsPerShot = 1,
+                    recoilUp = 4.5f, recoilSide = 1f, aimFOV = 0f, moveSpeedMult = 1f,
+                    muzzleVelocity = 115f, hopUp = 1f, hopTime = 0.4f, drag = 0.013f
                 },
+                // 3. Compact gas blowback SMG, full auto, 32-round gas stick; very fast but sprays.
                 new WeaponData {
-                    weaponName = "Ray Gun", shortName = "RayGun", model = "SciFi_RayGun", modelLength = 0.34f,
-                    damage = 30, fireRate = 6f, reloadTime = 1.8f, magSize = 15, maxReserve = 90,
-                    spread = 1.2f, range = 55f, isAutomatic = false, pelletsPerShot = 1,
-                    recoilUp = 2.5f, recoilSide = 0.8f, aimFOV = 0f, moveSpeedMult = 1f,
-                    muzzleVelocity = 95f, hopUp = 1.05f, hopTime = 0.4f, drag = 0.013f
+                    weaponName = "Uzi GBB SMG", shortName = "Uzi GBB", model = "Uzi", modelLength = 0.36f,
+                    damage = 17, fireRate = 15f, reloadTime = 1.8f, magSize = 32, maxReserve = 160,
+                    spread = 2.6f, range = 45f, isAutomatic = true, pelletsPerShot = 1,
+                    recoilUp = 2.2f, recoilSide = 1.3f, aimFOV = 0f, moveSpeedMult = 1f,
+                    muzzleVelocity = 95f, hopUp = 1f, hopTime = 0.4f, drag = 0.013f
                 },
+                // 4. Electric PDW, 68-round mid-cap; smooth AEG, almost no kick.
                 new WeaponData {
-                    weaponName = "Pulse SMG", shortName = "PulseSMG", model = "SciFi_LongPistol", modelLength = 0.4f,
-                    damage = 20, fireRate = 13f, reloadTime = 2f, magSize = 30, maxReserve = 150,
+                    weaponName = "P90 AEG", shortName = "P90 AEG", model = "P90", modelLength = 0.5f,
+                    damage = 19, fireRate = 13f, reloadTime = 2.2f, magSize = 68, maxReserve = 204,
                     spread = 2f, range = 60f, isAutomatic = true, pelletsPerShot = 1,
-                    recoilUp = 2f, recoilSide = 1f, aimFOV = 0f, moveSpeedMult = 0.95f,
+                    recoilUp = 1.2f, recoilSide = 0.8f, aimFOV = 0f, moveSpeedMult = 0.97f,
                     muzzleVelocity = 100f, hopUp = 1.05f, hopTime = 0.45f, drag = 0.012f
                 },
+                // 5. Spring pump shotgun, 3 BBs per pump; a 30-BB shell = 10 shots.
                 new WeaponData {
-                    weaponName = "P90", shortName = "P90", model = "P90", modelLength = 0.48f,
-                    damage = 18, fireRate = 15f, reloadTime = 2.2f, magSize = 50, maxReserve = 150,
-                    spread = 2.2f, range = 60f, isAutomatic = true, pelletsPerShot = 1,
-                    recoilUp = 1.8f, recoilSide = 1.2f, aimFOV = 0f, moveSpeedMult = 0.95f,
-                    muzzleVelocity = 105f, hopUp = 1.05f, hopTime = 0.45f, drag = 0.012f
-                },
-                new WeaponData {
-                    weaponName = "AK-47", shortName = "AK-47", model = "Rifle", modelLength = 0.75f,
-                    damage = 32, fireRate = 10f, reloadTime = 2.5f, magSize = 30, maxReserve = 120,
-                    spread = 1.8f, range = 80f, isAutomatic = true, pelletsPerShot = 1,
-                    recoilUp = 4f, recoilSide = 1.5f, aimFOV = 45f, moveSpeedMult = 0.88f,
-                    muzzleVelocity = 120f, hopUp = 1.1f, hopTime = 0.55f, drag = 0.01f
-                },
-                new WeaponData {
-                    weaponName = "Pulse Rifle", shortName = "PulseRf", model = "SciFi_Rifle", modelLength = 0.7f,
-                    damage = 28, fireRate = 11f, reloadTime = 2.3f, magSize = 30, maxReserve = 120,
-                    spread = 1.2f, range = 85f, isAutomatic = true, pelletsPerShot = 1,
-                    recoilUp = 3f, recoilSide = 0.8f, aimFOV = 45f, moveSpeedMult = 0.9f,
-                    muzzleVelocity = 125f, hopUp = 1.1f, hopTime = 0.55f, drag = 0.01f
-                },
-                new WeaponData {
-                    weaponName = "M870 Shotgun", shortName = "M870", model = "Shotgun", modelLength = 0.8f,
-                    damage = 30, fireRate = 1.2f, reloadTime = 0.5f, magSize = 6, maxReserve = 30,
-                    spread = 6f, range = 30f, isAutomatic = false, pelletsPerShot = 3,
-                    recoilUp = 6f, recoilSide = 2f, aimFOV = 0f, moveSpeedMult = 0.9f,
+                    weaponName = "M870 Spring Shotgun", shortName = "Shotgun", model = "Shotgun", modelLength = 0.85f,
+                    damage = 34, fireRate = 1.25f, reloadTime = 2f, magSize = 10, maxReserve = 40,
+                    spread = 4.5f, range = 32f, isAutomatic = false, pelletsPerShot = 3,
+                    recoilUp = 5f, recoilSide = 1.5f, aimFOV = 0f, moveSpeedMult = 0.92f,
                     muzzleVelocity = 85f, hopUp = 0.9f, hopTime = 0.3f, drag = 0.016f
                 },
+                // 6. Electric assault rifle (folding stock AK), 120-round mid-cap, iron sights.
                 new WeaponData {
-                    weaponName = "Lightning Gun", shortName = "Lightng", model = "SciFi_LightningGun", modelLength = 0.7f,
-                    damage = 25, fireRate = 14f, reloadTime = 4f, magSize = 100, maxReserve = 300,
-                    spread = 3f, range = 75f, isAutomatic = true, pelletsPerShot = 1,
-                    recoilUp = 3.5f, recoilSide = 2f, aimFOV = 0f, moveSpeedMult = 0.75f,
-                    muzzleVelocity = 115f, hopUp = 1.1f, hopTime = 0.5f, drag = 0.011f
+                    weaponName = "AK AEG", shortName = "AK AEG", model = "AK47", modelLength = 0.68f,
+                    damage = 22, fireRate = 12f, reloadTime = 2.5f, magSize = 120, maxReserve = 240,
+                    spread = 1.7f, range = 80f, isAutomatic = true, pelletsPerShot = 1,
+                    recoilUp = 1.8f, recoilSide = 1f, aimFOV = 50f, moveSpeedMult = 0.9f,
+                    muzzleVelocity = 115f, hopUp = 1.1f, hopTime = 0.55f, drag = 0.01f
                 },
+                // 7. Support AEG (RPK style), 300-round box mag; long wind-up reload, heavy to carry.
                 new WeaponData {
-                    weaponName = "AWP Sniper", shortName = "AWP", model = "SniperRifle", modelLength = 1.0f,
-                    damage = 95, fireRate = 0.7f, reloadTime = 3f, magSize = 5, maxReserve = 20,
-                    spread = 0.2f, range = 130f, isAutomatic = false, pelletsPerShot = 1,
-                    recoilUp = 8f, recoilSide = 0.5f, aimFOV = 20f, moveSpeedMult = 0.8f,
+                    weaponName = "RPK Support AEG", shortName = "RPK AEG", model = "AK47", modelLength = 0.88f,
+                    damage = 18, fireRate = 14f, reloadTime = 4.5f, magSize = 300, maxReserve = 300,
+                    spread = 2.6f, range = 85f, isAutomatic = true, pelletsPerShot = 1,
+                    recoilUp = 1.5f, recoilSide = 1.2f, aimFOV = 55f, moveSpeedMult = 0.75f,
+                    muzzleVelocity = 120f, hopUp = 1.1f, hopTime = 0.55f, drag = 0.01f
+                },
+                // 8. Designated marksman: semi-only AEG with a tight barrel, 50-round mid-cap.
+                new WeaponData {
+                    weaponName = "M14 DMR", shortName = "M14 DMR", model = "Rifle", modelLength = 0.9f,
+                    damage = 40, fireRate = 4f, reloadTime = 2.4f, magSize = 50, maxReserve = 150,
+                    spread = 0.6f, range = 105f, isAutomatic = false, pelletsPerShot = 1,
+                    recoilUp = 2.5f, recoilSide = 0.6f, aimFOV = 38f, moveSpeedMult = 0.86f,
+                    muzzleVelocity = 135f, hopUp = 1.12f, hopTime = 0.6f, drag = 0.009f
+                },
+                // 9. Spring bolt-action rifle on iron sights, 25-round mag; quick to cycle.
+                new WeaponData {
+                    weaponName = "Spring Bolt Rifle", shortName = "Bolt Rfl", model = "BoltRifle", modelLength = 0.95f,
+                    damage = 55, fireRate = 1.3f, reloadTime = 2.5f, magSize = 25, maxReserve = 75,
+                    spread = 0.4f, range = 110f, isAutomatic = false, pelletsPerShot = 1,
+                    recoilUp = 4f, recoilSide = 0.5f, aimFOV = 45f, moveSpeedMult = 0.88f,
+                    muzzleVelocity = 130f, hopUp = 1.12f, hopTime = 0.6f, drag = 0.008f
+                },
+                // 10. Scoped spring bolt-action sniper (L96 style), 30-round mag; one hit, slow bolt.
+                new WeaponData {
+                    weaponName = "L96 Spring Sniper", shortName = "Sniper", model = "SniperRifle", modelLength = 1.0f,
+                    damage = 100, fireRate = 0.75f, reloadTime = 3f, magSize = 30, maxReserve = 60,
+                    spread = 0.15f, range = 130f, isAutomatic = false, pelletsPerShot = 1,
+                    recoilUp = 5f, recoilSide = 0.4f, aimFOV = 20f, moveSpeedMult = 0.8f,
                     muzzleVelocity = 150f, hopUp = 1.15f, hopTime = 0.7f, drag = 0.007f
                 },
             };
