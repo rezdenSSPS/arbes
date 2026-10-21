@@ -554,6 +554,7 @@ namespace AirsoftFPS
             var metaText = meta.GetComponentInChildren<TextMeshProUGUI>();
             ApplyFont(metaText, F.Body); metaText.characterSpacing = 0;
 
+            ProfileUI.AddToMenu(screen, stage);   // level chip (top right) + profile/stats panel
             SetLanTab(LastWasLan);
             return screen.gameObject;
         }

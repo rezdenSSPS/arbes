@@ -11,6 +11,9 @@ namespace AirsoftFPS
     // hat and eyewear, and colour swatch rows. Builds itself whenever the AirsoftLobby scene
     // is loaded; the lobby screen shows the same 3D preview (PreviewTexture). The
     // chosen look is saved locally and synced to everyone via MatchNet.
+    // Some hats, eyewear and colours unlock at player levels (AirsoftLook.*Levels, PlayerProfile):
+    // locked items can be previewed but not saved. Items of the look saved before unlocks existed
+    // (ProfileData.legacyLook) and of the current saved look stay usable.
     public class CharacterCustomizerUI : MonoBehaviour
     {
         const string LobbyScene = "AirsoftLobby";
@@ -28,6 +31,8 @@ namespace AirsoftFPS
         float spin = 160f;
         bool dragging;
         GameObject modal;
+        KitButton saveButton;
+        TextMeshProUGUI footNote;
         readonly System.Collections.Generic.List<System.Action> refreshers = new();
 
         public Texture PreviewTexture => rt;
@@ -75,8 +80,34 @@ namespace AirsoftFPS
             modal.SetActive(true);
         }
 
+        static readonly AirsoftLook.Slot[] LockableSlots =
+            { AirsoftLook.Slot.Hat, AirsoftLook.Slot.HatColor, AirsoftLook.Slot.Eyewear,
+              AirsoftLook.Slot.Shirt, AirsoftLook.Slot.Pants, AirsoftLook.Slot.Hair };
+
+        // Usable now: unlocked at the player's level, or part of a look the player already had.
+        public bool Owned(AirsoftLook.Slot slot, int index)
+        {
+            if (PlayerProfile.Level >= AirsoftLook.RequiredLevel(slot, index)) return true;
+            if (AirsoftLook.Get(savedLook, slot) == index) return true;
+            int legacy = PlayerProfile.Data.legacyLook;
+            return legacy >= 0 && AirsoftLook.Get(AirsoftLook.Unpack(legacy), slot) == index;
+        }
+
+        // Names (with levels) of the locked items in the working look; empty = can be saved.
+        string LockedItems()
+        {
+            var list = new System.Collections.Generic.List<string>();
+            foreach (var slot in LockableSlots)
+            {
+                int i = AirsoftLook.Get(look, slot);
+                if (!Owned(slot, i)) list.Add($"{AirsoftLook.ItemName(slot, i)} (level {AirsoftLook.RequiredLevel(slot, i)})");
+            }
+            return string.Join(", ", list);
+        }
+
         public void Close(bool save)
         {
+            if (save && LockedItems().Length > 0) return;
             if (save)
             {
                 savedLook = look;
@@ -226,7 +257,7 @@ namespace AirsoftFPS
             Label(top, "CHARACTER", F.CondBlack, 40, Fg).rectTransform.Fill(0, 0, 200, 0);
             var rnd = Button(top, "RANDOMIZE", Btn.Quiet, 16, () =>
             {
-                look = AirsoftLook.Unpack(AirsoftLook.Random());
+                look = AirsoftLook.Unpack(AirsoftLook.Random(null, PlayerProfile.Level));
                 Changed();
             });
             rnd.GetComponent<RectTransform>().At(1f, 0.5f, 0, 0, 150, 40);
@@ -236,26 +267,37 @@ namespace AirsoftFPS
             foreach (var p in new[] { new Vector2(-3.5f, 3.5f), new Vector2(3.5f, -3.5f), new Vector2(3.5f, 3.5f), new Vector2(-3.5f, -3.5f) })
                 Box(dice, "Dot", Fg).rectTransform.At(0.5f, 0.5f, p.x, p.y, 2.4f, 2.4f);
 
-            Stepper(col.transform, "BODY", () => AirsoftLook.BodyNames[look.body], () => look.body, AirsoftLook.Bodies.Length,
+            Stepper(col.transform, "BODY", AirsoftLook.Slot.Body, () => AirsoftLook.BodyNames[look.body], () => look.body, AirsoftLook.Bodies.Length,
                 d => look.body = Wrap(look.body + d, AirsoftLook.Bodies.Length));
-            Stepper(col.transform, "HAT", () => AirsoftLook.Hats[look.hat], () => look.hat, AirsoftLook.Hats.Length,
+            Stepper(col.transform, "HAT", AirsoftLook.Slot.Hat, () => AirsoftLook.Hats[look.hat], () => look.hat, AirsoftLook.Hats.Length,
                 d => look.hat = Wrap(look.hat + d, AirsoftLook.Hats.Length));
-            Swatches(col.transform, "HAT COLOR", AirsoftLook.PaletteNames, AirsoftLook.Palette, () => look.hatColor, i => look.hatColor = i);
-            Stepper(col.transform, "EYEWEAR", () => AirsoftLook.Eyewear[look.eyewear], () => look.eyewear, AirsoftLook.Eyewear.Length,
+            Swatches(col.transform, "HAT COLOR", AirsoftLook.Slot.HatColor, AirsoftLook.PaletteNames, AirsoftLook.Palette, () => look.hatColor, i => look.hatColor = i);
+            Stepper(col.transform, "EYEWEAR", AirsoftLook.Slot.Eyewear, () => AirsoftLook.Eyewear[look.eyewear], () => look.eyewear, AirsoftLook.Eyewear.Length,
                 d => look.eyewear = Wrap(look.eyewear + d, AirsoftLook.Eyewear.Length));
-            Swatches(col.transform, "SHIRT", AirsoftLook.PaletteNames, AirsoftLook.Palette, () => look.shirt, i => look.shirt = i);
-            Swatches(col.transform, "PANTS", AirsoftLook.PaletteNames, AirsoftLook.Palette, () => look.pants, i => look.pants = i);
-            Swatches(col.transform, "SKIN", AirsoftLook.SkinNames, AirsoftLook.SkinTones, () => look.skin, i => look.skin = i);
-            Swatches(col.transform, "HAIR", AirsoftLook.HairNames, AirsoftLook.HairColors, () => look.hair, i => look.hair = i);
+            Swatches(col.transform, "SHIRT", AirsoftLook.Slot.Shirt, AirsoftLook.PaletteNames, AirsoftLook.Palette, () => look.shirt, i => look.shirt = i);
+            Swatches(col.transform, "PANTS", AirsoftLook.Slot.Pants, AirsoftLook.PaletteNames, AirsoftLook.Palette, () => look.pants, i => look.pants = i);
+            Swatches(col.transform, "SKIN", AirsoftLook.Slot.Skin, AirsoftLook.SkinNames, AirsoftLook.SkinTones, () => look.skin, i => look.skin = i);
+            Swatches(col.transform, "HAIR", AirsoftLook.Slot.Hair, AirsoftLook.HairNames, AirsoftLook.HairColors, () => look.hair, i => look.hair = i);
 
             Spacer(col.transform);
             var foot = Rect(col.transform, "Footer").LE(-1, 67);
             Box(foot, "Line", Line).rectTransform.At(0.5f, 1f, 0, 0, 624, 1);
-            var note = Label(foot, "Saved on this computer and shown to all players. In Team Deathmatch you wear team armbands.",
-                F.Body, 13, Muted).Wrap();
+            var note = Label(foot, "", F.Body, 13, Muted).Wrap();
             note.rectTransform.Fill(0, 19, 260, 0);
+            footNote = note;
             var save = Button(foot, "SAVE", Btn.Primary, 19, () => Close(true), F.CondBlack, 12);
             save.GetComponent<RectTransform>().At(1f, 0f, 0, 0, 104, 48);
+            saveButton = save;
+            refreshers.Add(() =>
+            {
+                string locked = LockedItems();
+                saveButton.interactable = locked.Length == 0;
+                saveButton.Refresh();
+                footNote.color = locked.Length == 0 ? Muted : DangerSoft;
+                footNote.text = locked.Length == 0
+                    ? $"Level {PlayerProfile.Level}. Saved on this computer and shown to all players. In Team Deathmatch you wear team armbands."
+                    : $"Locked: {locked}. Earn XP in matches to unlock it, or pick another.";
+            });
             var cancel = Button(foot, "CANCEL", Btn.Quiet, 18, () => Close(false));
             cancel.GetComponent<RectTransform>().At(1f, 0f, -116, 0, 116, 48);
 
@@ -282,7 +324,7 @@ namespace AirsoftFPS
 
         static int Wrap(int v, int n) => ((v % n) + n) % n;
 
-        void Stepper(Transform col, string label, System.Func<string> value, System.Func<int> index, int count, System.Action<int> step)
+        void Stepper(Transform col, string label, AirsoftLook.Slot slot, System.Func<string> value, System.Func<int> index, int count, System.Action<int> step)
         {
             var row = HRow(col, label + "Row", 16, TextAnchor.MiddleLeft);
             row.LE(-1, 46);
@@ -299,10 +341,25 @@ namespace AirsoftFPS
             v.rectTransform.Fill(44, 0, 44, 0);
             var pos = Label(box.transform, "", F.Mono, 11, Faint, TextAlignmentOptions.MidlineRight);
             pos.rectTransform.Fill(44, 0, 52, 0);
-            refreshers.Add(() => { v.text = value().ToUpperInvariant(); pos.text = (index() + 1) + "/" + count; });
+            // locked item: padlock + required level on the left of the box
+            var lockRow = HRow(box.transform, "Locked", 6, TextAnchor.MiddleLeft);
+            lockRow.GetComponent<RectTransform>().Fill(52, 0, 0, 0);
+            ProfileUI.LockIcon(lockRow.transform, Accent, 12).LE(12, 12);
+            var lockLevel = Label(lockRow.transform, "", F.MonoBold, 11, Accent);
+            lockLevel.LE(-1, 46);
+            refreshers.Add(() =>
+            {
+                int i = index();
+                bool locked = !Owned(slot, i);
+                v.text = value().ToUpperInvariant();
+                v.color = locked ? Muted : Fg;
+                pos.text = (i + 1) + "/" + count;
+                lockRow.gameObject.SetActive(locked);
+                lockLevel.text = "LEVEL " + AirsoftLook.RequiredLevel(slot, i);
+            });
         }
 
-        void Swatches(Transform col, string label, string[] names, Color[] colors, System.Func<int> get, System.Action<int> set)
+        void Swatches(Transform col, string label, AirsoftLook.Slot slot, string[] names, Color[] colors, System.Func<int> get, System.Action<int> set)
         {
             var row = HRow(col, label + "Row", 16, TextAnchor.MiddleLeft);
             row.LE(-1, 36);
@@ -315,6 +372,7 @@ namespace AirsoftFPS
             var sw = HRow(row.transform, "Swatches", 6, TextAnchor.MiddleLeft);
             sw.LE(-1, 36, 1);
             var rings = new Image[colors.Length];
+            var locks = new GameObject[colors.Length];
             for (int i = 0; i < colors.Length; i++)
             {
                 int idx = i;
@@ -327,12 +385,21 @@ namespace AirsoftFPS
                 b.bgN = b.bgH = b.bgP = colors[i];
                 b.Refresh();
                 Frame(b.transform, Ground, 1f);
+                var shade = Box(cell, "Locked", Scrim(0.6f));
+                shade.rectTransform.Fill();
+                ProfileUI.LockIcon(shade.transform, Fg, 12).At(0.5f, 0.5f, 0, 0, 12, 12);
+                locks[i] = shade.gameObject;
             }
             refreshers.Add(() =>
             {
                 int s = get();
-                cur.text = names[s];
-                for (int i = 0; i < rings.Length; i++) rings[i].enabled = i == s;
+                bool locked = !Owned(slot, s);
+                cur.text = locked ? $"{names[s]} <color={Html(Accent)}>LVL {AirsoftLook.RequiredLevel(slot, s)}</color>" : names[s];
+                for (int i = 0; i < rings.Length; i++)
+                {
+                    rings[i].enabled = i == s;
+                    locks[i].SetActive(!Owned(slot, i));
+                }
             });
         }
 

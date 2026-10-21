@@ -1355,6 +1355,7 @@ namespace AirsoftFPS
                 var k = Label(cell.transform, "", F.BodyBold, 11, Muted, TextAlignmentOptions.MidlineLeft, 0.14f); k.LE(-1, 14);
                 resStats.Add((v, k));
             }
+            ProfileUI.AddToResults(right.transform);   // XP gained + level progress
             Spacer(right.transform);
             var cdRow = Rect(right.transform, "Countdown").LE(-1, 20);
             Label(cdRow, "Returning to lobby", F.Body, 14, TextSoft).rectTransform.Fill();
