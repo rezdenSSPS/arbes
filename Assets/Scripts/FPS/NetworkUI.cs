@@ -83,6 +83,9 @@ namespace AirsoftFPS
         TMP_InputField lobbyName;
         GameObject hostModeKey, clientModeNote, tdmNote;
         readonly List<(KitButton btn, Image frame, CanvasGroup group)> modeCards = new();
+        Segmented timeSeg;
+        CanvasGroup timeGroup;
+        GameObject timeUnit, timeCoopNote;
         readonly List<Slot> slots = new List<Slot>();
         float copyFlashUntil;
         float refreshTimer;
@@ -830,13 +833,36 @@ namespace AirsoftFPS
                 modeCards.Add((b, frame, group));
             }
 
+            // match time limit (host picks, clients see it read-only; Co-op has none)
+            var time = Rect(colRt, "TimeLimit").LE(-1, 32);
+            Caption(time, "TIME LIMIT", 12, Muted, 0.16f).rectTransform.Fill();
+            var opts = new string[MatchNet.TIME_LIMIT_OPTIONS.Length];
+            for (int i = 0; i < opts.Length; i++)
+                opts[i] = MatchNet.TIME_LIMIT_OPTIONS[i] == 0 ? "OFF" : MatchNet.TIME_LIMIT_OPTIONS[i].ToString();
+            int sel0 = Array.IndexOf(MatchNet.TIME_LIMIT_OPTIONS, MatchNet.DEFAULT_TIME_LIMIT);
+            timeSeg = Segments(time, opts, sel0, 28, 12, i =>
+            {
+                if (isHost && MatchNet.Instance != null) MatchNet.Instance.HostSetTimeLimit(MatchNet.TIME_LIMIT_OPTIONS[i]);
+            }, 10f);
+            var segRt = (RectTransform)timeSeg.transform;
+            segRt.anchorMin = segRt.anchorMax = segRt.pivot = new Vector2(1f, 0.5f);
+            segRt.anchoredPosition = new Vector2(-30, 0);
+            timeGroup = timeSeg.gameObject.AddComponent<CanvasGroup>();
+            var unit = Label(time, "min", F.Body, 13, Muted, TextAlignmentOptions.MidlineRight);
+            unit.rectTransform.Fill();
+            timeUnit = unit.gameObject;
+            var coopNote = Label(time, "No limit in co-op", F.Body, 13, Muted, TextAlignmentOptions.MidlineRight);
+            coopNote.rectTransform.Fill();
+            timeCoopNote = coopNote.gameObject;
+            timeCoopNote.SetActive(false);
+
             var note = HRow(colRt, "ClientNote", 8);
             note.LE(-1, 18);
             var lockIcon = Rect(note.transform, "Lock").LE(14, 14);
             Box(lockIcon, "Body", Muted).rectTransform.At(0.5f, 0f, 0, 0, 12, 8);
             var shackle = Rect(lockIcon, "Shackle").At(0.5f, 1f, 0, 0, 8, 8);
             Frame(shackle, Muted, 2f);
-            Label(note.transform, "The host picks the mode", F.Body, 13, Muted).LE(-1, 18);
+            Label(note.transform, "The host picks the mode and time limit", F.Body, 13, Muted).LE(-1, 18);
             clientModeNote = note.gameObject;
         }
 
@@ -969,6 +995,15 @@ namespace AirsoftFPS
             }
             bool tdm = mnet.Mode == MatchNet.GameModeType.TeamDeathmatch;
             tdmNote.SetActive(tdm);
+
+            // time limit
+            bool coop = mnet.Mode == MatchNet.GameModeType.Coop;
+            timeSeg.gameObject.SetActive(!coop);
+            timeUnit.SetActive(!coop);
+            timeCoopNote.SetActive(coop);
+            int ti = Array.IndexOf(MatchNet.TIME_LIMIT_OPTIONS, mnet.TimeLimitMinutes);
+            if (ti >= 0 && timeSeg.Selected != ti) timeSeg.Select(ti, false);
+            timeGroup.blocksRaycasts = isHost;
 
             // roster
             var roster = mnet.Roster;
