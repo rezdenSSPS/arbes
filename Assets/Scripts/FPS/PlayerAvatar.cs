@@ -19,6 +19,7 @@ namespace AirsoftFPS
         Vector3 lastPos;
         float speed;
         float deadTilt;
+        float handUp;   // Milsim HIT pose blend (0..1)
 
         void Start()
         {
@@ -46,7 +47,7 @@ namespace AirsoftFPS
         int WantedTeam()
         {
             var mn = MatchNet.Instance;
-            if (mn == null || mn.Mode != MatchNet.GameModeType.TeamDeathmatch) return 0;
+            if (mn == null || !mn.TeamMode) return 0;
             return mn.TeamOf(Owner);
         }
 
@@ -80,6 +81,14 @@ namespace AirsoftFPS
 
             int gun = weapons != null && weapons.AmmoReady ? weapons.CurrentSlot - 1 : -1;
             if (gun != builtGun && avatar != null) AttachGun(gun);
+        }
+
+        // Milsim: a HIT player raises a hand (after the animation has posed the bones this frame).
+        void LateUpdate()
+        {
+            bool hit = health != null && health.IsOut;
+            handUp = Mathf.MoveTowards(handUp, hit ? 1f : 0f, Time.deltaTime * 5f);
+            if (avatar != null) AirsoftLook.RaiseHand(avatar, handUp);
         }
 
         void Rebuild(int look, int team)

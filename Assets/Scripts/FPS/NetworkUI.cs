@@ -804,7 +804,7 @@ namespace AirsoftFPS
         void BuildModeColumn(RectTransform colRt)
         {
             var col = colRt.gameObject.AddComponent<VerticalLayoutGroup>();
-            col.spacing = 12; col.childControlWidth = col.childControlHeight = true;
+            col.spacing = 8; col.childControlWidth = col.childControlHeight = true;
             col.childForceExpandWidth = true; col.childForceExpandHeight = false;
 
             var head = Rect(colRt, "Head").LE(-1, 18);
@@ -814,21 +814,21 @@ namespace AirsoftFPS
             key.anchoredPosition = Vector2.zero;
             hostModeKey = key.gameObject;
 
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < MatchNet.MODE_COUNT; i++)
             {
                 var mode = (MatchNet.GameModeType)i;
                 var b = Button(colRt, "", Btn.Ghost, 10, () =>
                 {
                     if (isHost && MatchNet.Instance != null) MatchNet.Instance.HostSetMode(mode);
                 });
-                b.LE(-1, 86);
+                b.LE(-1, 72);   // five cards fit the 492 px column
                 var group = b.gameObject.AddComponent<CanvasGroup>();
                 var frame = Frame(b.transform, Line, 1f);
-                var txt = VCol(b.transform, "Text", 4);
-                txt.padding = new RectOffset(16, 16, 13, 13);
+                var txt = VCol(b.transform, "Text", 2);
+                txt.padding = new RectOffset(16, 16, 9, 9);
                 txt.GetComponent<RectTransform>().Fill();
-                Label(txt.transform, ModeName(mode).ToUpperInvariant(), F.CondBold, 21, Fg, TextAlignmentOptions.MidlineLeft, 0.02f).LE(-1, 24);
-                Label(txt.transform, ModeDesc(mode), F.Body, 13, Muted).Wrap().LE(-1, 36);
+                Label(txt.transform, ModeName(mode).ToUpperInvariant(), F.CondBold, 20, Fg, TextAlignmentOptions.MidlineLeft, 0.02f).LE(-1, 22);
+                Label(txt.transform, ModeDesc(mode), F.Body, 12, Muted).Wrap().LE(-1, 30);
                 b.label.gameObject.SetActive(false);
                 modeCards.Add((b, frame, group));
             }
@@ -993,7 +993,7 @@ namespace AirsoftFPS
                 frame.pixelsPerUnitMultiplier = 4f / (sel ? 2f : 1f);
                 group.alpha = (!isHost && !sel) ? 0.55f : 1f;
             }
-            bool tdm = mnet.Mode == MatchNet.GameModeType.TeamDeathmatch;
+            bool tdm = mnet.TeamMode;   // Team Deathmatch or Milsim
             tdmNote.SetActive(tdm);
 
             // time limit

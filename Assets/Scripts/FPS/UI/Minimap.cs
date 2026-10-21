@@ -129,7 +129,7 @@ namespace AirsoftFPS
                 if (pl == null || pl.NetworkObject == me || !pl.IsSpawned) continue;
                 // Teammates only: everyone in Co-op, your own team in TDM. FFA / Gun Game: nobody.
                 int team = 0;
-                if (mode == MatchNet.GameModeType.TeamDeathmatch)
+                if (MatchNet.IsTeamMode(mode))
                 {
                     team = mn.TeamOf(pl.OwnerClientId);
                     if (team == 0 || team != myTeam) continue;

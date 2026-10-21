@@ -15,7 +15,8 @@ namespace AirsoftFPS
     // the whole state to clients whenever it changes.
     public class MatchNet : MonoBehaviour
     {
-        public enum GameModeType { Coop = 0, FreeForAll = 1, TeamDeathmatch = 2, GunGame = 3 }
+        public enum GameModeType { Coop = 0, FreeForAll = 1, TeamDeathmatch = 2, GunGame = 3, Milsim = 4 }
+        public const int MODE_COUNT = 5;
         public enum Phase { Lobby = 0, InMatch = 1, Results = 2 }
 
         public struct Entry
@@ -25,7 +26,7 @@ namespace AirsoftFPS
             public bool ready;
             public int kills;
             public int deaths;
-            public int team;   // 0 = none, 1 = Red, 2 = Blue (Team Deathmatch)
+            public int team;   // 0 = none, 1 = Red, 2 = Blue (team modes: Team Deathmatch, Milsim)
             public int look;   // packed AirsoftLook (-1 = not chosen yet)
         }
 
@@ -38,6 +39,7 @@ namespace AirsoftFPS
         public const int FFA_KILL_TARGET = 15;
         public const int TDM_KILL_TARGET = 40;
         public const int GUNGAME_WEAPONS = 10;
+        public const int MILSIM_HIT_TARGET = 30;   // Milsim: each BB hit scores a point for the shooter's team
         public const float RESULTS_SECONDS = 6f;   // results screen, then everyone returns to the lobby
         // Match time limit (minutes) the host can pick in the lobby; 0 = off. Co-op never has one.
         public static readonly int[] TIME_LIMIT_OPTIONS = { 0, 5, 10, 15 };
@@ -212,7 +214,7 @@ namespace AirsoftFPS
         public void HostCycleMode()
         {
             if (!IsHost) return;
-            Mode = (GameModeType)(((int)Mode + 1) % 4);
+            Mode = (GameModeType)(((int)Mode + 1) % MODE_COUNT);
             BroadcastState();
         }
 
@@ -282,8 +284,8 @@ namespace AirsoftFPS
             {
                 var e = roster[i];
                 e.kills = 0; e.deaths = 0;
-                e.team = (Mode == GameModeType.TeamDeathmatch) ? t : 0;
-                if (Mode == GameModeType.TeamDeathmatch) t = (t == 1) ? 2 : 1;
+                e.team = TeamMode ? t : 0;
+                if (TeamMode) t = (t == 1) ? 2 : 1;
                 roster[i] = e;
             }
             BroadcastState();
@@ -298,8 +300,8 @@ namespace AirsoftFPS
         {
             if (nm == null || !nm.IsServer) return;
 
-            bool pvpMode = Mode == GameModeType.FreeForAll || Mode == GameModeType.TeamDeathmatch || Mode == GameModeType.GunGame;
-            bool teamKill = Mode == GameModeType.TeamDeathmatch && HasEntry(killerClientId)
+            bool pvpMode = Mode != GameModeType.Coop;
+            bool teamKill = TeamMode && HasEntry(killerClientId)
                             && TeamOf(killerClientId) == TeamOf(victimClientId);
             bool scored = pvpMode && killerClientId != victimClientId && HasEntry(killerClientId) && !teamKill;
             string killerName = scored ? NameFor(killerClientId) : "";
@@ -323,13 +325,35 @@ namespace AirsoftFPS
             {
                 foreach (var e in roster) if (e.kills >= GUNGAME_WEAPONS) { EndMatch(e.clientId, 0); break; }
             }
-            else if (Mode == GameModeType.TeamDeathmatch)
-            {
-                if (TeamScore(1) >= TDM_KILL_TARGET) EndMatch(ulong.MaxValue, 1);
-                else if (TeamScore(2) >= TDM_KILL_TARGET) EndMatch(ulong.MaxValue, 2);
-            }
+            else if (TeamMode) CheckTeamTarget();
 
             if (changed || CurrentPhase == Phase.Results) BroadcastState();
+        }
+
+        void CheckTeamTarget()
+        {
+            int target = TeamTarget;
+            if (TeamScore(1) >= target) EndMatch(ulong.MaxValue, 1);
+            else if (TeamScore(2) >= target) EndMatch(ulong.MaxValue, 2);
+        }
+
+        // Called by Health on the server when a BB hits a player in Milsim (no HP: one hit = out).
+        // The shooter's team scores a point (kills = hits); the victim's deaths count times hit.
+        public void ReportHit(ulong victimClientId, ulong shooterClientId, string weapon)
+        {
+            if (nm == null || !nm.IsServer || CurrentPhase != Phase.InMatch) return;
+            bool scored = shooterClientId != victimClientId && HasEntry(shooterClientId)
+                          && TeamOf(shooterClientId) != TeamOf(victimClientId);
+            RaiseKill(scored ? NameFor(shooterClientId) : "", NameFor(victimClientId), weapon ?? "");
+
+            for (int i = 0; i < roster.Count; i++)
+            {
+                var e = roster[i];
+                if (e.clientId == victimClientId) { e.deaths++; roster[i] = e; }
+                else if (scored && e.clientId == shooterClientId) { e.kills++; roster[i] = e; }
+            }
+            CheckTeamTarget();
+            BroadcastState();
         }
 
         void EndMatch(ulong winnerClient, int winnerTeam, bool onTime = false, bool draw = false)
@@ -362,7 +386,7 @@ namespace AirsoftFPS
         // fewest deaths; TDM -> higher team score. An exact tie is a draw.
         void EndMatchOnTime()
         {
-            if (Mode == GameModeType.TeamDeathmatch)
+            if (TeamMode)
             {
                 int red = TeamScore(1), blue = TeamScore(2);
                 EndMatch(ulong.MaxValue, red > blue ? 1 : 2, true, red == blue);
@@ -633,7 +657,7 @@ namespace AirsoftFPS
                 info.killerClientId = player ? killerObj.OwnerClientId : ulong.MaxValue;
                 info.killerObjectId = killerObj.NetworkObjectId;
                 info.killerName = player ? NameFor(killerObj.OwnerClientId) : "Enemy soldier";
-                info.killerTeam = player && Mode == GameModeType.TeamDeathmatch ? TeamOf(killerObj.OwnerClientId) : 0;
+                info.killerTeam = player && TeamMode ? TeamOf(killerObj.OwnerClientId) : 0;
                 info.killerHp = kh.currentHealth.Value;
                 info.killerMaxHp = kh.maxHealth;
                 info.killerPos = killerObj.transform.position;
@@ -691,10 +715,17 @@ namespace AirsoftFPS
             foreach (var e in roster) if (e.clientId == clientId) return e.kills;
             return 0;
         }
-        // Team Deathmatch: block damage between teammates (friendly fire off).
+        // Red vs Blue modes (Team Deathmatch, Milsim).
+        public static bool IsTeamMode(GameModeType m) => m == GameModeType.TeamDeathmatch || m == GameModeType.Milsim;
+        public bool TeamMode => IsTeamMode(Mode);
+        public bool IsMilsim => Mode == GameModeType.Milsim;
+        // Team score that wins the match: kills in TDM, hits in Milsim.
+        public int TeamTarget => IsMilsim ? MILSIM_HIT_TARGET : TDM_KILL_TARGET;
+
+        // Team modes: block damage between teammates (friendly fire off).
         public bool BlocksDamage(ulong attacker, ulong victim)
         {
-            if (Mode != GameModeType.TeamDeathmatch || attacker == victim) return false;
+            if (!TeamMode || attacker == victim) return false;
             if (!HasEntry(attacker) || !HasEntry(victim)) return false;
             return TeamOf(attacker) == TeamOf(victim);
         }

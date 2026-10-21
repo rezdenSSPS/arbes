@@ -98,6 +98,7 @@ namespace AirsoftFPS
             {
                 var h = s_hits[i];
                 if (ignoreRoot != null && h.collider.transform.IsChildOf(ignoreRoot)) continue;
+                if (Health.PassesBBs(h.collider)) continue;   // Milsim: HIT players don't stop BBs
                 if (h.distance < best) { best = h.distance; hit = h; found = true; }
             }
             return found;
