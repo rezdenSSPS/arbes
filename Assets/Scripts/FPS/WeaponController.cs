@@ -59,6 +59,28 @@ namespace AirsoftFPS
         Vector3[] modelMuzzle;
         bool[] hasModel;
 
+        // ───── Server-authoritative hit validation ─────
+        // The owner raycasts locally for responsiveness and only reports *what* it hit;
+        // the server decides damage (from its own WeaponData) and rejects impossible hits.
+        const float FIRE_RATE_TOLERANCE = 0.1f;   // allow 10% faster than fireRate (clock/jitter)
+        const float SHOT_BURST_WINDOW = 0.2f;     // seconds of shots that may arrive bunched up by jitter
+        const float SWITCH_GRACE = 0.75f;         // old weapon still accepted this long after a switch (RTT)
+        const float ORIGIN_TOLERANCE = 3.5f;      // reported eye position vs server's (lagged) view of the shooter
+        const float TARGET_TOLERANCE = 3f;        // reported hit point vs server's view of the target's colliders
+        const float RANGE_TOLERANCE = 0.5f;
+        const float LOS_END_MARGIN = 0.3f;        // ignore geometry this close to either end of a LOS ray
+
+        int localShotSeq;                 // owner: one id per trigger pull (all pellets share it)
+        int svLastShot;                   // server: last shot id seen from this shooter
+        int svPelletsLeft;                // server: hits still allowed for svLastShot
+        float svShotTokens = -1f;         // server: fire-rate token bucket (-1 = full on first use)
+        float svTokenTime;
+        int svPrevWeapon = -1;            // server: weapon before the last switch, for SWITCH_GRACE
+        float svSwitchTime = -100f;
+        Health ownHealth;
+
+        static readonly RaycastHit[] s_losHits = new RaycastHit[16];
+
         static Material s_tracerMat;
         static Material s_glowMat;
 
@@ -95,6 +117,7 @@ namespace AirsoftFPS
 
             fpsController = GetComponent<FPSController>();
             playerCam = GetComponentInChildren<Camera>();
+            ownHealth = GetComponent<Health>();
 
             // Capture weapon rest pose for recoil animation
             if (weaponHolder)
@@ -314,12 +337,22 @@ namespace AirsoftFPS
         }
 
         [Rpc(SendTo.Server)]
-        void SwitchWeaponRpc(int idx)
+        void SwitchWeaponRpc(int idx, RpcParams rpcParams = default)
         {
+            if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
+            // Gun Game: the weapon is dictated by the server's kill count, not the client.
+            if (MatchNet.Instance != null && MatchNet.Instance.Mode == MatchNet.GameModeType.GunGame &&
+                idx != Mathf.Clamp(MatchNet.Instance.GunLevelOf(OwnerClientId), 0, weapons.Length - 1))
+                return;
             if (idx >= 0 && idx < weapons.Length)
             {
                 magAmmos[currentIndex] = ammoInMag;
                 reserveAmmos[currentIndex] = ammoReserve;
+                if (idx != netWeaponIndex.Value)
+                {
+                    svPrevWeapon = netWeaponIndex.Value;
+                    svSwitchTime = Time.unscaledTime;
+                }
                 netWeaponIndex.Value = idx;
             }
         }
@@ -388,6 +421,7 @@ namespace AirsoftFPS
                 magAmmos[currentIndex] = ammoInMag;
                 NotifyAmmo();
 
+                localShotSeq++;
                 for (int p = 0; p < w.pelletsPerShot; p++)
                     FireRaycast(w);
 
@@ -437,7 +471,8 @@ namespace AirsoftFPS
             {
                 tracerEnd = hit.point;
                 var hitNetObj = hit.collider.GetComponentInParent<NetworkObject>();
-                HitRpc(hitNetObj != null ? hitNetObj.NetworkObjectId : 0UL, w.damage, hit.point, w.weaponName);
+                if (hitNetObj != null)
+                    HitRpc(hitNetObj.NetworkObjectId, localShotSeq, currentIndex, ray.origin, hit.point);
                 SpawnImpact(hit.point, hit.normal);
             }
             else
@@ -553,23 +588,107 @@ namespace AirsoftFPS
             }
         }
 
+        // The client only says which object it hit, with which shot/weapon, from where and at what
+        // point. Damage, weapon name and whether the hit counts at all are decided here.
         [Rpc(SendTo.Server)]
-        void HitRpc(ulong networkObjId, int damage, Vector3 hitPoint, FixedString32Bytes weapon)
+        void HitRpc(ulong networkObjId, int shotSeq, int weaponIdx, Vector3 origin, Vector3 hitPoint,
+                    RpcParams rpcParams = default)
         {
-            if (networkObjId == 0) return;
+            if (rpcParams.Receive.SenderClientId != OwnerClientId) return;   // no shooting "as" someone else
+            if (ownHealth != null && ownHealth.isDead.Value) { RejectHit("shooter is dead"); return; }
 
-            if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(networkObjId, out var netObj))
+            // Weapon: must be the one the server has equipped (or the previous one right after a switch).
+            bool current = weaponIdx == netWeaponIndex.Value;
+            bool recentPrev = weaponIdx == svPrevWeapon && Time.unscaledTime - svSwitchTime < SWITCH_GRACE;
+            if (weaponIdx < 0 || weaponIdx >= weapons.Length || !(current || recentPrev))
+            { RejectHit("weapon " + weaponIdx + " not equipped"); return; }
+            var w = weapons[weaponIdx];
+
+            // Fire rate: each new shot id costs a token; pellets of the same shot share it.
+            if (shotSeq < svLastShot) { RejectHit("stale shot"); return; }
+            if (shotSeq > svLastShot)
             {
-                var health = netObj.GetComponent<Health>();
-                if (health != null)
-                {
-                    // Team Deathmatch: no friendly fire between teammates.
-                    if (MatchNet.Instance != null && MatchNet.Instance.BlocksDamage(OwnerClientId, netObj.OwnerClientId))
-                        return;
-                    health.TakeDamage(damage, OwnerClientId, weapon.ToString());
-                    HitConfirmRpc(hitPoint, RpcTarget.Single(OwnerClientId, RpcTargetUse.Temp));
-                }
+                float now = Time.unscaledTime;
+                float cap = 1f + SHOT_BURST_WINDOW * w.fireRate;
+                svShotTokens = svShotTokens < 0f ? cap
+                    : Mathf.Min(cap, svShotTokens + (now - svTokenTime) * w.fireRate * (1f + FIRE_RATE_TOLERANCE));
+                svTokenTime = now;
+                svLastShot = shotSeq;
+                if (svShotTokens < 1f) { svPelletsLeft = 0; RejectHit("firing faster than " + w.fireRate + "/s"); return; }
+                svShotTokens -= 1f;
+                svPelletsLeft = Mathf.Max(1, w.pelletsPerShot);
             }
+            if (svPelletsLeft <= 0) { RejectHit("more hits than pellets in shot " + shotSeq); return; }
+            svPelletsLeft--;
+
+            // Target: must exist, be damageable, alive and not the shooter.
+            if (!NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(networkObjId, out var netObj)) return;
+            if (netObj == NetworkObject) return;
+            var health = netObj.GetComponent<Health>();
+            if (health == null || health.isDead.Value) return;
+
+            // Geometry: plausible origin, in range, near the target, and no wall in between.
+            if (!OriginPlausible(origin)) { RejectHit("origin too far from shooter"); return; }
+            if (Vector3.Distance(origin, hitPoint) > w.range + RANGE_TOLERANCE) { RejectHit("out of range"); return; }
+            if (!NearTarget(netObj, hitPoint)) { RejectHit("hit point not near target"); return; }
+            if (WorldBlocks(origin, hitPoint)) { RejectHit("no line of sight"); return; }
+
+            // Team Deathmatch: no friendly fire between teammates.
+            if (MatchNet.Instance != null && MatchNet.Instance.BlocksDamage(OwnerClientId, netObj.OwnerClientId))
+                return;
+            health.TakeDamage(w.damage, OwnerClientId, w.weaponName);
+            HitConfirmRpc(hitPoint, RpcTarget.Single(OwnerClientId, RpcTargetUse.Temp));
+        }
+
+        // The reported eye position must be close to where the server sees this player
+        // (it lags behind the owner), and must not be on the other side of a wall from it.
+        bool OriginPlausible(Vector3 origin)
+        {
+            Vector3 feet = transform.position;
+            float h = Mathf.Clamp(Vector3.Dot(origin - feet, Vector3.up), -0.5f, 2.2f);
+            Vector3 serverEye = feet + Vector3.up * h;
+            if (Vector3.Distance(origin, serverEye) > ORIGIN_TOLERANCE) return false;
+            return !WorldBlocks(serverEye, origin);
+        }
+
+        // Hit point within TARGET_TOLERANCE of the target's colliders (covers interpolation lag).
+        static bool NearTarget(NetworkObject target, Vector3 point)
+        {
+            bool any = false;
+            Bounds b = default;
+            foreach (var c in target.GetComponentsInChildren<Collider>())
+            {
+                if (!c.enabled || c.isTrigger) continue;
+                if (!any) { b = c.bounds; any = true; }
+                else b.Encapsulate(c.bounds);
+            }
+            if (!any) b = new Bounds(target.transform.position + Vector3.up, new Vector3(1f, 2f, 1f));
+            b.Expand(TARGET_TOLERANCE * 2f);
+            return b.Contains(point);
+        }
+
+        // True if static world geometry sits between a and b. Anything networked (players,
+        // enemies) is ignored: it moves, and the client's raycast already stopped at it.
+        bool WorldBlocks(Vector3 a, Vector3 b)
+        {
+            Vector3 d = b - a;
+            float dist = d.magnitude;
+            if (dist <= LOS_END_MARGIN * 2f) return false;
+            int n = Physics.RaycastNonAlloc(a, d / dist, s_losHits, dist, hitMask, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < n; i++)
+            {
+                var hit = s_losHits[i];
+                if (hit.distance < LOS_END_MARGIN || hit.distance > dist - LOS_END_MARGIN) continue;
+                if (hit.collider.GetComponentInParent<NetworkObject>() != null) continue;
+                return true;
+            }
+            return false;
+        }
+
+        void RejectHit(string reason)
+        {
+            if (Debug.isDebugBuild)
+                Debug.Log($"[Airsoft] Hit from client {OwnerClientId} rejected: {reason}");
         }
 
         [Rpc(SendTo.SpecifiedInParams)]
