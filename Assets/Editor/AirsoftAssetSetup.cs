@@ -7,7 +7,8 @@ namespace AirsoftFPS.Editor
     // Import settings for the Quaternius CC0 low-poly models.
     //  - characters: Legacy animation (so the runtime can play Idle/Walk/Run/Death by name)
     //  - guns: readable meshes (the runtime measures them to orient/scale the model)
-    //  - map props: static, no animation
+    //  - map props: static, no animation, readable meshes (EnemySpawner rebuilds the NavMesh at
+    //    runtime, which needs read access in a player build)
     public class AirsoftModelPostprocessor : AssetPostprocessor
     {
         const string Root = "Assets/ThirdParty/Quaternius/";
@@ -35,7 +36,7 @@ namespace AirsoftFPS.Editor
             {
                 mi.animationType = ModelImporterAnimationType.None;
                 mi.importAnimation = false;
-                mi.isReadable = false;
+                mi.isReadable = true;
             }
         }
     }
@@ -43,7 +44,7 @@ namespace AirsoftFPS.Editor
     [InitializeOnLoad]
     static class AirsoftAssetSetup
     {
-        const string DoneKey = "Airsoft.QuaterniusImport.v1";
+        const string DoneKey = "Airsoft.QuaterniusImport.v2";
 
         static AirsoftAssetSetup() { EditorApplication.delayCall += RunOnce; }
 
