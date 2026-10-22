@@ -44,7 +44,7 @@ namespace AirsoftFPS.Editor
     [InitializeOnLoad]
     static class AirsoftAssetSetup
     {
-        const string DoneKey = "Airsoft.QuaterniusImport.v2";
+        const string DoneKey = "Airsoft.QuaterniusImport.v3";
 
         static AirsoftAssetSetup() { EditorApplication.delayCall += RunOnce; }
 
