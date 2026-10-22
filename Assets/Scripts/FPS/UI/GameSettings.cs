@@ -23,8 +23,9 @@ namespace AirsoftFPS
         public static bool PostProcessing;
         public static bool ShowFps;
 
-        // Audio (0 – 1)
-        public static float MasterVolume, SfxVolume, MusicVolume, AnnouncerVolume;
+        // Audio (0 – 1), applied to the AudioMixer groups by AirsoftAudio.ApplyVolumes
+        public static float MasterVolume, SfxVolume, MusicVolume, AnnouncerVolume;   // Announcer = the UI group
+        public static bool Ambience;          // wind / room tone while in a match
 
         // Gameplay
         public static int CrosshairColor;     // index into CrosshairColors
@@ -83,6 +84,7 @@ namespace AirsoftFPS
             SfxVolume       = PlayerPrefs.GetFloat(P + "VolSfx", 0.9f);
             MusicVolume     = PlayerPrefs.GetFloat(P + "VolMusic", 0.5f);
             AnnouncerVolume = PlayerPrefs.GetFloat(P + "VolVoice", 0.7f);
+            Ambience        = PlayerPrefs.GetInt(P + "Ambience", 1) == 1;
 
             CrosshairColor = PlayerPrefs.GetInt(P + "XColor", 0);
             CrosshairSize  = PlayerPrefs.GetInt(P + "XSize", 12);
@@ -125,6 +127,7 @@ namespace AirsoftFPS
             PlayerPrefs.SetFloat(P + "VolSfx", SfxVolume);
             PlayerPrefs.SetFloat(P + "VolMusic", MusicVolume);
             PlayerPrefs.SetFloat(P + "VolVoice", AnnouncerVolume);
+            PlayerPrefs.SetInt(P + "Ambience", Ambience ? 1 : 0);
             PlayerPrefs.SetInt(P + "XColor", CrosshairColor);
             PlayerPrefs.SetInt(P + "XSize", CrosshairSize);
             PlayerPrefs.SetInt(P + "HitMarker", ShowHitMarker ? 1 : 0);
@@ -139,7 +142,7 @@ namespace AirsoftFPS
         public static void ResetToDefaults()
         {
             foreach (var k in new[] { "Sens", "ScopedSens", "InvertY", "ToggleCrouch", "Fov", "ResW", "ResH", "Fullscreen",
-                         "VSync", "Quality", "PostFx", "ShowFps", "VolMaster", "VolSfx", "VolMusic", "VolVoice",
+                         "VSync", "Quality", "PostFx", "ShowFps", "VolMaster", "VolSfx", "VolMusic", "VolVoice", "Ambience",
                          "XColor", "XSize", "HitMarker", "HealthBars", "Killcam", "Minimap", "MinimapRotate" })
                 PlayerPrefs.DeleteKey(P + k);
             Load();
@@ -149,7 +152,7 @@ namespace AirsoftFPS
         public static void Apply()
         {
             QualitySettings.vSyncCount = VSync ? 1 : 0;
-            AudioListener.volume = MasterVolume;
+            AirsoftAudio.ApplyVolumes();   // mixer groups (or AudioListener.volume without a mixer)
 
             int levels = QualitySettings.names.Length;
             if (levels > 0)

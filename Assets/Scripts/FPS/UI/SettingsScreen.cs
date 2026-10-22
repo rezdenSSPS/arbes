@@ -60,6 +60,7 @@ namespace AirsoftFPS
             Button(actions.transform, "RESET TO DEFAULT", Btn.Ghost, 17, () =>
             {
                 GameSettings.ResetToDefaults();
+                AirsoftAudio.ApplyVolumes();
                 foreach (var r in refreshers) r();
             }, F.CondSemi).LE(190, 44);
             Button(actions.transform, "SAVE & BACK", Btn.Primary, 17, Close, F.CondBold, 10).LE(150, 44);
@@ -161,14 +162,16 @@ namespace AirsoftFPS
         {
             var pane = Rect(content, "Audio").Fill();
             var c1 = Column(pane, 0, 560);
+            // every change goes straight to the mixer, so you hear it while dragging
             SliderRow(c1, "Master volume", 0, 100, true, () => GameSettings.MasterVolume * 100f,
-                v => { GameSettings.MasterVolume = v / 100f; AudioListener.volume = GameSettings.MasterVolume; }, v => Mathf.RoundToInt(v) + "%");
+                v => { GameSettings.MasterVolume = v / 100f; AirsoftAudio.ApplyVolumes(); }, v => Mathf.RoundToInt(v) + "%");
             SliderRow(c1, "Weapons & effects", 0, 100, true, () => GameSettings.SfxVolume * 100f,
-                v => GameSettings.SfxVolume = v / 100f, v => Mathf.RoundToInt(v) + "%");
+                v => { GameSettings.SfxVolume = v / 100f; AirsoftAudio.ApplyVolumes(); }, v => Mathf.RoundToInt(v) + "%");
             SliderRow(c1, "Music", 0, 100, true, () => GameSettings.MusicVolume * 100f,
-                v => GameSettings.MusicVolume = v / 100f, v => Mathf.RoundToInt(v) + "%");
-            SliderRow(c1, "Announcer", 0, 100, true, () => GameSettings.AnnouncerVolume * 100f,
-                v => GameSettings.AnnouncerVolume = v / 100f, v => Mathf.RoundToInt(v) + "%");
+                v => { GameSettings.MusicVolume = v / 100f; AirsoftAudio.ApplyVolumes(); }, v => Mathf.RoundToInt(v) + "%");
+            SliderRow(c1, "Interface & announcer", 0, 100, true, () => GameSettings.AnnouncerVolume * 100f,
+                v => { GameSettings.AnnouncerVolume = v / 100f; AirsoftAudio.ApplyVolumes(); }, v => Mathf.RoundToInt(v) + "%");
+            Check(c1, "In-match ambience (wind, room tone)", () => GameSettings.Ambience, v => GameSettings.Ambience = v);
             return pane.gameObject;
         }
 

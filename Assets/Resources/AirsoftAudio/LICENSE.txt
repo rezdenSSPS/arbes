@@ -1,0 +1,10 @@
+Airsoft FPS sounds and music (everything in this folder: Sfx/, Music/)
+
+Source:  original work made for this project. Every clip is synthesised procedurally by
+         tools/audio/gen_airsoft_audio.py (Python standard library only): no recorded samples,
+         no sound libraries, nothing downloaded.
+License: CC0 1.0 Universal (public domain dedication)
+         https://creativecommons.org/publicdomain/zero/1.0/
+         Free to use, modify and redistribute, also commercially, without attribution.
+
+AirsoftMixer.mixer is a Unity asset created by Assets/Editor/AirsoftAudioSetup.cs.

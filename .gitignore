@@ -40,3 +40,6 @@ netdiag_*.txt
 .DS_Store
 Thumbs.db
 AssetSources/
+
+# ---- Python (tools/) ----
+__pycache__/

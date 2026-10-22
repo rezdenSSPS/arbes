@@ -34,6 +34,7 @@ namespace AirsoftFPS
         Health health;
 
         public bool IsSprinting { get; private set; }
+        public bool IsCrouching => isCrouching;
 
         public override void OnNetworkSpawn()
         {

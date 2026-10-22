@@ -74,19 +74,26 @@ namespace AirsoftFPS
                 currentHealth.Value = maxHealth;
             if (IsServer && IsCombatant) StartSpawnProtection();
             if (IsCombatant && GetComponent<SpawnProtectionFX>() == null) gameObject.AddComponent<SpawnProtectionFX>();
+            if (GetComponent<FootstepAudio>() == null) gameObject.AddComponent<FootstepAudio>();
 
             currentHealth.OnValueChanged += (prev, curr) =>
             {
                 OnHealthChanged?.Invoke(curr, maxHealth);
+                AirsoftAudio.OnHealthChanged(this, prev, curr);
             };
 
             isDead.OnValueChanged += (prev, curr) =>
             {
                 if (curr) OnDeath?.Invoke();
                 else OnRespawn?.Invoke();
+                AirsoftAudio.OnDeadChanged(this, curr);
             };
 
-            isHit.OnValueChanged += (prev, curr) => OnHitChanged?.Invoke(curr);
+            isHit.OnValueChanged += (prev, curr) =>
+            {
+                OnHitChanged?.Invoke(curr);
+                AirsoftAudio.OnHitChanged(this, curr);
+            };
 
             // Initial notification
             OnHealthChanged?.Invoke(currentHealth.Value, maxHealth);

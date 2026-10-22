@@ -208,6 +208,7 @@ namespace AirsoftFPS
         [Rpc(SendTo.Everyone)]
         void ShootEffectRpc()
         {
+            AirsoftAudio.Shot(null, transform.position + Vector3.up * 1.4f, false);   // co-op AI: generic AEG
             var flash = GetComponentInChildren<Light>(true);
             if (flash)
             {
@@ -221,9 +222,10 @@ namespace AirsoftFPS
         [Rpc(SendTo.Everyone)]
         public void BotShotRpc(int weaponIdx, Vector3 origin, Vector3 dir, uint seed)
         {
+            s_botWeapons ??= WeaponData.GetAllWeapons();
+            if (weaponIdx >= 0 && weaponIdx < s_botWeapons.Length) AirsoftAudio.Shot(s_botWeapons[weaponIdx], origin, false);
             if (!IsServer)
             {
-                s_botWeapons ??= WeaponData.GetAllWeapons();
                 if (weaponIdx >= 0 && weaponIdx < s_botWeapons.Length)
                 {
                     var w = s_botWeapons[weaponIdx];

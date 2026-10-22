@@ -39,3 +39,12 @@ AutoConnect.cs, NetDiag.cs.
 - 10 slotů (klávesy 1–0 = pořadí v Gun Game): 1911 GBB pistole, CO2 revolver, Uzi GBB (plynový samopal), P90 AEG, pružinová brokovnice M870 (3 kuličky na výstřel), AK AEG, RPK podpůrná AEG (300ranový box), M14 DMR (poloautomat), pružinová opakovačka (mířidla), L96 pružinová odstřelovačka.
 - Statistiky v airsoftových jednotkách: úsťová rychlost 85–150 m/s, mid-cap/hi-cap zásobníky, semi/auto, vyvážené TTK.
 - Nové low-poly modely (Quaternius CC0, převedeno z .blend do FBX): AK47, Uzi, BoltRifle; sci-fi modely odstraněny. RPK používá model AK (delší).
+
+## 2026-10-22 — Zvuk a hudba
+- Hra měla nulový zvuk; teď má ~60 zvuků (130 variant) + menu hudbu a dva ambienty. Všechny jsou vlastní, vygenerované procedurálně skriptem `tools/audio/gen_airsoft_audio.py` (syntéza v Pythonu bez vzorků), licence CC0.
+- Zbraně: airsoftové výstřely podle typu (AEG „thwack“ s převodovkou, GBB pistole/Uzi, CO2 revolver, pružinová brokovnice s pumpou, pružinová opakovačka a hlasitější L96 se závěrem), přebití (zásobník ven/dovnitř, závěr), cvaknutí naprázdno, výměna zbraně, „tik“ zásahu a potvrzení eliminace.
+- Dopady kuliček podle povrchu (beton s odskoky, plech, dřevo, sklo, tráva/pytle, oblečení) a kroky podle povrchu (chůze/sprint/plížení), skok a dopad. Odvozeno z pohybu na každém klientovi, žádné pakety navíc; výstřely ostatních jdou přes existující RPC.
+- Milsim/Medic: hráč po zásahu zavolá „HIT!“ (syntetický hlas, každý hráč má svůj).
+- Cíle: vlajka (sebrání, zisk, návrat), body v Domination, bomba (položení, zrychlující pípání, zneškodnění, výbuch), extrakce VIP, oživení, píšťalka a odpočet kola, výhra/prohra kola, posledních 10 s zápasu, úvodní a závěrečná znělka (výhra/prohra/remíza).
+- UI: hover/klik tlačítek, přepínače, posuvníky, ready.
+- 3D zvuk s útlumem a dolní propustí podle vzdálenosti; AudioMixer Master → SFX / Music / UI napojený na Nastavení → Zvuk (nově přepínač ambientu).
