@@ -15,6 +15,20 @@ namespace AirsoftFPS
 
         bool matchLive;
 
+        // Every peer (host and clients) must have the network prefabs registered before it starts,
+        // or clients fail with "NetworkPrefab could not be found". They come from the NetworkManager's
+        // NetworkPrefabsList; if the scene lost that reference, register the player prefab here and say so.
+        void Awake()
+        {
+            var nm = GetComponent<NetworkManager>();
+            if (nm == null || nm.NetworkConfig == null || playerPrefab == null) return;
+            foreach (var list in nm.NetworkConfig.Prefabs.NetworkPrefabsLists)
+                if (list != null && list.Contains(playerPrefab)) return;
+            Debug.LogError("[Airsoft] NetworkManager has no NetworkPrefabsList with the player prefab " +
+                           "(assign Assets/DefaultNetworkPrefabs.asset). Registering the player prefab at runtime.");
+            nm.AddNetworkPrefab(playerPrefab);
+        }
+
         void Start()
         {
             var nm = NetworkManager.Singleton;

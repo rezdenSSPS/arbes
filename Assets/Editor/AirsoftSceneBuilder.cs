@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -561,20 +562,19 @@ namespace AirsoftFPS.Editor
             nm.NetworkConfig = new NetworkConfig();
             nm.NetworkConfig.NetworkTransport = transport;
 
-            // Register player prefab
+            // Network prefabs go in a NetworkPrefabsList asset: NetworkConfig.Prefabs.Add() only fills a
+            // runtime list that is NOT saved with the scene, so clients couldn't spawn the player or enemies.
             var playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabPath);
+            var enemyPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(EnemyPrefabPath);
+            var prefabList = GetNetworkPrefabsList(playerPrefab, enemyPrefab);
+            nm.NetworkConfig.Prefabs.NetworkPrefabsLists = new List<NetworkPrefabsList> { prefabList };
+
             if (playerPrefab != null)
             {
-                nm.NetworkConfig.Prefabs.Add(new NetworkPrefab { Prefab = playerPrefab });
                 // No auto-spawn: PlayerSpawner spawns avatars only when the match scene loads
                 var playerSpawner = nmObj.AddComponent<PlayerSpawner>();
                 playerSpawner.playerPrefab = playerPrefab;
             }
-
-            // Register enemy prefab
-            var enemyPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(EnemyPrefabPath);
-            if (enemyPrefab != null)
-                nm.NetworkConfig.Prefabs.Add(new NetworkPrefab { Prefab = enemyPrefab });
 
             // EventSystem
             var esObj = new GameObject("EventSystem");
@@ -590,6 +590,30 @@ namespace AirsoftFPS.Editor
         }
 
         // ────────── ARENA SCENE ──────────
+        const string NetworkPrefabsListPath = "Assets/DefaultNetworkPrefabs.asset";
+
+        // The project's NetworkPrefabsList asset (created if missing), holding every given prefab.
+        static NetworkPrefabsList GetNetworkPrefabsList(params GameObject[] prefabs)
+        {
+            var list = AssetDatabase.LoadAssetAtPath<NetworkPrefabsList>(NetworkPrefabsListPath);
+            if (list == null)
+            {
+                list = ScriptableObject.CreateInstance<NetworkPrefabsList>();
+                AssetDatabase.CreateAsset(list, NetworkPrefabsListPath);
+            }
+            foreach (var prefab in prefabs)
+            {
+                if (prefab == null) continue;
+                bool listed = false;
+                foreach (var np in list.PrefabList)
+                    if (np.Prefab == prefab) { listed = true; break; }
+                if (!listed) list.Add(new NetworkPrefab { Prefab = prefab });
+            }
+            EditorUtility.SetDirty(list);
+            AssetDatabase.SaveAssets();
+            return list;
+        }
+
         static void BuildArenaScene()
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
