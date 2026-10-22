@@ -91,6 +91,7 @@ namespace AirsoftFPS
         // points someone is already standing on. A little randomness spreads players over equal points.
         public static Pose GetSpawnFor(ulong clientId)
         {
+            if (ObjectiveMode.TrySpawnFor(clientId, out Pose objPose)) return objPose;   // e.g. VIP escort: by role
             var mn = MatchNet.Instance;
             var mode = mn != null ? mn.Mode : MatchNet.GameModeType.Coop;
             int team = MatchNet.IsTeamMode(mode) && mn != null ? mn.TeamOf(clientId) : 0;

@@ -31,6 +31,7 @@ namespace AirsoftFPS
             public string pointsLabel;  // scoreboard column
             public Func<MapCaps, string> missing;   // null = map has what the mode needs, else a short reason
             public bool hitRule;        // Milsim HIT rule: one BB = out (no HP), hand up
+            public bool ownClock;       // round modes run their own round timer (no match time limit)
         }
 
         static readonly Dictionary<MatchNet.GameModeType, Def> defs = new Dictionary<MatchNet.GameModeType, Def>
@@ -50,6 +51,16 @@ namespace AirsoftFPS
                 type = typeof(Medic), target = 0, unit = "tickets",   // no score race: tickets run down
                 pointsLabel = "REVIVES", missing = null, hitRule = true
             },
+            [MatchNet.GameModeType.Bomb] = new Def
+            {
+                type = typeof(BombMode), target = BombMode.ROUNDS_TO_WIN, unit = "rounds",
+                pointsLabel = "OBJ", missing = BombMode.MissingOnMap, ownClock = true
+            },
+            [MatchNet.GameModeType.VipEscort] = new Def
+            {
+                type = typeof(VipEscort), target = VipEscort.ROUNDS_TO_WIN, unit = "rounds",
+                pointsLabel = "OBJ", missing = VipEscort.MissingOnMap, ownClock = true
+            },
         };
 
         public static bool HasObjective(MatchNet.GameModeType m) => defs.ContainsKey(m);
@@ -64,6 +75,9 @@ namespace AirsoftFPS
 
         // Plays with the Milsim HIT rule (one BB = out, raised hand) instead of HP.
         public static bool UsesHitRule(MatchNet.GameModeType m) => defs.TryGetValue(m, out var d) && d.hitRule;
+
+        // Round modes (Bomb, VIP escort) time their own rounds: the lobby's match time limit doesn't apply.
+        public static bool HasOwnClock(MatchNet.GameModeType m) => defs.TryGetValue(m, out var d) && d.ownClock;
 
         // Can the current match map play this mode? reason = short text for the lobby card when not.
         public static bool IsAvailable(MatchNet.GameModeType m, out string reason)
@@ -137,6 +151,42 @@ namespace AirsoftFPS
 
         // FPSController: e.g. a flag carrier can't sprint.
         public static bool CannotSprint(ulong clientId) => Active != null && Active.BlocksSprint(clientId);
+
+        // ── round modes (Bomb, VIP escort): respawn, spawn, movement and weapon rules ──
+
+        // Server (Health.Respawn): keep this dead player down for now (e.g. no respawn during a bomb round).
+        public static bool HoldsRespawn(ulong clientId) => Active != null && Active.HoldRespawn(clientId);
+
+        // Server (PlayerSpawner): where this player spawns instead of the usual team side. false = no override.
+        public static bool TrySpawnFor(ulong clientId, out Pose pose)
+        {
+            pose = default;
+            return Active != null && Active.SpawnOverride(clientId, out pose);
+        }
+
+        // Owner (FPSController): walk speed factor (0 = frozen, e.g. before a round starts).
+        public static float SpeedFactor(ulong clientId) => Active != null ? Active.MoveFactor(clientId) : 1f;
+
+        // Owner + server (WeaponController): may this player use this weapon (e.g. the VIP: sidearms only)?
+        public static bool WeaponAllowed(ulong clientId, WeaponData w) => Active == null || w == null || Active.AllowsWeapon(clientId, w);
+
+        // Local HUD: the local player is dead and watching a teammate (no death screen).
+        public static bool LocalSpectating => Active != null && Active.IsLocalSpectating;
+
+        // Local death screen: true = this mode decides the respawn. delay = seconds from death, or -1 when the
+        // player stays down (heldText says until when, e.g. "the next round").
+        public static bool LocalRespawnRule(out float delay, out string heldText)
+        {
+            delay = 0f; heldText = null;
+            return Active != null && Active.RespawnRule(out delay, out heldText);
+        }
+
+        protected virtual bool HoldRespawn(ulong clientId) => false;
+        protected virtual bool SpawnOverride(ulong clientId, out Pose pose) { pose = default; return false; }
+        protected virtual float MoveFactor(ulong clientId) => 1f;
+        protected virtual bool AllowsWeapon(ulong clientId, WeaponData w) => true;
+        protected virtual bool IsLocalSpectating => false;
+        protected virtual bool RespawnRule(out float delay, out string heldText) { delay = 0f; heldText = null; return false; }
 
         public static int PointsOf(ulong clientId) =>
             Active != null && Active.playerPoints.TryGetValue(clientId, out int p) ? p : 0;

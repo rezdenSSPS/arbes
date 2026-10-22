@@ -18,9 +18,9 @@ MonoBehaviour:
     redBase: 1
     blueBase: 1
     controlPoints: 3
-    bombSites: 0
-    vipStart: 0
-    vipExtract: 0
+    bombSites: 2
+    vipStart: 1
+    vipExtract: 1
     known: 1
   - scene: AirsoftWarehouse
     displayName: Warehouse

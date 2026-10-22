@@ -811,7 +811,8 @@ namespace AirsoftFPS
         void BuildModeColumn(RectTransform colRt)
         {
             var col = colRt.gameObject.AddComponent<VerticalLayoutGroup>();
-            col.spacing = 8; col.childControlWidth = col.childControlHeight = true;
+            bool dense = MatchNet.MODE_COUNT > 7;   // many modes: tighter cards and gaps so they all fit
+            col.spacing = dense ? 4 : 8; col.childControlWidth = col.childControlHeight = true;
             col.childForceExpandWidth = true; col.childForceExpandHeight = false;
 
             var head = Rect(colRt, "Head").LE(-1, 18);
@@ -823,7 +824,8 @@ namespace AirsoftFPS
 
             // five cards fit the 492 px column at 72 px; more modes get compact one-line cards
             bool compact = MatchNet.MODE_COUNT > 5;
-            float cardH = compact ? Mathf.Floor((492f - 18f - 32f - 18f - 8f * (MatchNet.MODE_COUNT + 2)) / MatchNet.MODE_COUNT) : 72f;
+            float cardH = compact ? Mathf.Floor((492f - 18f - 32f - 18f - col.spacing * (MatchNet.MODE_COUNT + 2)) / MatchNet.MODE_COUNT) : 72f;
+            int densePad = Mathf.Clamp(Mathf.FloorToInt((cardH - 32f) / 2f), 1, 6);
             for (int i = 0; i < MatchNet.MODE_COUNT; i++)
             {
                 var mode = (MatchNet.GameModeType)i;
@@ -834,12 +836,14 @@ namespace AirsoftFPS
                 b.LE(-1, cardH);
                 var group = b.gameObject.AddComponent<CanvasGroup>();
                 var frame = Frame(b.transform, Line, 1f);
-                var txt = VCol(b.transform, "Text", compact ? 1 : 2);
-                txt.padding = compact ? new RectOffset(16, 16, 6, 6) : new RectOffset(16, 16, 9, 9);
+                var txt = VCol(b.transform, "Text", dense ? 0 : compact ? 1 : 2);
+                txt.padding = dense ? new RectOffset(14, 14, densePad, densePad)
+                            : compact ? new RectOffset(16, 16, 6, 6) : new RectOffset(16, 16, 9, 9);
                 txt.GetComponent<RectTransform>().Fill();
-                Label(txt.transform, ModeName(mode).ToUpperInvariant(), F.CondBold, compact ? 18 : 20, Fg, TextAlignmentOptions.MidlineLeft, 0.02f).LE(-1, compact ? 20 : 22);
-                var desc = Label(txt.transform, ModeDesc(mode), F.Body, 12, Muted);
-                if (compact) { desc.overflowMode = TextOverflowModes.Ellipsis; desc.LE(-1, 16); }
+                Label(txt.transform, ModeName(mode).ToUpperInvariant(), F.CondBold, dense ? 16 : compact ? 18 : 20, Fg, TextAlignmentOptions.MidlineLeft, 0.02f)
+                    .LE(-1, dense ? 18 : compact ? 20 : 22);
+                var desc = Label(txt.transform, ModeDesc(mode), F.Body, dense ? 11 : 12, Muted);
+                if (compact) { desc.overflowMode = TextOverflowModes.Ellipsis; desc.LE(-1, dense ? 14 : 16); }
                 else desc.Wrap().LE(-1, 30);
                 b.label.gameObject.SetActive(false);
                 modeCards.Add((b, frame, group));
@@ -1077,9 +1081,12 @@ namespace AirsoftFPS
 
             // time limit
             bool coop = mnet.Mode == MatchNet.GameModeType.Coop;
-            timeSeg.gameObject.SetActive(!coop);
-            timeUnit.SetActive(!coop);
-            timeCoopNote.SetActive(coop);
+            bool noClock = coop || ObjectiveMode.HasOwnClock(mnet.Mode);   // Bomb / VIP escort: timed rounds
+            timeSeg.gameObject.SetActive(!noClock);
+            timeUnit.SetActive(!noClock);
+            timeCoopNote.SetActive(noClock);
+            if (noClock && timeCoopNote.TryGetComponent<TextMeshProUGUI>(out var noClockText))
+                noClockText.text = coop ? "No limit in co-op" : "Timed rounds instead";
             int ti = Array.IndexOf(MatchNet.TIME_LIMIT_OPTIONS, mnet.TimeLimitMinutes);
             if (ti >= 0 && timeSeg.Selected != ti) timeSeg.Select(ti, false);
             timeGroup.blocksRaycasts = isHost;
