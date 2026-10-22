@@ -515,7 +515,7 @@ namespace AirsoftFPS
 
         void HandleClientDisconnected(ulong clientId)
         {
-            if (nm == null || !nm.IsServer) return;
+            if (nm == null || !nm.IsServer || nm.ShutdownInProgress) return;
             for (int i = roster.Count - 1; i >= 0; i--)
                 if (roster[i].clientId == clientId) roster.RemoveAt(i);
             BroadcastState();
@@ -524,6 +524,7 @@ namespace AirsoftFPS
         void HandleClientStopped(bool wasHost)
         {
             // Session ended locally -- wipe state so a fresh lobby starts clean.
+            CancelInvoke(nameof(ReturnToLobby));
             roster.Clear();
             CurrentPhase = Phase.Lobby;
             WinnerClientId = ulong.MaxValue;
@@ -568,14 +569,22 @@ namespace AirsoftFPS
         void EnsureEntry(ulong clientId)
         {
             foreach (var e in roster) if (e.clientId == clientId) return;
-            roster.Add(new Entry { clientId = clientId, name = DefaultName(clientId), ready = false, kills = 0, deaths = 0, look = (nm != null && clientId == nm.LocalClientId) ? localLook : -1 });
+            // A late joiner in a running team match goes to the smaller team (Red on a tie).
+            int team = 0;
+            if (CurrentPhase == Phase.InMatch && TeamMode)
+            {
+                int red = 0, blue = 0;
+                foreach (var e in roster) { if (e.team == 1) red++; else if (e.team == 2) blue++; }
+                team = red <= blue ? 1 : 2;
+            }
+            roster.Add(new Entry { clientId = clientId, name = DefaultName(clientId), ready = false, kills = 0, deaths = 0, team = team, look = (nm != null && clientId == nm.LocalClientId) ? localLook : -1 });
         }
 
         void BroadcastState()
         {
             OnStateChanged?.Invoke(); // refresh the host's own UI immediately
 
-            if (nm == null || !nm.IsServer) return;
+            if (nm == null || !nm.IsServer || nm.ShutdownInProgress || nm.CustomMessagingManager == null) return;
 
             using var w = new FastBufferWriter(1024, Allocator.Temp, 64 * 1024);
             w.WriteValueSafe((byte)Mode);
