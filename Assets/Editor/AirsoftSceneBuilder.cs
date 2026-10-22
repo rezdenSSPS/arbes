@@ -597,17 +597,30 @@ namespace AirsoftFPS.Editor
             // ── Environment: low-poly town (ground, roads, buildings, props, sky, post-processing) ──
             AirsoftMapBuilder.BuildEnvironment();
 
+            BuildGameplayObjects(PlayerSpawns, EnemySpawns);
+
+            // ── Objective points (CTF bases, Domination A/B/C) as the map's MapLayout ──
+            ObjectiveMapSetup.AddTownLayout();
+
+            EditorSceneManager.SaveScene(scene, ArenaPath);
+        }
+
+        // Gameplay objects every match map needs, built after its environment: team spawn points,
+        // enemy spawn points, the baked NavMesh, GameManager, EnemySpawner and the HUD.
+        // Used by BuildArenaScene and by the other map builders (AirsoftWarehouseBuilder).
+        public static NavMeshSurface BuildGameplayObjects((Vector3 pos, int team)[] playerSpawns, Vector3[] enemySpawns)
+        {
             // ── Spawn Points ──
-            CreatePlayerSpawns(new GameObject("SpawnPoints").transform);
+            CreatePlayerSpawns(new GameObject("SpawnPoints").transform, playerSpawns);
 
             // Enemy spawn points
             var enemySpawnParent = new GameObject("EnemySpawnPoints");
-            Transform[] enemySpawnTransforms = new Transform[EnemySpawns.Length];
-            for (int i = 0; i < EnemySpawns.Length; i++)
+            Transform[] enemySpawnTransforms = new Transform[enemySpawns.Length];
+            for (int i = 0; i < enemySpawns.Length; i++)
             {
                 var esp = new GameObject($"EnemySpawn_{i}");
                 esp.transform.SetParent(enemySpawnParent.transform);
-                esp.transform.position = EnemySpawns[i];
+                esp.transform.position = enemySpawns[i];
                 enemySpawnTransforms[i] = esp.transform;
             }
 
@@ -633,11 +646,7 @@ namespace AirsoftFPS.Editor
 
             // ── HUD Canvas ──
             BuildHUDCanvas();
-
-            // ── Objective points (CTF bases, Domination A/B/C) as the map's MapLayout ──
-            ObjectiveMapSetup.AddTownLayout();
-
-            EditorSceneManager.SaveScene(scene, ArenaPath);
+            return navSurface;
         }
 
         // ────────── SPAWN POINTS ──────────
@@ -659,10 +668,12 @@ namespace AirsoftFPS.Editor
             new Vector3(-15, 1, 21)
         };
 
-        static void CreatePlayerSpawns(Transform parent)
+        static void CreatePlayerSpawns(Transform parent) => CreatePlayerSpawns(parent, PlayerSpawns);
+
+        static void CreatePlayerSpawns(Transform parent, (Vector3 pos, int team)[] spawns)
         {
             int n = 0;
-            foreach (var (pos, team) in PlayerSpawns)
+            foreach (var (pos, team) in spawns)
             {
                 var sp = new GameObject($"SpawnPoint_{(team == 1 ? "Red" : "Blue")}_{n++}");
                 sp.transform.SetParent(parent);
@@ -917,11 +928,16 @@ namespace AirsoftFPS.Editor
 
         static void UpdateBuildSettings()
         {
-            EditorBuildSettings.scenes = new[]
+            var scenes = new System.Collections.Generic.List<EditorBuildSettingsScene>
             {
                 new EditorBuildSettingsScene(LobbyPath, true),
                 new EditorBuildSettingsScene(ArenaPath, true)
             };
+            // keep the other maps already in the list (e.g. AirsoftWarehouse)
+            foreach (var s in EditorBuildSettings.scenes)
+                if (s.path != LobbyPath && s.path != ArenaPath && System.IO.File.Exists(s.path))
+                    scenes.Add(s);
+            EditorBuildSettings.scenes = scenes.ToArray();
         }
     }
 }
