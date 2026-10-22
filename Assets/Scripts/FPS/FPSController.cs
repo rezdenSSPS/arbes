@@ -124,7 +124,8 @@ namespace AirsoftFPS
             if (input && kb.sKey.isPressed) v -= 1f;
 
             // Sprint
-            IsSprinting = input && kb.leftShiftKey.isPressed && v > 0.1f && !isCrouching;
+            IsSprinting = input && kb.leftShiftKey.isPressed && v > 0.1f && !isCrouching
+                          && !ObjectiveMode.CannotSprint(OwnerClientId);   // e.g. carrying the flag (CTF)
 
             // Crouch: toggle on press, or hold (Settings > Controls)
             bool crouchKey = kb.cKey.isPressed || kb.leftCtrlKey.isPressed;

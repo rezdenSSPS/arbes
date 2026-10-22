@@ -15,8 +15,8 @@ namespace AirsoftFPS
     // the whole state to clients whenever it changes.
     public class MatchNet : MonoBehaviour
     {
-        public enum GameModeType { Coop = 0, FreeForAll = 1, TeamDeathmatch = 2, GunGame = 3, Milsim = 4 }
-        public const int MODE_COUNT = 5;
+        public enum GameModeType { Coop = 0, FreeForAll = 1, TeamDeathmatch = 2, GunGame = 3, Milsim = 4, CaptureTheFlag = 5, Domination = 6 }
+        public const int MODE_COUNT = 7;
         public enum Phase { Lobby = 0, InMatch = 1, Results = 2 }
 
         public struct Entry
@@ -47,6 +47,8 @@ namespace AirsoftFPS
         const string TIME_LIMIT_PREF = "Airsoft.TimeLimit";
         const string MATCH_SCENE = "AirsoftArena";
         const string LOBBY_SCENE = "AirsoftLobby";
+        // The map scene the next / current match is played on (objective modes check its MapLayout).
+        public static string CurrentMapScene => MATCH_SCENE;
 
         const string MSG_NAME  = "mn_name";   // client -> server
         const string MSG_READY = "mn_ready";  // client -> server
@@ -139,6 +141,7 @@ namespace AirsoftFPS
             if (nm.IsServer && !serverHandlersUp) RegisterServerHandlers();
 
             if (nm.IsServer) TickMatchClock();
+            ObjectiveMode.Sync(this, nm);   // objective modes (CTF, Domination): create / remove the rules object
         }
 
         // ───────────────────────── Local player API (UI calls these) ─────────────────────────
@@ -214,7 +217,13 @@ namespace AirsoftFPS
         public void HostCycleMode()
         {
             if (!IsHost) return;
-            Mode = (GameModeType)(((int)Mode + 1) % MODE_COUNT);
+            var m = Mode;
+            for (int i = 0; i < MODE_COUNT; i++)   // skip modes this map can't play
+            {
+                m = (GameModeType)(((int)m + 1) % MODE_COUNT);
+                if (ObjectiveMode.IsAvailable(m, out _)) break;
+            }
+            Mode = m;
             BroadcastState();
         }
 
@@ -222,6 +231,7 @@ namespace AirsoftFPS
         public void HostSetMode(GameModeType mode)
         {
             if (!IsHost || Mode == mode) return;
+            if (!ObjectiveMode.IsAvailable(mode, out _)) return;   // the map lacks this mode's points
             Mode = mode;
             BroadcastState();
         }
@@ -271,6 +281,7 @@ namespace AirsoftFPS
         public void HostStartMatch()
         {
             if (!IsHost) return;
+            if (!ObjectiveMode.IsAvailable(Mode, out _)) return;   // lobby shows why on the mode card
             EnemiesEnabled = (Mode == GameModeType.Coop);
             CurrentPhase = Phase.InMatch;
             WinnerClientId = ulong.MaxValue;
@@ -307,6 +318,7 @@ namespace AirsoftFPS
             string killerName = scored ? NameFor(killerClientId) : "";
             RaiseKill(killerName, NameFor(victimClientId), weapon ?? "");
             SendDeathInfo(victimClientId, killerClientId, weapon, killerObject);
+            ObjectiveMode.NotifyKill(victimClientId, killerClientId);   // e.g. a flag carrier drops the flag
 
             bool changed = false;
             for (int i = 0; i < roster.Count; i++)
@@ -345,6 +357,7 @@ namespace AirsoftFPS
             bool scored = shooterClientId != victimClientId && HasEntry(shooterClientId)
                           && TeamOf(shooterClientId) != TeamOf(victimClientId);
             RaiseKill(scored ? NameFor(shooterClientId) : "", NameFor(victimClientId), weapon ?? "");
+            ObjectiveMode.NotifyHit(victimClientId, shooterClientId);
 
             for (int i = 0; i < roster.Count; i++)
             {
@@ -386,6 +399,13 @@ namespace AirsoftFPS
         // fewest deaths; TDM -> higher team score. An exact tie is a draw.
         void EndMatchOnTime()
         {
+            // objective modes decide themselves (default: higher team score, tie = draw)
+            if (ObjectiveMode.DecideOnTimeout(out int objWinner, out bool objDraw))
+            {
+                EndMatch(ulong.MaxValue, objWinner, true, objDraw);
+                BroadcastState();
+                return;
+            }
             if (TeamMode)
             {
                 int red = TeamScore(1), blue = TeamScore(2);
@@ -708,6 +728,7 @@ namespace AirsoftFPS
         }
         public int TeamScore(int team)
         {
+            if (ObjectiveMode.TryTeamScore(team, out int obj)) return obj;   // CTF captures / Domination points
             int sc = 0; foreach (var e in roster) if (e.team == team) sc += e.kills; return sc;
         }
         public int GunLevelOf(ulong clientId)
@@ -715,12 +736,22 @@ namespace AirsoftFPS
             foreach (var e in roster) if (e.clientId == clientId) return e.kills;
             return 0;
         }
-        // Red vs Blue modes (Team Deathmatch, Milsim).
-        public static bool IsTeamMode(GameModeType m) => m == GameModeType.TeamDeathmatch || m == GameModeType.Milsim;
+        // Red vs Blue modes (Team Deathmatch, Milsim, Capture the Flag, Domination).
+        public static bool IsTeamMode(GameModeType m) => m == GameModeType.TeamDeathmatch || m == GameModeType.Milsim
+                                                         || m == GameModeType.CaptureTheFlag || m == GameModeType.Domination;
         public bool TeamMode => IsTeamMode(Mode);
         public bool IsMilsim => Mode == GameModeType.Milsim;
         // Team score that wins the match: kills in TDM, hits in Milsim.
-        public int TeamTarget => IsMilsim ? MILSIM_HIT_TARGET : TDM_KILL_TARGET;
+        public int TeamTarget => ObjectiveMode.HasObjective(Mode) ? ObjectiveMode.TargetFor(Mode)
+                                 : IsMilsim ? MILSIM_HIT_TARGET : TDM_KILL_TARGET;
+
+        // Server: the active objective changed a team score; end the match if a team reached the target.
+        public void NotifyObjectiveScore()
+        {
+            if (nm == null || !nm.IsServer || CurrentPhase != Phase.InMatch) return;
+            CheckTeamTarget();
+            if (CurrentPhase == Phase.Results) BroadcastState();
+        }
 
         // Team modes: block damage between teammates (friendly fire off).
         public bool BlocksDamage(ulong attacker, ulong victim)

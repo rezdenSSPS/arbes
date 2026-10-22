@@ -252,7 +252,7 @@ namespace AirsoftFPS
                 ulong me = nm != null ? nm.LocalClientId : ulong.MaxValue;
                 if (!mnet.IsDraw)
                 {
-                    if (mnet.Mode == MatchNet.GameModeType.TeamDeathmatch)
+                    if (MatchNet.IsTeamMode(mnet.Mode))   // TDM, Milsim, CTF, Domination
                         match.won = mnet.WinnerTeam != 0 && mnet.WinnerTeam == mnet.TeamOf(me);
                     else if (mnet.Mode != MatchNet.GameModeType.Coop)
                         match.won = mnet.WinnerClientId == me;

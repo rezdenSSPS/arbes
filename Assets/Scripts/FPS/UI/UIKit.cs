@@ -641,6 +641,8 @@ namespace AirsoftFPS
             MatchNet.GameModeType.TeamDeathmatch => "Team Deathmatch",
             MatchNet.GameModeType.GunGame => "Gun Game",
             MatchNet.GameModeType.Milsim => "Milsim",
+            MatchNet.GameModeType.CaptureTheFlag => "Capture the Flag",
+            MatchNet.GameModeType.Domination => "Domination",
             _ => "Co-op Survival"
         };
 
@@ -649,7 +651,9 @@ namespace AirsoftFPS
             MatchNet.GameModeType.FreeForAll => $"Every player for themselves. First to {MatchNet.FFA_KILL_TARGET} kills.",
             MatchNet.GameModeType.TeamDeathmatch => $"Red vs Blue. First team to {MatchNet.TDM_KILL_TARGET} kills.",
             MatchNet.GameModeType.GunGame => $"Each kill = next weapon. Finish all {MatchNet.GUNGAME_WEAPONS}.",
-            MatchNet.GameModeType.Milsim => $"Red vs Blue. One BB = out: walk back to respawn. First to {MatchNet.MILSIM_HIT_TARGET}.",
+            MatchNet.GameModeType.Milsim => $"One BB = out: walk back to respawn. First to {MatchNet.MILSIM_HIT_TARGET}.",
+            MatchNet.GameModeType.CaptureTheFlag => $"Grab the enemy flag, bring it home. First to {CaptureTheFlag.CAPTURE_TARGET}.",
+            MatchNet.GameModeType.Domination => $"Hold points A, B and C to score. First to {Domination.SCORE_TARGET}.",
             _ => "Team up against waves of AI enemies."
         };
 
