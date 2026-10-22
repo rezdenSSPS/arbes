@@ -190,18 +190,16 @@ namespace AirsoftFPS
         const double OWNER_MOVE_TIMEOUT = 2.0;
         Vector3 pendingSpawnPos;
         double pendingSpawnUntil;   // 0 = not waiting
-        bool pendingRevive;         // bring back to life when the move arrives (Respawn), or just stop waiting
 
         // Server: true while the owner of this avatar hasn't arrived at its new spawn point yet
         // (objectives ignore the player meanwhile).
         public bool ServerAwaitingRespawnMove => pendingSpawnUntil > 0;
 
-        bool ExpectOwnerMove(Vector3 pos, bool revive = true)
+        bool ExpectOwnerMove(Vector3 pos)
         {
             if (IsOwnedByServer) return false;   // the host's own avatar teleports at once
             pendingSpawnPos = pos;
             pendingSpawnUntil = NetworkManager.ServerTime.Time + OWNER_MOVE_TIMEOUT;
-            pendingRevive = revive;
             return true;
         }
 
@@ -211,7 +209,7 @@ namespace AirsoftFPS
             bool arrived = d.sqrMagnitude < 4f;
             if (!arrived && NetworkManager.ServerTime.Time < pendingSpawnUntil) return;
             pendingSpawnUntil = 0;
-            if (pendingRevive && isDead.Value)
+            if (isDead.Value)
             {
                 StartSpawnProtection();   // protection counts from when they are really back
                 isDead.Value = false;
@@ -224,6 +222,7 @@ namespace AirsoftFPS
         {
             if (!IsServer || !IsSpawned) return;
             CancelInvoke(nameof(Respawn));
+            pendingSpawnUntil = 0;   // back right now: no longer waiting for an earlier respawn move
             var bot = IsBot ? GetComponent<BotBrain>() : null;
             if (bot != null) bot.Teleport(pose.position, pose.rotation);
             else RespawnTeleportRpc(pose.position, pose.rotation);
@@ -231,8 +230,8 @@ namespace AirsoftFPS
             hitRespawnAt.Value = 0;
             isHit.Value = false;
             StartSpawnProtection();
-            if (bot == null && isDead.Value && ExpectOwnerMove(pose.position)) return;   // dead: back once moved
-            if (bot == null) ExpectOwnerMove(pose.position, revive: false);             // alive: objectives wait
+            // No waiting for the owner's teleport here: round modes freeze everyone (spawn-protected) in Prep,
+            // and marking the new round's players inactive made Bomb drop a remote carrier's bomb.
             isDead.Value = false;
         }
 

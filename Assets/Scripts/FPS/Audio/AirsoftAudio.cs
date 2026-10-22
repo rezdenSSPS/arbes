@@ -314,6 +314,8 @@ namespace AirsoftFPS
         string musicName;
         float musicVol;
         AirsoftAudio.Bus musicBus;
+        float musicVolB;                 // the outgoing track keeps its own volume and bus while it fades
+        AirsoftAudio.Bus musicBusB;
         float fadeA, fadeB;              // current fade levels (0..1)
 
         AudioListener listener;
@@ -456,9 +458,11 @@ namespace AirsoftFPS
         // ───────────────────────── music ─────────────────────────
         public void SetMusic(string name, float volume, AirsoftAudio.Bus bus)
         {
+            if (name == musicName) { musicVol = volume; musicBus = bus; return; }
+            musicVolB = musicVol;
+            musicBusB = musicBus;
             musicVol = volume;
             musicBus = bus;
-            if (name == musicName) return;
             musicName = name;
             // the old track fades out on B, the new one starts on A
             (musicA, musicB) = (musicB, musicA);
@@ -477,9 +481,8 @@ namespace AirsoftFPS
         {
             fadeA = Mathf.MoveTowards(fadeA, musicA.clip != null && musicA.isPlaying ? 1f : 0f, dt / 1.5f);
             fadeB = Mathf.MoveTowards(fadeB, 0f, dt / 1.5f);
-            float bus = AirsoftAudio.FallbackBusVolume(musicBus);
-            musicA.volume = musicVol * fadeA * bus;
-            musicB.volume = musicVol * fadeB * bus;
+            musicA.volume = musicVol * fadeA * AirsoftAudio.FallbackBusVolume(musicBus);
+            musicB.volume = musicVolB * fadeB * AirsoftAudio.FallbackBusVolume(musicBusB);
             if (fadeB <= 0f && musicB.isPlaying) musicB.Stop();
         }
 

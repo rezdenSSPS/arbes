@@ -250,9 +250,10 @@ namespace AirsoftFPS
 
             if (!IsOwner) return;
             if (Time.timeScale == 0) return;
-            if (HUDManager.InputBlocked || (ownHealth != null && ownHealth.IsOut))
+            if (HUDManager.InputBlocked || (ownHealth != null && (ownHealth.IsOut || (ownHealth.IsSpawned && ownHealth.isDead.Value))))
             {
-                // a menu is open (or Milsim HIT): no shooting/switching, drop out of the scope
+                // a menu is open, Milsim HIT, or dead (death screen / spectating): no shooting/switching,
+                // drop out of the scope
                 isAiming = false;
                 if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, GameSettings.FieldOfView, Time.deltaTime * 10f);
                 return;
