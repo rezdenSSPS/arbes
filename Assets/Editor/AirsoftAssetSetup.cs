@@ -50,6 +50,9 @@ namespace AirsoftFPS.Editor
 
         static void RunOnce()
         {
+            // Multiplayer Play Mode clones open the project read-only: they can't import, the main Editor does it.
+            string cmd = System.Environment.CommandLine;
+            if (cmd.Contains("com.unity.mppm.clone") || cmd.Contains("-readonly")) return;
             if (EditorPrefs.GetBool(DoneKey, false)) return;
             EditorPrefs.SetBool(DoneKey, true);
             Reimport();
