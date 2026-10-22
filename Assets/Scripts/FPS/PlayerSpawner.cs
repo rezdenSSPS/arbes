@@ -1,5 +1,6 @@
 using UnityEngine;
 using Unity.Netcode;
+using Unity.Netcode.Transports.UTP;
 using System.Collections.Generic;
 
 namespace AirsoftFPS
@@ -20,6 +21,11 @@ namespace AirsoftFPS
         // NetworkPrefabsList; if the scene lost that reference, register the player prefab here and say so.
         void Awake()
         {
+            // BB shots, bots and objective state send many small packets; the transport's default queue
+            // of 128 packets per frame overflows ("Receive queue is full, some packets could be dropped").
+            var utp = GetComponent<UnityTransport>();
+            if (utp != null && utp.MaxPacketQueueSize < MIN_PACKET_QUEUE) utp.MaxPacketQueueSize = MIN_PACKET_QUEUE;
+
             var nm = GetComponent<NetworkManager>();
             if (nm == null || nm.NetworkConfig == null || playerPrefab == null) return;
             foreach (var list in nm.NetworkConfig.Prefabs.NetworkPrefabsLists)
@@ -28,6 +34,8 @@ namespace AirsoftFPS
                            "(assign Assets/DefaultNetworkPrefabs.asset). Registering the player prefab at runtime.");
             nm.AddNetworkPrefab(playerPrefab);
         }
+
+        public const int MIN_PACKET_QUEUE = 512;
 
         void Start()
         {

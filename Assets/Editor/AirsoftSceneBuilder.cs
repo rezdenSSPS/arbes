@@ -559,6 +559,7 @@ namespace AirsoftFPS.Editor
             var nmObj = new GameObject("NetworkManager");
             var nm = nmObj.AddComponent<NetworkManager>();
             var transport = nmObj.AddComponent<UnityTransport>();
+            transport.MaxPacketQueueSize = PlayerSpawner.MIN_PACKET_QUEUE;
             nm.NetworkConfig = new NetworkConfig();
             nm.NetworkConfig.NetworkTransport = transport;
 

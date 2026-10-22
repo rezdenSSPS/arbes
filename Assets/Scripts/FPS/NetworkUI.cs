@@ -319,7 +319,17 @@ namespace AirsoftFPS
                 await ResetNetcodeAsync();
                 CaptureName();
                 Transport.SetConnectionData("0.0.0.0", PORT, "0.0.0.0");
-                NetworkManager.Singleton.StartHost();
+                retryAction = OnHostLan;
+                if (!NetworkManager.Singleton.StartHost())
+                {
+                    // Usually the port is taken: another game (or a second Editor / Multiplayer Play Mode
+                    // player) on this computer is already hosting.
+                    ShowError("HOSTING ON LAN", "Couldn’t host on this computer",
+                        "Port " + PORT + " is already in use. Another game on this computer is probably hosting already.",
+                        "Join that game instead: LAN → Join with 127.0.0.1 · Or close the other game and try again",
+                        "UDP port " + PORT + " in use");
+                    return;
+                }
                 LanAddress = GetLocalIPv4();
                 EnterWaitingRoom(true);
             }
