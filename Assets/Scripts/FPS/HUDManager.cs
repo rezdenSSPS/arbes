@@ -222,7 +222,21 @@ namespace AirsoftFPS
                 killFeedSub = true;
             }
 
+            // Host left / connection dropped during the match: back to the menu (NetworkUI only handles
+            // this in the lobby scene).
+            var nmL = NetworkManager.Singleton;
+            if (nmL != null && (nmL.IsConnectedClient || nmL.IsServer)) sawConnected = true;
+            else if (sawConnected && !leaving && (nmL == null || (!nmL.IsListening && !nmL.ShutdownInProgress)))
+            {
+                NetworkUI.PendingMenuHint = "The host left the match.";
+                QuitToMenu();
+                return;
+            }
+
             var mnet = MatchNet.Instance;
+            // ReturnToLobby resets the phase and despawns the avatars (this scene's only cameras) before the
+            // lobby has loaded: keep the opaque results screen up until this scene unloads.
+            if (resultsStart >= 0f && mnet != null && mnet.CurrentPhase == MatchNet.Phase.Lobby) return;
             bool results = mnet != null && mnet.CurrentPhase == MatchNet.Phase.Results;
             if (results && resultsStart < 0f) { resultsStart = Time.unscaledTime; if (isPaused) TogglePause(); }
             if (!results) resultsStart = -1f;
@@ -742,8 +756,12 @@ namespace AirsoftFPS
 
         public void ResumeGame() { if (isPaused) TogglePause(); }
 
+        bool sawConnected, leaving;
+
         public void QuitToMenu()
         {
+            if (leaving) return;
+            leaving = true;
             NetworkUI.JoinCode = "";
             Time.timeScale = 1;
             InputBlocked = false;

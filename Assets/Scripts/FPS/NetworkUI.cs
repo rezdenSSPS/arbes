@@ -54,7 +54,10 @@ namespace AirsoftFPS
         // Domain reload is disabled (Enter Play Mode Options), so statics survive
         // between play sessions -- reset here so a stale code never shows in the HUD.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void ResetStatics() { JoinCode = ""; LanAddress = ""; LastWasLan = false; }
+        static void ResetStatics() { JoinCode = ""; LanAddress = ""; LastWasLan = false; PendingMenuHint = null; }
+
+        // Set by the match HUD when the session dropped mid-match; shown on the menu once.
+        public static string PendingMenuHint;
 
         // ───────── built UI ─────────
         Canvas canvas;
@@ -114,6 +117,7 @@ namespace AirsoftFPS
 
             BuildUI();
             ShowScreen(menuScreen);
+            if (!string.IsNullOrEmpty(PendingMenuHint)) { MenuHint(PendingMenuHint); PendingMenuHint = null; }
 
             // If we're still connected (e.g. returned here after a match), skip the
             // connect screen and go straight back to the lobby.

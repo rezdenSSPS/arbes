@@ -44,6 +44,9 @@ namespace AirsoftFPS
             // afterwards. With Physics.autoSyncTransforms off the CharacterController would still sit at
             // (0,0,0) and the first Move() would snap the player there: re-create it at the spawn pose.
             if (IsOwner && cc != null && cc.enabled) { cc.enabled = false; cc.enabled = true; }
+            // the small "stick to the ground" move (velocity.y = -2) falls under minMoveDistance at very high
+            // frame rates and the player stops being grounded (no jumping): don't skip tiny moves
+            if (cc != null) cc.minMoveDistance = 0f;
 
             // Customisable low-poly character (visual only)
             if (GetComponent<PlayerAvatar>() == null) gameObject.AddComponent<PlayerAvatar>();

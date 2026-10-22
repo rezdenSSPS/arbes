@@ -233,7 +233,7 @@ namespace AirsoftFPS
             if (phase == MatchNet.Phase.InMatch && !active) Begin(mnet, nm);
             if (active)
             {
-                if (phase == MatchNet.Phase.Results) End(mnet, nm, true);
+                if (phase == MatchNet.Phase.Results) { Track(mnet, nm); End(mnet, nm, true); }   // count the match-ending kill/death too
                 else if (phase != MatchNet.Phase.InMatch) End(mnet, nm, false);
                 else Track(mnet, nm);
             }

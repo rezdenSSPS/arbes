@@ -56,9 +56,14 @@ namespace AirsoftFPS
             if (hub != null) return;
             Load();
             var go = new GameObject("~AirsoftAudio");
+            // Build the voices while inactive: an AudioSource added to an active object at BeforeSceneLoad
+            // queues a play-on-awake (default true) that later fails on the filtered 3D voices
+            // ("Only custom filters can be played", 40x at every start).
+            go.SetActive(false);
             Object.DontDestroyOnLoad(go);
             hub = go.AddComponent<AudioHub>();
             hub.Init(gSfx, gUi, gMusic);
+            go.SetActive(true);
             GameSettings.Changed -= ApplyVolumes;
             GameSettings.Changed += ApplyVolumes;
             ApplyVolumes();
@@ -292,6 +297,7 @@ namespace AirsoftFPS
     }
 
     // Owns the voices (pooled AudioSources) and the two music players; runs GameAudio every frame.
+    [DefaultExecutionOrder(10000)]   // LateUpdate after camera/killcam/spectator scripts (fallback listener)
     public class AudioHub : MonoBehaviour
     {
         const int VOICES_3D = 40;
@@ -320,6 +326,7 @@ namespace AirsoftFPS
 
         AudioListener listener;
         float nextListenerSearch;
+        AudioListener fallback;          // on only while no other listener is (scene loads, before the avatar spawns)
 
         public string MusicName => musicName;
         public bool MusicPlaying => musicA != null && musicA.isPlaying;
@@ -333,6 +340,17 @@ namespace AirsoftFPS
             for (int i = 0; i < VOICES_2D; i++) voices2D.Add(MakeVoice("v2d_" + i, false));
             musicA = MakeMusic("musicA");
             musicB = MakeMusic("musicB");
+            fallback = gameObject.AddComponent<AudioListener>();
+            fallback.enabled = false;
+        }
+
+        void LateUpdate()
+        {
+            if (fallback == null) return;
+            bool other = false;
+            foreach (var l in FindObjectsByType<AudioListener>())
+                if (l != fallback && l.isActiveAndEnabled) { other = true; break; }
+            if (fallback.enabled == other) fallback.enabled = !other;
         }
 
         Voice MakeVoice(string name, bool spatial)

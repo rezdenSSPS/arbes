@@ -177,12 +177,12 @@ namespace AirsoftFPS
             if (bot != null) bot.Teleport(spawn.position, spawn.rotation);   // bots: the server moves them
             else RespawnTeleportRpc(spawn.position, spawn.rotation);
 
-            currentHealth.Value = maxHealth;
-            StartSpawnProtection();
             // A remote owner moves its own avatar (ClientNetworkTransform): until its teleport comes back
             // the server still has the body at the death spot. Keep it dead until then, or it could be shot
-            // or pick up a flag there.
+            // or pick up a flag there (health and protection are restored when it is really back).
             if (bot == null && ExpectOwnerMove(spawn.position)) return;
+            currentHealth.Value = maxHealth;
+            StartSpawnProtection();
             isDead.Value = false;
         }
 
@@ -211,6 +211,7 @@ namespace AirsoftFPS
             pendingSpawnUntil = 0;
             if (isDead.Value)
             {
+                currentHealth.Value = maxHealth;
                 StartSpawnProtection();   // protection counts from when they are really back
                 isDead.Value = false;
             }
