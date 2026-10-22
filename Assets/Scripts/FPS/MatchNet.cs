@@ -68,6 +68,14 @@ namespace AirsoftFPS
         public int TimeLimitMinutes { get; private set; } = DEFAULT_TIME_LIMIT;
         // Network server time (NetworkManager.ServerTime) when the clock runs out; 0 = not running.
         public double MatchEndTime { get; private set; }
+        // Co-op: the wave the server's EnemySpawner is on (clients have no live spawner state of their own).
+        public int CoopWave { get; private set; } = 1;
+        public void ServerSetCoopWave(int wave)
+        {
+            if (nm == null || !nm.IsServer || wave == CoopWave) return;
+            CoopWave = wave;
+            BroadcastState();
+        }
         public IReadOnlyList<Entry> Roster => roster;
 
         // Raised on everyone whenever the roster/mode/phase changes, so UI can refresh.
@@ -287,6 +295,7 @@ namespace AirsoftFPS
             if (!ObjectiveMode.IsAvailable(Mode, out _)) return;   // lobby shows why on the mode card
             ChooseMatchMap();   // lobby map vote (MatchNetMapVote)
             EnemiesEnabled = (Mode == GameModeType.Coop);
+            CoopWave = 1;
             CurrentPhase = Phase.InMatch;
             WinnerClientId = ulong.MaxValue;
             WinnerTeam = 0;
@@ -468,6 +477,13 @@ namespace AirsoftFPS
             }
             ResetMapVote();
             BroadcastState();
+            // Avatars are spawned with DestroyWithScene=false, so NGO would carry them (camera and
+            // AudioListener included) into the lobby until every client has loaded it. Remove them first.
+            foreach (var id in nm.ConnectedClientsIds)
+            {
+                var po = nm.ConnectedClients.TryGetValue(id, out var cc) ? cc.PlayerObject : null;
+                if (po != null && po.IsSpawned) po.Despawn(true);
+            }
             nm.SceneManager.LoadScene(LOBBY_SCENE, LoadSceneMode.Single);
         }
 
@@ -537,6 +553,7 @@ namespace AirsoftFPS
             EndedOnTime = false;
             MatchEndTime = 0;
             LastDeath = default;
+            CoopWave = 1;
             ClearMapVoteState();
             serverHandlersUp = false;
             clientHandlersUp = false;
@@ -555,7 +572,7 @@ namespace AirsoftFPS
         void OnServerRecvName(ulong sender, FastBufferReader reader)
         {
             reader.ReadValueSafe(out string n);
-            n = Sanitize(n);
+            n = UniqueName(Sanitize(n), sender);
             EnsureEntry(sender);
             for (int i = 0; i < roster.Count; i++)
                 if (roster[i].clientId == sender) { var e = roster[i]; e.name = n; roster[i] = e; }
@@ -570,7 +587,7 @@ namespace AirsoftFPS
             BroadcastState();
         }
 
-        void EnsureEntry(ulong clientId)
+        internal void EnsureEntry(ulong clientId)
         {
             foreach (var e in roster) if (e.clientId == clientId) return;
             // A late joiner in a running team match goes to the smaller team (Red on a tie).
@@ -598,6 +615,7 @@ namespace AirsoftFPS
             w.WriteValueSafe((byte)((IsDraw ? 1 : 0) | (EndedOnTime ? 2 : 0)));
             w.WriteValueSafe((byte)TimeLimitMinutes);
             w.WriteValueSafe(MatchEndTime);
+            w.WriteValueSafe(CoopWave);
             w.WriteValueSafe(roster.Count);
             foreach (var e in roster)
             {
@@ -625,6 +643,7 @@ namespace AirsoftFPS
             reader.ReadValueSafe(out byte endFlags);
             reader.ReadValueSafe(out byte timeLimit);
             reader.ReadValueSafe(out double matchEnd);
+            reader.ReadValueSafe(out int coopWave);
             reader.ReadValueSafe(out int count);
 
             roster.Clear();
@@ -648,6 +667,7 @@ namespace AirsoftFPS
             EndedOnTime = (endFlags & 2) != 0;
             TimeLimitMinutes = timeLimit;
             MatchEndTime = matchEnd;
+            CoopWave = coopWave;
             EnemiesEnabled = (Mode == GameModeType.Coop);
             OnStateChanged?.Invoke();
         }
@@ -796,6 +816,26 @@ namespace AirsoftFPS
         }
 
         static string DefaultName(ulong clientId) => clientId == 0 ? "Host" : "Player " + clientId;
+
+        // Two players with the same name would confuse everything keyed by name (kill feed colours, the
+        // "me" highlight, profile stats): a taken name gets a number, e.g. "Viper 2".
+        string UniqueName(string n, ulong owner)
+        {
+            if (string.IsNullOrEmpty(n)) return n;
+            bool Taken(string c)
+            {
+                foreach (var e in roster) if (e.clientId != owner && e.name == c) return true;
+                return false;
+            }
+            if (!Taken(n)) return n;
+            for (int k = 2; k < 100; k++)
+            {
+                string suffix = " " + k;
+                string c = (n.Length + suffix.Length > 16 ? n.Substring(0, 16 - suffix.Length) : n) + suffix;
+                if (!Taken(c)) return c;
+            }
+            return n;
+        }
 
         static string Sanitize(string n)
         {

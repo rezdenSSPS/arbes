@@ -277,7 +277,7 @@ namespace AirsoftFPS
             var h = go.GetComponent<Health>();
             if (no == null || h == null) { Destroy(go); return; }
 
-            h.botId.Value = e.clientId;   // before Spawn: clients get it with the spawn
+            h.botId.Reset(e.clientId);   // before Spawn (no dirty-marking warning): clients get it with the spawn
             h.maxHealth = Health.BOT_MAX_HEALTH;
             h.respawnDelay = 3f;
             var brain = go.AddComponent<BotBrain>();

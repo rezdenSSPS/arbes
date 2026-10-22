@@ -343,8 +343,7 @@ namespace AirsoftFPS
                 }
                 else
                 {
-                    var spawner = FindAnyObjectByType<EnemySpawner>();
-                    coopWave.text = "WAVE " + (spawner != null ? spawner.CurrentWave : 1);
+                    coopWave.text = "WAVE " + (MatchNet.Instance != null ? MatchNet.Instance.CoopWave : 1);
                     enemyCountTimer -= Time.unscaledDeltaTime;
                     if (enemyCountTimer <= 0f)
                     {
@@ -632,8 +631,7 @@ namespace AirsoftFPS
                     pauseScore.text = $"{k} / {MatchNet.FFA_KILL_TARGET}";
                     break;
                 default:
-                    var spawner = FindAnyObjectByType<EnemySpawner>();
-                    pauseScore.text = "WAVE " + (spawner != null ? spawner.CurrentWave : 1);
+                    pauseScore.text = "WAVE " + (MatchNet.Instance != null ? MatchNet.Instance.CoopWave : 1);
                     break;
             }
             string code = NetworkUI.JoinCode;

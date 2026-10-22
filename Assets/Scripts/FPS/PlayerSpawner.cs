@@ -91,7 +91,13 @@ namespace AirsoftFPS
         void OnClientConnected(ulong clientId)
         {
             if (!NetworkManager.Singleton.IsServer) return;
-            if (matchLive) SpawnFor(clientId); // late joiner drops straight into the match
+            if (matchLive)   // late joiner drops straight into the match
+            {
+                // MatchNet's own connect handler (which gives a late joiner its team) runs after this one;
+                // create the roster entry first so the spawn point is on the joiner's side.
+                MatchNet.Instance?.EnsureEntry(clientId);
+                SpawnFor(clientId);
+            }
         }
 
         void SpawnFor(ulong clientId)

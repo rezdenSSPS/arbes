@@ -40,6 +40,10 @@ namespace AirsoftFPS
         {
             cc = GetComponent<CharacterController>();
             health = GetComponent<Health>();
+            // NGO instantiates a remotely spawned player at the prefab origin and moves the transform only
+            // afterwards. With Physics.autoSyncTransforms off the CharacterController would still sit at
+            // (0,0,0) and the first Move() would snap the player there: re-create it at the spawn pose.
+            if (IsOwner && cc != null && cc.enabled) { cc.enabled = false; cc.enabled = true; }
 
             // Customisable low-poly character (visual only)
             if (GetComponent<PlayerAvatar>() == null) gameObject.AddComponent<PlayerAvatar>();

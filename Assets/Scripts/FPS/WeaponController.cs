@@ -556,7 +556,7 @@ namespace AirsoftFPS
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             var col = go.GetComponent<Collider>();
-            if (col) Destroy(col);
+            if (col) DestroyImmediate(col);   // now, not at frame end: same-frame raycasts (dropped flag/bomb) hit it
             go.name = "Impact";
             go.transform.position = point + normal * 0.02f;
             go.transform.localScale = Vector3.one * 0.08f;

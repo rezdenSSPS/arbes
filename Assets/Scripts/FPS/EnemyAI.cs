@@ -191,11 +191,13 @@ namespace AirsoftFPS
         {
             if (target == null) return;
 
+            // aim from the muzzle height the ray starts at, not from the feet (that line ran 1.2 m too high)
+            Vector3 origin = transform.position + Vector3.up * 1.2f;
             Vector3 aimPoint = target.position + Vector3.up * 1f;
-            Vector3 dir = (aimPoint - transform.position).normalized;
+            Vector3 dir = (aimPoint - origin).normalized;
             dir += Random.insideUnitSphere * 0.08f;
 
-            if (Physics.Raycast(transform.position + Vector3.up * 1.2f, dir, out RaycastHit hit, attackRange + 5f))
+            if (Physics.Raycast(origin, dir, out RaycastHit hit, attackRange + 5f))
             {
                 var targetHealth = hit.collider.GetComponentInParent<Health>();
                 if (targetHealth != null && targetHealth.isPlayer && !targetHealth.isDead.Value)

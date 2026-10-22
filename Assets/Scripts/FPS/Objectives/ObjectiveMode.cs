@@ -379,7 +379,9 @@ namespace AirsoftFPS
                     id = id,
                     team = mn != null ? mn.TeamOf(id) : 0,
                     position = cl.PlayerObject.transform.position,
-                    active = h == null || (h.IsSpawned && !h.isDead.Value && !h.IsOut)
+                    // a remote player who just respawned is still at the death spot on the server until
+                    // its teleport arrives: not active until then (no flag pickups / captures from there)
+                    active = h == null || (h.IsSpawned && !h.isDead.Value && !h.IsOut && !h.ServerAwaitingRespawnMove)
                 });
             }
             CollectExtraParticipants?.Invoke(participants);
@@ -409,8 +411,13 @@ namespace AirsoftFPS
             var nm = NetworkManager.Singleton;
             if (nm != null && nm.IsListening)
             {
-                try { var no = nm.SpawnManager?.GetPlayerNetworkObject(id); if (no != null) found = no.transform; }
-                catch (Exception) { /* older NGO: server-only API */ }
+                // NGO only lets the server (or the owner itself) look up player objects; on a client it
+                // logs an error for anyone else, so clients scan the spawned Health components instead.
+                if (nm.IsServer || id == nm.LocalClientId)
+                {
+                    var no = nm.SpawnManager?.GetPlayerNetworkObject(id);
+                    if (no != null) found = no.transform;
+                }
                 if (found == null)
                     foreach (var h in FindObjectsByType<Health>())
                         if (h.isPlayer && h.IsSpawned && h.OwnerClientId == id && h.NetworkObject.IsPlayerObject) { found = h.transform; break; }

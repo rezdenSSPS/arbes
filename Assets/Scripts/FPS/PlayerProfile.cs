@@ -117,10 +117,16 @@ namespace AirsoftFPS
             if (s_data == null) return;
             try
             {
-                string tmp = FilePath + ".tmp";
-                File.WriteAllText(tmp, JsonUtility.ToJson(s_data, true));
-                if (File.Exists(FilePath)) File.Delete(FilePath);
-                File.Move(tmp, FilePath);
+                // Own temp file per save and an atomic replace: two game instances on one computer (host and
+                // a Multiplayer Play Mode player) finishing a match together must not delete the profile.
+                string tmp = FilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                try
+                {
+                    File.WriteAllText(tmp, JsonUtility.ToJson(s_data, true));
+                    if (File.Exists(FilePath)) File.Replace(tmp, FilePath, null);
+                    else File.Move(tmp, FilePath);
+                }
+                finally { if (File.Exists(tmp)) File.Delete(tmp); }
             }
             catch (Exception e) { Debug.LogWarning("[Airsoft] profile could not be saved: " + e.Message); }
         }

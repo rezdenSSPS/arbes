@@ -14,6 +14,11 @@ namespace AirsoftFPS
             NetworkVariableReadPermission.Everyone,
             NetworkVariableWritePermission.Server);
 
+        // maxHealth synced from the server (enemy waves and bots change it per spawn; clients only know the prefab value)
+        public NetworkVariable<int> netMaxHealth = new NetworkVariable<int>(0,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Server);
+
         public NetworkVariable<bool> isDead = new NetworkVariable<bool>(false,
             NetworkVariableReadPermission.Everyone,
             NetworkVariableWritePermission.Server);
@@ -71,7 +76,17 @@ namespace AirsoftFPS
         {
             if (IsBot) maxHealth = BOT_MAX_HEALTH;
             if (IsServer)
+            {
+                netMaxHealth.Value = maxHealth;
                 currentHealth.Value = maxHealth;
+            }
+            else if (netMaxHealth.Value > 0) maxHealth = netMaxHealth.Value;
+            netMaxHealth.OnValueChanged += (prev, curr) =>
+            {
+                if (curr <= 0) return;
+                maxHealth = curr;
+                OnHealthChanged?.Invoke(currentHealth.Value, maxHealth);
+            };
             if (IsServer && IsCombatant) StartSpawnProtection();
             if (IsCombatant && GetComponent<SpawnProtectionFX>() == null) gameObject.AddComponent<SpawnProtectionFX>();
             if (GetComponent<FootstepAudio>() == null) gameObject.AddComponent<FootstepAudio>();
@@ -164,7 +179,43 @@ namespace AirsoftFPS
 
             currentHealth.Value = maxHealth;
             StartSpawnProtection();
+            // A remote owner moves its own avatar (ClientNetworkTransform): until its teleport comes back
+            // the server still has the body at the death spot. Keep it dead until then, or it could be shot
+            // or pick up a flag there.
+            if (bot == null && ExpectOwnerMove(spawn.position)) return;
             isDead.Value = false;
+        }
+
+        // ───── waiting for a remote owner's respawn teleport (server) ─────
+        const double OWNER_MOVE_TIMEOUT = 2.0;
+        Vector3 pendingSpawnPos;
+        double pendingSpawnUntil;   // 0 = not waiting
+        bool pendingRevive;         // bring back to life when the move arrives (Respawn), or just stop waiting
+
+        // Server: true while the owner of this avatar hasn't arrived at its new spawn point yet
+        // (objectives ignore the player meanwhile).
+        public bool ServerAwaitingRespawnMove => pendingSpawnUntil > 0;
+
+        bool ExpectOwnerMove(Vector3 pos, bool revive = true)
+        {
+            if (IsOwnedByServer) return false;   // the host's own avatar teleports at once
+            pendingSpawnPos = pos;
+            pendingSpawnUntil = NetworkManager.ServerTime.Time + OWNER_MOVE_TIMEOUT;
+            pendingRevive = revive;
+            return true;
+        }
+
+        void TickOwnerMove()
+        {
+            Vector3 d = transform.position - pendingSpawnPos; d.y = 0;
+            bool arrived = d.sqrMagnitude < 4f;
+            if (!arrived && NetworkManager.ServerTime.Time < pendingSpawnUntil) return;
+            pendingSpawnUntil = 0;
+            if (pendingRevive && isDead.Value)
+            {
+                StartSpawnProtection();   // protection counts from when they are really back
+                isDead.Value = false;
+            }
         }
 
         // Server: bring this player back right now at pose, alive with full health (round modes: everyone
@@ -180,6 +231,8 @@ namespace AirsoftFPS
             hitRespawnAt.Value = 0;
             isHit.Value = false;
             StartSpawnProtection();
+            if (bot == null && isDead.Value && ExpectOwnerMove(pose.position)) return;   // dead: back once moved
+            if (bot == null) ExpectOwnerMove(pose.position, revive: false);             // alive: objectives wait
             isDead.Value = false;
         }
 
@@ -215,7 +268,9 @@ namespace AirsoftFPS
 
         void Update()
         {
-            if (IsServer && IsSpawned && isHit.Value) TickHitRespawn();
+            if (!IsServer || !IsSpawned) return;
+            if (pendingSpawnUntil > 0) TickOwnerMove();
+            if (isHit.Value) TickHitRespawn();
         }
 
         // Server: once the HIT player stands in their team's zone, count down and bring them back.
