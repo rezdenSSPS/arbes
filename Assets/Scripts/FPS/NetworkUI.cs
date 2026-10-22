@@ -20,7 +20,7 @@ namespace AirsoftFPS
     // Flow: Main menu (Online / LAN, host or join) -> Connecting (progress / error)
     // -> Lobby (mode, roster, ready; host presses START) -> match scene.
     // The whole UI is built in code with UIKit; networking is unchanged.
-    public class NetworkUI : MonoBehaviour
+    public partial class NetworkUI : MonoBehaviour
     {
         // Old scene-wired UI. Kept so existing scenes still load; hidden at runtime.
         [Header("Legacy UI (hidden at runtime)")]
@@ -972,7 +972,7 @@ namespace AirsoftFPS
         void BuildCharacterColumn(RectTransform colRt)
         {
             var col = colRt.gameObject.AddComponent<VerticalLayoutGroup>();
-            col.spacing = 14; col.childControlWidth = col.childControlHeight = true;
+            col.spacing = 10; col.childControlWidth = col.childControlHeight = true;
             col.childForceExpandWidth = true; col.childForceExpandHeight = false;
 
             Caption(colRt, "YOUR CHARACTER", 12, Muted, 0.16f).LE(-1, 16);
@@ -988,18 +988,22 @@ namespace AirsoftFPS
 
             var nameBlock = VCol(colRt, "Callsign", 6);
             Caption(nameBlock.transform, "CALLSIGN").LE(-1, 14);
-            lobbyName = Input(nameBlock.transform, "Your name", F.Body, 15, 16);
-            lobbyName.LE(-1, 42);
+            var nameRow = HRow(nameBlock.transform, "Row", 8);   // callsign + CUSTOMIZE side by side (room for the map vote)
+            nameRow.LE(-1, 42);
+            lobbyName = Input(nameRow.transform, "Your name", F.Body, 15, 16);
+            lobbyName.LE(-1, 42, 1);
             lobbyName.onEndEdit.AddListener(v =>
             {
                 if (MatchNet.Instance != null) MatchNet.Instance.SetLocalName(v);
                 if (nameInput != null) nameInput.SetTextWithoutNotify(v);
             });
 
-            Button(colRt, "CUSTOMIZE", Btn.Secondary, 17, () =>
+            Button(nameRow.transform, "CUSTOMIZE", Btn.Secondary, 14, () =>
             {
                 if (CharacterCustomizerUI.Instance != null) CharacterCustomizerUI.Instance.Open();
-            }).LE(-1, 44);
+            }).LE(112, 42);
+
+            BuildMapVote(colRt);   // map cards under the character (NetworkUI.MapVote.cs)
         }
 
         RectTransform previewBox;
@@ -1118,6 +1122,8 @@ namespace AirsoftFPS
                 s.ready.SetActive(e.ready);
                 s.notReady.SetActive(!e.ready);
             }
+
+            RefreshMapVote(mnet, net);
 
             // ready / start
             bool ready = mnet.LocalReady;

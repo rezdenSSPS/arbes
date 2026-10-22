@@ -13,7 +13,7 @@ namespace AirsoftFPS
     // Networking uses the NetworkManager's CustomMessagingManager, which works
     // WITHOUT a spawned NetworkObject -- the server owns the roster and broadcasts
     // the whole state to clients whenever it changes.
-    public partial class MatchNet : MonoBehaviour   // bots: MatchNet.Bots.cs
+    public partial class MatchNet : MonoBehaviour   // bots: MatchNet.Bots.cs, map vote: MatchNetMapVote.cs
     {
         public enum GameModeType { Coop = 0, FreeForAll = 1, TeamDeathmatch = 2, GunGame = 3, Milsim = 4, CaptureTheFlag = 5, Domination = 6, Medic = 7 }
         public const int MODE_COUNT = 8;
@@ -45,10 +45,11 @@ namespace AirsoftFPS
         public static readonly int[] TIME_LIMIT_OPTIONS = { 0, 5, 10, 15 };
         public const int DEFAULT_TIME_LIMIT = 10;
         const string TIME_LIMIT_PREF = "Airsoft.TimeLimit";
-        const string MATCH_SCENE = "AirsoftArena";
+        const string MATCH_SCENE = "AirsoftArena";   // default map; the lobby vote picks MatchScene (MatchNetMapVote)
         const string LOBBY_SCENE = "AirsoftLobby";
         // The map scene the next / current match is played on (objective modes check its MapLayout).
-        public static string CurrentMapScene => MATCH_SCENE;
+        // In the lobby: the map the vote currently picks; in a match: the map being played (MatchNetMapVote).
+        public static string CurrentMapScene => Instance != null ? Instance.VotedOrMatchScene : MATCH_SCENE;
 
         const string MSG_NAME  = "mn_name";   // client -> server
         const string MSG_READY = "mn_ready";  // client -> server
@@ -283,6 +284,7 @@ namespace AirsoftFPS
         {
             if (!IsHost) return;
             if (!ObjectiveMode.IsAvailable(Mode, out _)) return;   // lobby shows why on the mode card
+            ChooseMatchMap();   // lobby map vote (MatchNetMapVote)
             EnemiesEnabled = (Mode == GameModeType.Coop);
             CurrentPhase = Phase.InMatch;
             WinnerClientId = ulong.MaxValue;
@@ -301,7 +303,7 @@ namespace AirsoftFPS
                 roster[i] = e;
             }
             BroadcastState();
-            nm.SceneManager.LoadScene(MATCH_SCENE, LoadSceneMode.Single);
+            nm.SceneManager.LoadScene(MatchScene, LoadSceneMode.Single);
         }
 
         // ───────────────────────── Server-side match logic ─────────────────────────
@@ -391,7 +393,7 @@ namespace AirsoftFPS
             double now = nm.ServerTime.Time;
             if (MatchEndTime <= 0)
             {
-                if (SceneManager.GetActiveScene().name != MATCH_SCENE) return;
+                if (SceneManager.GetActiveScene().name != MatchScene) return;
                 MatchEndTime = now + TimeLimitMinutes * 60.0;
                 BroadcastState();
                 return;
@@ -463,6 +465,7 @@ namespace AirsoftFPS
             {
                 var e = roster[i]; e.ready = false; e.kills = 0; e.deaths = 0; e.team = 0; roster[i] = e;
             }
+            ResetMapVote();
             BroadcastState();
             nm.SceneManager.LoadScene(LOBBY_SCENE, LoadSceneMode.Single);
         }
@@ -478,6 +481,7 @@ namespace AirsoftFPS
             cm.RegisterNamedMessageHandler(MSG_NAME,  OnServerRecvName);
             cm.RegisterNamedMessageHandler(MSG_READY, OnServerRecvReady);
             cm.RegisterNamedMessageHandler(MSG_LOOK,  OnServerRecvLook);
+            RegisterMapVoteServerHandlers(cm);
             serverHandlersUp = true;
 
             // Make sure the host's own entry exists.
@@ -491,6 +495,7 @@ namespace AirsoftFPS
             nm.CustomMessagingManager.RegisterNamedMessageHandler(MSG_STATE, OnClientRecvState);
             nm.CustomMessagingManager.RegisterNamedMessageHandler(MSG_KILL, OnClientRecvKill);
             nm.CustomMessagingManager.RegisterNamedMessageHandler(MSG_DEATH, OnClientRecvDeath);
+            RegisterMapVoteClientHandlers(nm.CustomMessagingManager);
             clientHandlersUp = true;
         }
 
@@ -513,7 +518,7 @@ namespace AirsoftFPS
 
         void HandleClientDisconnected(ulong clientId)
         {
-            if (nm == null || !nm.IsServer) return;
+            if (nm == null || !nm.IsServer || nm.ShutdownInProgress) return;
             for (int i = roster.Count - 1; i >= 0; i--)
                 if (roster[i].clientId == clientId) roster.RemoveAt(i);
             BroadcastState();
@@ -522,6 +527,7 @@ namespace AirsoftFPS
         void HandleClientStopped(bool wasHost)
         {
             // Session ended locally -- wipe state so a fresh lobby starts clean.
+            CancelInvoke(nameof(ReturnToLobby));
             roster.Clear();
             CurrentPhase = Phase.Lobby;
             WinnerClientId = ulong.MaxValue;
@@ -530,6 +536,7 @@ namespace AirsoftFPS
             EndedOnTime = false;
             MatchEndTime = 0;
             LastDeath = default;
+            ClearMapVoteState();
             serverHandlersUp = false;
             clientHandlersUp = false;
             OnStateChanged?.Invoke();
@@ -565,14 +572,22 @@ namespace AirsoftFPS
         void EnsureEntry(ulong clientId)
         {
             foreach (var e in roster) if (e.clientId == clientId) return;
-            roster.Add(new Entry { clientId = clientId, name = DefaultName(clientId), ready = false, kills = 0, deaths = 0, look = (nm != null && clientId == nm.LocalClientId) ? localLook : -1 });
+            // A late joiner in a running team match goes to the smaller team (Red on a tie).
+            int team = 0;
+            if (CurrentPhase == Phase.InMatch && TeamMode)
+            {
+                int red = 0, blue = 0;
+                foreach (var e in roster) { if (e.team == 1) red++; else if (e.team == 2) blue++; }
+                team = red <= blue ? 1 : 2;
+            }
+            roster.Add(new Entry { clientId = clientId, name = DefaultName(clientId), ready = false, kills = 0, deaths = 0, team = team, look = (nm != null && clientId == nm.LocalClientId) ? localLook : -1 });
         }
 
         void BroadcastState()
         {
             OnStateChanged?.Invoke(); // refresh the host's own UI immediately
 
-            if (nm == null || !nm.IsServer) return;
+            if (nm == null || !nm.IsServer || nm.ShutdownInProgress || nm.CustomMessagingManager == null) return;
 
             using var w = new FastBufferWriter(1024, Allocator.Temp, 64 * 1024);
             w.WriteValueSafe((byte)Mode);
@@ -594,6 +609,7 @@ namespace AirsoftFPS
                 w.WriteValueSafe(e.look);
             }
             nm.CustomMessagingManager.SendNamedMessageToAll(MSG_STATE, w, NetworkDelivery.Reliable);
+            SendMapVoteState();
         }
 
         void OnClientRecvState(ulong sender, FastBufferReader reader)
