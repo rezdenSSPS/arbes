@@ -123,6 +123,7 @@ namespace AirsoftFPS
                 {
                     state.pos = hit.point;
                     Stop(hit.point);
+                    AirsoftAudio.Impact(hit);   // every peer flies its own copy of each BB: one impact sound each
                     var cb = onHit;
                     onHit = null;
                     cb?.Invoke(hit);

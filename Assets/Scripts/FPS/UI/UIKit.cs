@@ -533,6 +533,7 @@ namespace AirsoftFPS
             check.gameObject.SetActive(on);
             tg.onValueChanged.AddListener(v => check.gameObject.SetActive(v));
             if (changed != null) tg.onValueChanged.AddListener(changed);
+            row.gameObject.AddComponent<UISound>();
             return tg;
         }
 
@@ -594,6 +595,7 @@ namespace AirsoftFPS
             s.minValue = min; s.maxValue = max; s.wholeNumbers = whole;
             s.SetValueWithoutNotify(value);
             if (changed != null) s.onValueChanged.AddListener(changed);
+            rt.gameObject.AddComponent<UISound>().hover = false;
             return s;
         }
 
@@ -723,6 +725,18 @@ namespace AirsoftFPS
 
         public void SetSelectedLook(bool on) { selectedLook = on; Refresh(true); }
 
+        public override void OnPointerEnter(PointerEventData e)
+        {
+            base.OnPointerEnter(e);
+            if (IsInteractable()) AirsoftAudio.UiHover();
+        }
+
+        public override void OnPointerClick(PointerEventData e)
+        {
+            if (IsInteractable() && e.button == PointerEventData.InputButton.Left) AirsoftAudio.UiClick(style);
+            base.OnPointerClick(e);
+        }
+
         public void SetLabel(string s) { if (label) label.text = s; }
 
         public void Refresh(bool instant = true) => DoStateTransition(currentSelectionState, instant);
@@ -769,6 +783,10 @@ namespace AirsoftFPS
     public class UIClick : MonoBehaviour, IPointerClickHandler
     {
         public System.Action onClick;
-        public void OnPointerClick(PointerEventData e) => onClick?.Invoke();
+        public void OnPointerClick(PointerEventData e)
+        {
+            AirsoftAudio.Play2D("ui_click", 0.55f, AirsoftAudio.Bus.Ui, 0f, 0.03f);
+            onClick?.Invoke();
+        }
     }
 }

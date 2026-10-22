@@ -26,6 +26,7 @@ namespace AirsoftFPS
         float nextFireTime;
         bool isReloading;
         float reloadEndTime;
+        int reloadSfx;           // reload sounds played so far (0 = mag out, 1 = mag in, 2 = rack)
         bool isAiming;
 
         FPSController fpsController;
@@ -204,6 +205,8 @@ namespace AirsoftFPS
         void OnWeaponChanged(int prev, int next)
         {
             SwitchToWeapon(next);
+            if (IsOwner) AirsoftAudio.Play2D("switch", 0.5f, AirsoftAudio.Bus.Sfx, 0.04f);
+            else AirsoftAudio.PlayAt("switch", transform.position + Vector3.up * 1.3f, 0.4f, 1.5f, 12f);
         }
 
         void SwitchToWeapon(int idx)
@@ -412,6 +415,12 @@ namespace AirsoftFPS
         {
             if (isReloading)
             {
+                // mag in a bit past halfway, then (gas / spring guns) the slide or bolt
+                var rw = weapons[currentIndex];
+                float done = 1f - (reloadEndTime - Time.time) / Mathf.Max(0.01f, rw.reloadTime);
+                if (reloadSfx == 0 && done >= 0.55f) { reloadSfx = 1; AirsoftAudio.Play2D("reload_in", 0.6f, AirsoftAudio.Bus.Sfx, 0.04f); }
+                if (reloadSfx == 1 && done >= 0.85f && AirsoftAudio.ShotKind(rw) != "aeg")
+                { reloadSfx = 2; AirsoftAudio.Play2D("reload_rack", 0.55f, AirsoftAudio.Bus.Sfx, 0.04f); }
                 if (Time.time >= reloadEndTime)
                 {
                     int need = weapons[currentIndex].magSize - ammoInMag;
@@ -436,6 +445,8 @@ namespace AirsoftFPS
         {
             isReloading = true;
             reloadEndTime = Time.time + weapons[currentIndex].reloadTime;
+            reloadSfx = 0;
+            AirsoftAudio.Play2D("reload_out", 0.55f, AirsoftAudio.Bus.Sfx, 0.04f);
         }
 
         void HandleAim()
@@ -464,6 +475,8 @@ namespace AirsoftFPS
 
             var w = weapons[currentIndex];
             bool fireInput = w.isAutomatic ? mouse.leftButton.isPressed : mouse.leftButton.wasPressedThisFrame;
+            if (mouse.leftButton.wasPressedThisFrame && ammoInMag <= 0 && Time.time >= nextFireTime)
+                AirsoftAudio.Play2D("dryfire", 0.6f, AirsoftAudio.Bus.Sfx, 0.05f, 0.1f);   // empty: click
 
             if (fireInput && Time.time >= nextFireTime && ammoInMag > 0)
             {
@@ -513,6 +526,7 @@ namespace AirsoftFPS
             bool aimed = isAiming;
 
             ShootRpc(shot, weaponIdx, origin, dir, seed, aimed);
+            AirsoftAudio.Shot(w, origin, true);
             SpawnBBs(w, origin, dir, seed, aimed, hit =>
             {
                 if (this == null) return;   // player despawned while the BB was in the air
@@ -636,7 +650,10 @@ namespace AirsoftFPS
         {
             // Remote players fly a visual-only copy of the same BBs (the owner already has its own).
             if (!IsOwner && weapons != null && weaponIdx >= 0 && weaponIdx < weapons.Length)
+            {
                 SpawnBBs(weapons[weaponIdx], origin, dir, seed, aimed, null);
+                AirsoftAudio.Shot(weapons[weaponIdx], origin, false);
+            }
 
             // Visible muzzle flash on every client (disabled by the timer in Update)
             muzzleFlashTimer = 0.05f;
@@ -779,6 +796,7 @@ namespace AirsoftFPS
         [Rpc(SendTo.SpecifiedInParams)]
         void HitConfirmRpc(Vector3 point, RpcParams rpcParams = default)
         {
+            AirsoftAudio.Play2D("hitmarker", 0.7f, AirsoftAudio.Bus.Sfx, 0.02f, 0.03f);
             OnHitMarker?.Invoke(point);
         }
 

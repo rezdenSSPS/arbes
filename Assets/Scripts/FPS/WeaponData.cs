@@ -25,6 +25,10 @@ namespace AirsoftFPS
         public string shortName;
         public float modelLength = 0.6f; // metres, barrel tip to stock
 
+        // Firing sound family (Resources/AirsoftAudio/Sfx/shot_<sound>_N): aeg (electric), gbb (gas
+        // blowback), co2, shotgun (spring pump), springbolt, sniper (spring bolt-action, loudest).
+        public string sound = "aeg";
+
         // BB ballistics (see BBBallistics). Tuned so a level shot stays flat for the first
         // ~60% of `range`, then drops away; long shots take ~1 s, so a moving target can dodge.
         public float muzzleVelocity = 100f; // m/s at the muzzle
@@ -43,7 +47,7 @@ namespace AirsoftFPS
             {
                 // 1. Gas blowback pistol, 15-round gas magazine; snappy blowback, short hop.
                 new WeaponData {
-                    weaponName = "1911 GBB Pistol", shortName = "1911 GBB", model = "Pistol", modelLength = 0.22f,
+                    weaponName = "1911 GBB Pistol", shortName = "1911 GBB", model = "Pistol", modelLength = 0.22f, sound = "gbb",
                     damage = 25, fireRate = 5f, reloadTime = 1.5f, magSize = 15, maxReserve = 75,
                     spread = 1.4f, range = 45f, isAutomatic = false, pelletsPerShot = 1,
                     recoilUp = 3.5f, recoilSide = 1f, aimFOV = 0f, moveSpeedMult = 1f,
@@ -51,7 +55,7 @@ namespace AirsoftFPS
                 },
                 // 2. CO2 revolver, 6 shells; hard hitting but slow double-action pull, shell-by-shell reload.
                 new WeaponData {
-                    weaponName = "CO2 Revolver", shortName = "Revolver", model = "Revolver", modelLength = 0.3f,
+                    weaponName = "CO2 Revolver", shortName = "Revolver", model = "Revolver", modelLength = 0.3f, sound = "co2",
                     damage = 50, fireRate = 2f, reloadTime = 2.4f, magSize = 6, maxReserve = 36,
                     spread = 0.9f, range = 55f, isAutomatic = false, pelletsPerShot = 1,
                     recoilUp = 4.5f, recoilSide = 1f, aimFOV = 0f, moveSpeedMult = 1f,
@@ -59,7 +63,7 @@ namespace AirsoftFPS
                 },
                 // 3. Compact gas blowback SMG, full auto, 32-round gas stick; very fast but sprays.
                 new WeaponData {
-                    weaponName = "Uzi GBB SMG", shortName = "Uzi GBB", model = "Uzi", modelLength = 0.36f,
+                    weaponName = "Uzi GBB SMG", shortName = "Uzi GBB", model = "Uzi", modelLength = 0.36f, sound = "gbb",
                     damage = 17, fireRate = 15f, reloadTime = 1.8f, magSize = 32, maxReserve = 160,
                     spread = 2.6f, range = 45f, isAutomatic = true, pelletsPerShot = 1,
                     recoilUp = 2.2f, recoilSide = 1.3f, aimFOV = 0f, moveSpeedMult = 1f,
@@ -67,7 +71,7 @@ namespace AirsoftFPS
                 },
                 // 4. Electric PDW, 68-round mid-cap; smooth AEG, almost no kick.
                 new WeaponData {
-                    weaponName = "P90 AEG", shortName = "P90 AEG", model = "P90", modelLength = 0.5f,
+                    weaponName = "P90 AEG", shortName = "P90 AEG", model = "P90", modelLength = 0.5f, sound = "aeg",
                     damage = 19, fireRate = 13f, reloadTime = 2.2f, magSize = 68, maxReserve = 204,
                     spread = 2f, range = 60f, isAutomatic = true, pelletsPerShot = 1,
                     recoilUp = 1.2f, recoilSide = 0.8f, aimFOV = 0f, moveSpeedMult = 0.97f,
@@ -75,7 +79,7 @@ namespace AirsoftFPS
                 },
                 // 5. Spring pump shotgun, 3 BBs per pump; a 30-BB shell = 10 shots.
                 new WeaponData {
-                    weaponName = "M870 Spring Shotgun", shortName = "Shotgun", model = "Shotgun", modelLength = 0.85f,
+                    weaponName = "M870 Spring Shotgun", shortName = "Shotgun", model = "Shotgun", modelLength = 0.85f, sound = "shotgun",
                     damage = 34, fireRate = 1.25f, reloadTime = 2f, magSize = 10, maxReserve = 40,
                     spread = 4.5f, range = 32f, isAutomatic = false, pelletsPerShot = 3,
                     recoilUp = 5f, recoilSide = 1.5f, aimFOV = 0f, moveSpeedMult = 0.92f,
@@ -83,7 +87,7 @@ namespace AirsoftFPS
                 },
                 // 6. Electric assault rifle (folding stock AK), 120-round mid-cap, iron sights.
                 new WeaponData {
-                    weaponName = "AK AEG", shortName = "AK AEG", model = "AK47", modelLength = 0.68f,
+                    weaponName = "AK AEG", shortName = "AK AEG", model = "AK47", modelLength = 0.68f, sound = "aeg",
                     damage = 22, fireRate = 12f, reloadTime = 2.5f, magSize = 120, maxReserve = 240,
                     spread = 1.7f, range = 80f, isAutomatic = true, pelletsPerShot = 1,
                     recoilUp = 1.8f, recoilSide = 1f, aimFOV = 50f, moveSpeedMult = 0.9f,
@@ -91,7 +95,7 @@ namespace AirsoftFPS
                 },
                 // 7. Support AEG (RPK style), 300-round box mag; long wind-up reload, heavy to carry.
                 new WeaponData {
-                    weaponName = "RPK Support AEG", shortName = "RPK AEG", model = "AK47", modelLength = 0.88f,
+                    weaponName = "RPK Support AEG", shortName = "RPK AEG", model = "AK47", modelLength = 0.88f, sound = "aeg",
                     damage = 18, fireRate = 14f, reloadTime = 4.5f, magSize = 300, maxReserve = 300,
                     spread = 2.6f, range = 85f, isAutomatic = true, pelletsPerShot = 1,
                     recoilUp = 1.5f, recoilSide = 1.2f, aimFOV = 55f, moveSpeedMult = 0.75f,
@@ -99,7 +103,7 @@ namespace AirsoftFPS
                 },
                 // 8. Designated marksman: semi-only AEG with a tight barrel, 50-round mid-cap.
                 new WeaponData {
-                    weaponName = "M14 DMR", shortName = "M14 DMR", model = "Rifle", modelLength = 0.9f,
+                    weaponName = "M14 DMR", shortName = "M14 DMR", model = "Rifle", modelLength = 0.9f, sound = "aeg",
                     damage = 40, fireRate = 4f, reloadTime = 2.4f, magSize = 50, maxReserve = 150,
                     spread = 0.6f, range = 105f, isAutomatic = false, pelletsPerShot = 1,
                     recoilUp = 2.5f, recoilSide = 0.6f, aimFOV = 38f, moveSpeedMult = 0.86f,
@@ -107,7 +111,7 @@ namespace AirsoftFPS
                 },
                 // 9. Spring bolt-action rifle on iron sights, 25-round mag; quick to cycle.
                 new WeaponData {
-                    weaponName = "Spring Bolt Rifle", shortName = "Bolt Rfl", model = "BoltRifle", modelLength = 0.95f,
+                    weaponName = "Spring Bolt Rifle", shortName = "Bolt Rfl", model = "BoltRifle", modelLength = 0.95f, sound = "springbolt",
                     damage = 55, fireRate = 1.3f, reloadTime = 2.5f, magSize = 25, maxReserve = 75,
                     spread = 0.4f, range = 110f, isAutomatic = false, pelletsPerShot = 1,
                     recoilUp = 4f, recoilSide = 0.5f, aimFOV = 45f, moveSpeedMult = 0.88f,
@@ -115,7 +119,7 @@ namespace AirsoftFPS
                 },
                 // 10. Scoped spring bolt-action sniper (L96 style), 30-round mag; one hit, slow bolt.
                 new WeaponData {
-                    weaponName = "L96 Spring Sniper", shortName = "Sniper", model = "SniperRifle", modelLength = 1.0f,
+                    weaponName = "L96 Spring Sniper", shortName = "Sniper", model = "SniperRifle", modelLength = 1.0f, sound = "sniper",
                     damage = 100, fireRate = 0.75f, reloadTime = 3f, magSize = 30, maxReserve = 60,
                     spread = 0.15f, range = 130f, isAutomatic = false, pelletsPerShot = 1,
                     recoilUp = 5f, recoilSide = 0.4f, aimFOV = 20f, moveSpeedMult = 0.8f,
