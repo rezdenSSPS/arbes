@@ -105,6 +105,7 @@ namespace AirsoftFPS
         Image deathSwatch;
         TextMeshProUGUI deathBy, deathHp, deathSeconds;
         Image deathFill;
+        TextMeshProUGUI deathRespawnIn, deathRespawnNote;   // round modes rewrite these ("Out until the next round")
 
         // killcam overlay
         Image kcSwatch, kcFill;
@@ -244,7 +245,8 @@ namespace AirsoftFPS
             hudRoot.SetActive(!results && !isPaused && !killcam);
             resultsScreen.SetActive(results);
             pauseScreen.SetActive(isPaused && !results);
-            deathScreen.SetActive(dead && !killcam && !results && !isPaused && !showScores);
+            deathScreen.SetActive(dead && !killcam && !results && !isPaused && !showScores
+                                  && !ObjectiveMode.LocalSpectating);   // round modes: watching a teammate
             killcamScreen.SetActive(killcam && !results && !isPaused && !showScores);
             scoreboard.SetActive(showScores);
             hitScreen.SetActive(hit && !heldOut && !results && !isPaused && !showScores);
@@ -551,7 +553,7 @@ namespace AirsoftFPS
             MatchNet.GameModeType.FreeForAll => "first to " + MatchNet.FFA_KILL_TARGET + " kills",
             MatchNet.GameModeType.GunGame => "finish all " + MatchNet.GUNGAME_WEAPONS + " weapons",
             MatchNet.GameModeType.Milsim => "first team to " + MatchNet.MILSIM_HIT_TARGET + " hits",
-            MatchNet.GameModeType.CaptureTheFlag or MatchNet.GameModeType.Domination
+            _ when ObjectiveMode.HasObjective(m)   // CTF, Domination, Bomb, VIP escort
                 => "first team to " + ObjectiveMode.TargetFor(m) + ObjectiveMode.UnitFor(m),
             MatchNet.GameModeType.Medic => "medics revive · out of tickets and players = lose",
             _ => "survive the waves together"
@@ -560,7 +562,18 @@ namespace AirsoftFPS
         void UpdateDeath(bool killcam)
         {
             float delay = playerHealth != null ? playerHealth.respawnDelay : 3f;
-            float left = Mathf.Max(0f, delay - (Time.unscaledTime - deathTime));
+            // round modes (Bomb, VIP escort) decide the respawn: a longer delay, or out until the next round
+            bool held = false;
+            if (ObjectiveMode.LocalRespawnRule(out float objDelay, out string heldText))
+            {
+                if (objDelay < 0f) held = true; else delay = objDelay;
+                deathRespawnIn.text = held ? heldText : "Respawning in";
+                deathRespawnNote.text = held ? "No respawns during the round." : "Full health on respawn.";
+            }
+            else { deathRespawnIn.text = "Respawning in"; deathRespawnNote.text = "Full health on respawn."; }
+            float left = held ? 0f : Mathf.Max(0f, delay - (Time.unscaledTime - deathTime));
+            deathSeconds.gameObject.SetActive(!held);
+            deathFill.transform.parent.gameObject.SetActive(!held);
             deathSeconds.text = Mathf.CeilToInt(left).ToString();
             SetBar(deathFill, 1f - left / Mathf.Max(0.01f, delay));
 
@@ -590,7 +603,7 @@ namespace AirsoftFPS
             kcBy.text = by;
             kcHpBlock.SetActive(hasHp);
             if (hasHp) kcHp.text = $"{info.killerHp}<size=16><color={Html(Muted)}> / {info.killerMaxHp}</color></size>";
-            kcSeconds.text = "Respawning in " + Mathf.CeilToInt(left);
+            kcSeconds.text = held ? deathRespawnIn.text : "Respawning in " + Mathf.CeilToInt(left);
             SetBar(kcFill, killCam.Progress);
         }
 
@@ -607,6 +620,8 @@ namespace AirsoftFPS
                 case MatchNet.GameModeType.CaptureTheFlag:
                 case MatchNet.GameModeType.Domination:
                 case MatchNet.GameModeType.Medic:
+                case MatchNet.GameModeType.Bomb:
+                case MatchNet.GameModeType.VipEscort:
                     pauseScore.text = $"<color={Html(Red)}>{mnet.TeamScore(1)}</color> <color={Html(Faint)}>:</color> <color={Html(Blue)}>{mnet.TeamScore(2)}</color>";
                     break;
                 case MatchNet.GameModeType.GunGame:
@@ -1002,11 +1017,12 @@ namespace AirsoftFPS
             var resp = VCol(col.transform, "Respawn", 12, TextAnchor.MiddleCenter, true);
             resp.LE(360, -1);
             var rr = HRow(resp.transform, "Row", 10, TextAnchor.LowerCenter);
-            Label(rr.transform, "Respawning in", F.Body, 15, TextSoft, TextAlignmentOptions.BottomLeft).margin = new Vector4(0, 0, 0, 6);
+            deathRespawnIn = Label(rr.transform, "Respawning in", F.Body, 15, TextSoft, TextAlignmentOptions.BottomLeft);
+            deathRespawnIn.margin = new Vector4(0, 0, 0, 6);
             deathSeconds = Label(rr.transform, "3", F.CondBlack, 44, Accent, TextAlignmentOptions.BottomLeft);
             deathFill = Bar(resp.transform, "Bar", Line, Accent);
             deathFill.transform.parent.GetComponent<Image>().LE(-1, 6);
-            Label(resp.transform, "Full health on respawn.", F.Body, 13, Muted, TextAlignmentOptions.Center);
+            deathRespawnNote = Label(resp.transform, "Full health on respawn.", F.Body, 13, Muted, TextAlignmentOptions.Center);
 
             var tab = HRow(screen, "TabHint", 8, TextAnchor.MiddleRight);
             tab.GetComponent<RectTransform>().At(1f, 0f, -24, 24, 300, 24);
@@ -1311,7 +1327,7 @@ namespace AirsoftFPS
             ctr.gameObject.AddComponent<Image>().color = Scrim(0.86f);
             Frame(ctr.transform, Line, 1f).gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
             Caption(ctr.transform, "CONTROLS", 11, Muted, 0.16f).LE(-1, 14);
-            var grid = Rect(ctr.transform, "Grid").LE(-1, 5 * 30);
+            var grid = Rect(ctr.transform, "Grid").LE(-1, (Binds.Length + 1) / 2 * 30);
             for (int i = 0; i < Binds.Length; i++)
             {
                 int c = i % 2, r = i / 2;

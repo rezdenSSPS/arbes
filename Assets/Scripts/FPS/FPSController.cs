@@ -31,12 +31,14 @@ namespace AirsoftFPS
         float standHeight = 2f;
         float crouchHeight = 1.2f;
         float speedMultiplier = 1f; // set by weapon weight
+        Health health;
 
         public bool IsSprinting { get; private set; }
 
         public override void OnNetworkSpawn()
         {
             cc = GetComponent<CharacterController>();
+            health = GetComponent<Health>();
 
             // Customisable low-poly character (visual only)
             if (GetComponent<PlayerAvatar>() == null) gameObject.AddComponent<PlayerAvatar>();
@@ -67,6 +69,10 @@ namespace AirsoftFPS
 
         void Update()
         {
+            // a dead body doesn't block anyone (round modes keep players down for a while)
+            bool dead = health != null && health.IsSpawned && health.isDead.Value;
+            if (cc != null && cc.detectCollisions == dead) cc.detectCollisions = !dead;
+
             if (!IsOwner) return;
             if (cc == null) return;
             if (playerCamera && !playerCamera.gameObject.activeSelf)
@@ -117,7 +123,8 @@ namespace AirsoftFPS
                 velocity.y = -2f;
 
             bool downed = ObjectiveMode.IsDowned(OwnerClientId);   // Medic: down in place until revived / bled out
-            bool input = !HUDManager.InputBlocked && !downed;
+            bool input = !HUDManager.InputBlocked && !downed
+                         && !(health != null && health.IsSpawned && health.isDead.Value);   // dead: no walking around
             float h = 0f;
             float v = 0f;
             if (input && kb.dKey.isPressed) h += 1f;
@@ -150,7 +157,7 @@ namespace AirsoftFPS
             }
 
             float speed = isCrouching ? crouchSpeed : (IsSprinting ? sprintSpeed : walkSpeed);
-            speed *= speedMultiplier;
+            speed *= speedMultiplier * ObjectiveMode.SpeedFactor(OwnerClientId);   // e.g. frozen before a round, slower VIP
 
             Vector3 move = transform.right * h + transform.forward * v;
             if (move.sqrMagnitude > 1f) move.Normalize();

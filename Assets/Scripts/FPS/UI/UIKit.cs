@@ -644,6 +644,8 @@ namespace AirsoftFPS
             MatchNet.GameModeType.CaptureTheFlag => "Capture the Flag",
             MatchNet.GameModeType.Domination => "Domination",
             MatchNet.GameModeType.Medic => "Medic",
+            MatchNet.GameModeType.Bomb => "Bomb",
+            MatchNet.GameModeType.VipEscort => "VIP Escort",
             _ => "Co-op Survival"
         };
 
@@ -656,6 +658,8 @@ namespace AirsoftFPS
             MatchNet.GameModeType.CaptureTheFlag => $"Grab the enemy flag, bring it home. First to {CaptureTheFlag.CAPTURE_TARGET}.",
             MatchNet.GameModeType.Domination => $"Hold points A, B and C to score. First to {Domination.SCORE_TARGET}.",
             MatchNet.GameModeType.Medic => $"One BB = down. Medics revive (hold E). {Medic.BASE_TICKETS} tickets.",
+            MatchNet.GameModeType.Bomb => $"Plant at A or B, or defuse it. No respawns. First to {BombMode.ROUNDS_TO_WIN} rounds.",
+            MatchNet.GameModeType.VipEscort => $"Escort your VIP to the extraction, or take them down. First to {VipEscort.ROUNDS_TO_WIN}.",
             _ => "Team up against waves of AI enemies."
         };
 
@@ -663,7 +667,7 @@ namespace AirsoftFPS
         {
             ("Move", "W A S D"), ("Sprint", "SHIFT"), ("Crouch", "C / CTRL"), ("Jump", "SPACE"),
             ("Fire", "LMB"), ("Aim / scope", "RMB"), ("Reload", "R"), ("Weapons", "1 – 0"),
-            ("Scoreboard", "TAB"), ("Pause", "ESC")
+            ("Scoreboard", "TAB"), ("Interact", "E"), ("Pause", "ESC")
         };
     }
 

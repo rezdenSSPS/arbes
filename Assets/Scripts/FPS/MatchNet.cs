@@ -15,8 +15,8 @@ namespace AirsoftFPS
     // the whole state to clients whenever it changes.
     public partial class MatchNet : MonoBehaviour   // bots: MatchNet.Bots.cs, map vote: MatchNetMapVote.cs
     {
-        public enum GameModeType { Coop = 0, FreeForAll = 1, TeamDeathmatch = 2, GunGame = 3, Milsim = 4, CaptureTheFlag = 5, Domination = 6, Medic = 7 }
-        public const int MODE_COUNT = 8;
+        public enum GameModeType { Coop = 0, FreeForAll = 1, TeamDeathmatch = 2, GunGame = 3, Milsim = 4, CaptureTheFlag = 5, Domination = 6, Medic = 7, Bomb = 8, VipEscort = 9 }
+        public const int MODE_COUNT = 10;
         public enum Phase { Lobby = 0, InMatch = 1, Results = 2 }
 
         public struct Entry
@@ -250,7 +250,8 @@ namespace AirsoftFPS
         }
 
         // True when the current mode plays with the time limit (Co-op never does).
-        public bool UsesTimeLimit => Mode != GameModeType.Coop && TimeLimitMinutes > 0;
+        public bool UsesTimeLimit => Mode != GameModeType.Coop && TimeLimitMinutes > 0
+                                     && !ObjectiveMode.HasOwnClock(Mode);   // Bomb / VIP: timed rounds instead
 
         // Seconds left on the match clock (valid on everyone), or -1 when there is no clock.
         // While the arena is still loading it reads the full limit.
@@ -758,10 +759,11 @@ namespace AirsoftFPS
             foreach (var e in roster) if (e.clientId == clientId) return e.kills;
             return 0;
         }
-        // Red vs Blue modes (Team Deathmatch, Milsim, Capture the Flag, Domination).
+        // Red vs Blue modes (Team Deathmatch, Milsim, Capture the Flag, Domination, Bomb, VIP escort).
         public static bool IsTeamMode(GameModeType m) => m == GameModeType.TeamDeathmatch || m == GameModeType.Milsim
                                                          || m == GameModeType.CaptureTheFlag || m == GameModeType.Domination
-                                                         || m == GameModeType.Medic;
+                                                         || m == GameModeType.Medic
+                                                         || m == GameModeType.Bomb || m == GameModeType.VipEscort;
         public bool TeamMode => IsTeamMode(Mode);
         public bool IsMilsim => Mode == GameModeType.Milsim;
         // One BB = out with a raised hand (Milsim, and objective modes built on it such as Medic).

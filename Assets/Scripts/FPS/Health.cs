@@ -92,12 +92,12 @@ namespace AirsoftFPS
             OnHealthChanged?.Invoke(currentHealth.Value, maxHealth);
         }
 
-        // HIT players don't stop BBs: the BB flies on through them (BBBallistics.CastSegment).
+        // HIT (and dead) players don't stop BBs: the BB flies on through them (BBBallistics.CastSegment).
         public static bool PassesBBs(Collider c)
         {
             if (c == null) return false;
             var h = c.GetComponentInParent<Health>();
-            return h != null && h.IsSpawned && h.isHit.Value;
+            return h != null && h.IsSpawned && (h.isHit.Value || h.isDead.Value);
         }
 
         public void TakeDamage(int amount, ulong attackerClientId) => TakeDamage(amount, attackerClientId, "");
@@ -145,6 +145,8 @@ namespace AirsoftFPS
         void Respawn()
         {
             if (!IsServer) return;
+            // round modes (Bomb, VIP escort): stay down until the mode lets you back in
+            if (IsCombatant && ObjectiveMode.HoldsRespawn(MatchId)) { Invoke(nameof(Respawn), 0.25f); return; }
 
             // Team side / away from enemies (PlayerSpawner). The owner moves the player: its
             // ClientNetworkTransform is owner-authoritative, so a server-side move would be undone.
@@ -154,6 +156,22 @@ namespace AirsoftFPS
             else RespawnTeleportRpc(spawn.position, spawn.rotation);
 
             currentHealth.Value = maxHealth;
+            StartSpawnProtection();
+            isDead.Value = false;
+        }
+
+        // Server: bring this player back right now at pose, alive with full health (round modes: everyone
+        // at their side when a new round starts, dead or alive).
+        public void ServerForceRespawn(Pose pose)
+        {
+            if (!IsServer || !IsSpawned) return;
+            CancelInvoke(nameof(Respawn));
+            var bot = IsBot ? GetComponent<BotBrain>() : null;
+            if (bot != null) bot.Teleport(pose.position, pose.rotation);
+            else RespawnTeleportRpc(pose.position, pose.rotation);
+            currentHealth.Value = maxHealth;
+            hitRespawnAt.Value = 0;
+            isHit.Value = false;
             StartSpawnProtection();
             isDead.Value = false;
         }

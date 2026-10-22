@@ -322,6 +322,14 @@ namespace AirsoftFPS
                 return;
             }
 
+            // objective modes (VIP escort: sidearms only): off-limits weapons are skipped
+            if (!ObjectiveMode.WeaponAllowed(OwnerClientId, weapons[currentIndex]))
+            {
+                int ok = NextAllowedWeapon(currentIndex, 1);
+                if (ok != currentIndex) SwitchWeaponRpc(ok);
+                return;
+            }
+
             var kb = Keyboard.current;
             if (kb == null) return;
 
@@ -330,7 +338,7 @@ namespace AirsoftFPS
                 int weaponIdx = i < 9 ? i : 9;
                 if (kb[digitKeys[i]].wasPressedThisFrame)
                 {
-                    if (weaponIdx != currentIndex)
+                    if (weaponIdx != currentIndex && ObjectiveMode.WeaponAllowed(OwnerClientId, weapons[weaponIdx]))
                         SwitchWeaponRpc(weaponIdx);
                     return;
                 }
@@ -342,14 +350,40 @@ namespace AirsoftFPS
             float scroll = mouse.scroll.y.ReadValue();
             if (scroll > 1f)
             {
-                int next = (currentIndex + 1) % weapons.Length;
-                SwitchWeaponRpc(next);
+                int next = NextAllowedWeapon((currentIndex + 1) % weapons.Length, 1);
+                if (next != currentIndex) SwitchWeaponRpc(next);
             }
             else if (scroll < -1f)
             {
-                int prev = (currentIndex - 1 + weapons.Length) % weapons.Length;
-                SwitchWeaponRpc(prev);
+                int prev = NextAllowedWeapon((currentIndex - 1 + weapons.Length) % weapons.Length, -1);
+                if (prev != currentIndex) SwitchWeaponRpc(prev);
             }
+        }
+
+        // First weapon from `from` (stepping by dir) this player may use right now (ObjectiveMode.WeaponAllowed).
+        int NextAllowedWeapon(int from, int dir)
+        {
+            for (int k = 0; k < weapons.Length; k++)
+            {
+                int i = ((from + dir * k) % weapons.Length + weapons.Length) % weapons.Length;
+                if (ObjectiveMode.WeaponAllowed(OwnerClientId, weapons[i])) return i;
+            }
+            return currentIndex;
+        }
+
+        // Owner: full magazines and reserves again (round modes, when a new round starts).
+        public void RefillAmmo()
+        {
+            if (weapons == null || magAmmos == null) return;
+            for (int i = 0; i < weapons.Length; i++)
+            {
+                magAmmos[i] = weapons[i].magSize;
+                reserveAmmos[i] = weapons[i].maxReserve;
+            }
+            ammoInMag = magAmmos[currentIndex];
+            ammoReserve = reserveAmmos[currentIndex];
+            isReloading = false;
+            NotifyAmmo();
         }
 
         [Rpc(SendTo.Server)]
@@ -360,6 +394,7 @@ namespace AirsoftFPS
             if (MatchNet.Instance != null && MatchNet.Instance.Mode == MatchNet.GameModeType.GunGame &&
                 idx != Mathf.Clamp(MatchNet.Instance.GunLevelOf(OwnerClientId), 0, weapons.Length - 1))
                 return;
+            if (idx >= 0 && idx < weapons.Length && !ObjectiveMode.WeaponAllowed(OwnerClientId, weapons[idx])) return;
             if (idx >= 0 && idx < weapons.Length)
             {
                 magAmmos[currentIndex] = ammoInMag;
@@ -564,6 +599,7 @@ namespace AirsoftFPS
             if (weaponIdx < 0 || weaponIdx >= weapons.Length || !(current || recentPrev))
             { RejectShot(shotSeq, "weapon " + weaponIdx + " not equipped"); return; }
             var w = weapons[weaponIdx];
+            if (!ObjectiveMode.WeaponAllowed(OwnerClientId, w)) { RejectShot(shotSeq, "weapon not allowed in this role"); return; }
 
             // Fire rate: each trigger pull costs a token; pellets of the same shot share it.
             float now = Time.unscaledTime;
