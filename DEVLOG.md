@@ -28,6 +28,11 @@ MatchNet.cs, NetworkUI.cs, PlayerSpawner.cs, FPSController.cs, WeaponController.
 WeaponData.cs, Health.cs, EnemyAI.cs, EnemySpawner.cs, HUDManager.cs, WorldHealthBar.cs,
 AutoConnect.cs, NetDiag.cs.
 
+## 2026-10-19 — Team Deathmatch a Gun Game
+- Týmy (automatické rozdělení), v Team Deathmatch bez friendly fire, společné skóre týmu, scoreboard v barvách týmů.
+- Gun Game: každý kill posune hráče na další z 10 zbraní, vyhrává ten, kdo projde všechny.
+- V lobby se režim přepíná klávesou M (4 režimy), HUD banner a scoreboard podle režimu.
+
 ## 2026-10-21 — Low-poly vzhled, postavy, nové zbraně, nová mapa
 - Staženy CC0 low-poly balíčky od Quaternius (postavy, zbraně, budovy, ulice, příroda, rekvizity).
 - Lobby: editor postavy (tělo, čepice, barva čepice, tričko, kalhoty, barva kůže, vlasy) s 3D náhledem; vzhled se ukládá a synchronizuje všem hráčům.
@@ -35,7 +40,112 @@ AutoConnect.cs, NetDiag.cs.
 - 10 nových zbraní s low-poly modely (Pistol, Revolver, Ray Gun, Pulse SMG, P90, AK-47, Pulse Rifle, M870, Lightning Gun, AWP).
 - Nová mapa "město": křižovatka se silnicemi a chodníky, domy, kontejnerový sklad, park, auta a zátarasy jako krytí, panorama budov, obloha, mlha, post-processing.
 
+## 2026-10-21 — Přejmenování Arbes → Airsoft
+- Projekt přejmenován v kódu, assetech, scénách i nastavení: namespace `AirsoftFPS`, scény `AirsoftLobby` a `AirsoftArena`, menu *Tools → Airsoft*, název produktu *Airsoft*.
+
+## 2026-10-21 — Nové UI/UX
+- Návrh rozhraní v Claude Design (design canvas: https://claude.ai/artifact/H16xM5KTXvKWrjhFWzd41d), vizuální styl „field-tactical“, písma Barlow, Barlow Condensed a JetBrains Mono.
+- Implementace v uGUI: `UIKit` (barvy, písma, procedurálně kreslené rámečky a ikony, stavebnice tlačítek, posuvníků a přepínačů), referenční rozlišení 1280×720.
+- Menu se záložkami Online / LAN, obrazovka připojování (kroky a průběh, při chybě karta s opakováním).
+- Lobby: karty režimů, 8 slotů hráčů s odznaky, ready (klávesa R), START MATCH jen pro hosta, kód hry s kopírováním, 3D náhled postavy.
+- Editor postavy jako celoobrazovkové okno. Nastavení (Controls, Video, Audio, Gameplay) se ukládá do PlayerPrefs.
+- HUD podle režimu, killfeed, scoreboard (Tab), obrazovka smrti, pauza (zápas běží dál, jen se zablokuje ovládání), výsledky zápasu.
+- Menu *Tools → Airsoft → Rebuild UI Only* vymění staré UI ve scénách za nové bez přegenerování mapy.
+
+## 2026-10-21 — Automatické buildy (GitHub Actions)
+- Workflow `.github/workflows/build.yml`: GameCI `unity-builder` sestaví build pro macOS a Windows na Linux runneru a uloží ho jako artefakt.
+- Pokud je nastavené itch.io, nahraje buildy přes butler do kanálů `mac` a `windows`. Spouští se ručně nebo pushnutím tagu `v*`.
+- Česky psaný návod v `docs/BUILD.md` (Unity licence, secrety, stránka na itch.io, tipy pro hráče).
+
+## 2026-10-21 — Časový limit zápasu
+- Host v lobby volí limit Off / 5 / 10 / 15 min (výchozí 10, pamatuje si ho), klienti ho jen vidí. V Co-op limit není.
+- Server spustí hodiny po načtení mapy; po vypršení vyhodnotí: FFA nejvíc killů, Gun Game level → killy → méně smrtí, týmové režimy skóre týmu. Přesná shoda = remíza (DRAW).
+- HUD: hodiny mm:ss pod widgetem režimu, posledních 30 s oranžově, posledních 10 s červeně. Scoreboard a pauza ukazují zbývající čas.
+
+## 2026-10-21 — Týmové pásky, brýle a masky
+- V TDM si hráč nechává vlastní tričko a nosí na obou pažích pásky v barvě týmu, navázané na kosti postavy (hýbou se s animací).
+- Nový slot ochrany očí: Goggles, Shooting Glasses, Full Face Mask, Mesh Mask (sestavené z primitiv na kosti hlavy).
+- Starší uložené vzhledy se načtou bez brýlí, synchronizace přes MatchNet se nezměnila.
+- Oprava: lidské postavy byly kvůli roztaženým chodidlům modelů natočené asi o 19° vedle směru pohledu; natočení se teď počítá podle linie ramen.
+
+## 2026-10-21 — Killcam a minimapa
+- Killcam: po vyřazení se kamera asi na 2 s otočí na toho, kdo hráče vyřadil (hráč, nebo AI nepřítel v Co-op), potom obrazovka smrti s „Eliminated by …“, zbraní a zbývajícím HP útočníka.
+- Údaje o útočníkovi posílá server jen oběti a skládá je z vlastního záznamu zásahů, takže je klient nemůže podvrhnout.
+- Minimapa vlevo nahoře: statická část mapy se jednou vyfotí shora ortografickou kamerou, pod ní se otáčí šipka hráče. Spoluhráči jsou tečky, nepřátelé se nezobrazují.
+- V *Settings → Gameplay* lze killcam a minimapu vypnout a minimapu přepnout na „sever nahoře“.
+
+## 2026-10-21 — Kuličky (BB) a ověřování zásahů na serveru
+- Server ověřuje zásahy: klient hlásí jen co trefil (cíl, číslo výstřelu, zbraň, počátek, bod zásahu). Poškození bere server ze svých `WeaponData`, hlídá kadenci zbraně, počet zásahů na výstřel, dosah, polohu cíle a přímou viditelnost.
+- Místo okamžitého zásahu (hitscan) letí skutečné kuličky: úsťová rychlost, gravitace, hop-up (vztlak), odpor vzduchu, simulace s pevným krokem 60 Hz (`BBBallistics`, `BBProjectile`).
+- Rozptyl je deterministický ze seedu, takže všichni klienti vidí stejné kuličky. Server let přepočítá a zásah uzná, jen když leží na dráze kuličky bez zdi před ním a uplynul čas letu.
+- Pokusy o podvržený zásah (neznámý výstřel, zásah hned na 35 m, mimo dráhu, duplicitní) server odmítne (v editoru a debug buildu je zaloguje).
+
 ## 2026-10-21 — Airsoftové repliky místo sci-fi zbraní
 - 10 slotů (klávesy 1–0 = pořadí v Gun Game): 1911 GBB pistole, CO2 revolver, Uzi GBB (plynový samopal), P90 AEG, pružinová brokovnice M870 (3 kuličky na výstřel), AK AEG, RPK podpůrná AEG (300ranový box), M14 DMR (poloautomat), pružinová opakovačka (mířidla), L96 pružinová odstřelovačka.
 - Statistiky v airsoftových jednotkách: úsťová rychlost 85–150 m/s, mid-cap/hi-cap zásobníky, semi/auto, vyvážené TTK.
 - Nové low-poly modely (Quaternius CC0, převedeno z .blend do FBX): AK47, Uzi, BoltRifle; sci-fi modely odstraněny. RPK používá model AK (delší).
+
+## 2026-10-21 — Týmové spawny a ochrana po spawnu
+- Komponenta `SpawnPoint` (tým 0 = kdokoli, 1 = Červení, 2 = Modří). Červení se rodí na severu, Modří na jihu.
+- Ve všech režimech se vybírá bod nejdál od živých nepřátel, obsazené body se přeskočí.
+- Spawny na koncích silnic přesunuty za krytí podle toho, z jak velké části mapy je bod vidět. Menu *Tools → Airsoft → Check Spawn Points* vypíše report.
+- Ochrana po spawnu: 3 s nezranitelnost, skončí prvním výstřelem. Hráč vidí odpočet, ostatní kolem něj průsvitný obal.
+- Respawn teleportuje hráče na straně vlastníka (NetworkTransform je owner-authoritative), takže se vzdálení klienti opravdu přesunou.
+
+## 2026-10-21 — Profil hráče: statistiky, XP, odemykání
+- Lokální profil (JSON v `persistentDataPath`): zápasy, výhry, killy, smrti, zásahy, nejlepší série, oblíbená zbraň, XP a level.
+- XP: kill 20, nepřítel v Co-op 10, zásah 3, dohraný zápas 50, výhra 100. Level N → N+1 stojí 150 + 75·(N−1) XP.
+- Čepice, brýle/masky a barvy se odemykají s levelem (v editoru postavy zámek s levelem). Vzhled uložený před zavedením profilu zůstává použitelný.
+- Menu: čip s profilem a panel statistik. Výsledky: karta XP s rozpisem, animovaným pruhem a oznámením nového levelu.
+- Bez změn v síťovém protokolu, počítá se z dat, která klient už dostává.
+
+## 2026-10-21 — Režim Milsim (airsoftové pravidlo HIT)
+- Týmový režim Red vs Blue: jeden zásah kuličkou = HIT místo ubírání HP. Zasažený hráč zvedne ruku (vidí to všichni), nemůže střílet, nejde znovu zasáhnout a kuličky jím prolétají.
+- Musí dojít do zóny svého týmu, po 3 s v zóně je zpět ve hře. HUD ukazuje směr a vzdálenost k základně.
+- Každý zásah = bod pro tým střelce, vyhrává první s 30 body (časový limit platí dál). Friendly fire vypnutý, killfeed „X hit Y“.
+- Kontroly „je to TDM?“ nahradily pomocné `TeamMode` / `IsTeamMode`, aby šly přidávat další týmové režimy.
+- Nová komponenta `MapLayout` pro body jednotlivých režimů na mapě (základny, kontrolní body, …).
+
+## 2026-10-22 — Boti v PvP režimech
+- Host v lobby zapne doplnění boty (Off / do 4 / do 8 hráčů) a obtížnost (Easy / Normal / Hard). Boti odcházejí, když se připojí hráči, a vrací se, když hráči odejdou.
+- Bot je AI voják (`BotBrain`, běží na serveru) na NavMeshi: prochází mapu, útočí na nejbližšího viditelného soupeře (respektuje týmy), střílí skutečné kuličky, přebíjí, uhýbá do stran, respawnuje se se spawn ochranou. V Milsim zvedne ruku a jde na základnu.
+- Obtížnost mění reakční dobu, rozptyl, přesnost, předsazení a vnímání okolí.
+- Boti hrají jen ve FFA, TDM, Gun Game a Milsim. Killfeed, scoreboard, výsledky, killcam i minimapa s nimi počítají. Co-op beze změny.
+
+## 2026-10-22 — Objektivové režimy: Capture the Flag a Domination
+- Rámec `ObjectiveMode` (`Assets/Scripts/FPS/Objectives`): pravidla běží na serveru, klienti dostávají stav přes pojmenované zprávy.
+- Capture the Flag: vlajky na základnách, nositel nemůže sprintovat, bod jen když je vlastní vlajka doma, při smrti nebo HIT vlajka spadne, po 20 s se sama vrátí. Vyhrává 3 doručení.
+- Domination: body A, B, C (poloměr 6 m), obsadí se stáním uvnitř, se soupeřem uvnitř je bod sporný. Každý držený bod dává 1 bod za 2 s, cíl 200.
+- Lobby: karta režimu zešedne s důvodem, pokud mapa nemá potřebné body (`MapManifest`). HUD widget podle režimu, značky ve světě, oznámení.
+- Body na mapě Town přidává `ObjectiveMapSetup`. Kontroly v editoru: `ObjectiveLogicCheck` (pravidla bez sítě) a `ObjectivePlayCheck` (host v play módu).
+
+## 2026-10-22 — Mapa Warehouse a hlasování o mapě
+- Druhá mapa *Warehouse* (60 × 60 m, boj na krátkou vzdálenost): 7 m vysoká hala s regály, kontejner, palety a vysokozdvižné vozíky, kancelářský blok (chodba a šest místností), nakládací dvory na severu (Červení) a jihu (Modří). Zrcadlově symetrická.
+- Celou ji staví skript `AirsoftWarehouseBuilder` (*Tools → Airsoft → Build Warehouse Map*): prostředí, 8 týmových spawnů, 6 spawnů nepřátel, NavMesh a body pro všechny režimy.
+- Hlasování v lobby: karty map s náhledem, jeden hlas na hráče, vyhrává většina, při shodě rozhoduje hlas hosta, host může mapu zamknout.
+- Náhledy map shora (`Resources/MapPreviews`). Střechy a stropy se v minimapě a náhledech skrývají, takže jsou vidět místnosti.
+- Oprava: postavy hráčů se při návratu do lobby odstraní, další zápas všechny spawne znovu na nové mapě.
+
+## 2026-10-22 — Režim Medic
+- Týmový režim na pravidle HIT: zasažený hráč padne na místě a 45 s „krvácí“. Medik ze stejného týmu ho oživí držením E po dobu 4 s.
+- Vykrvácení nebo vzdání se (držet G) = návrat na základnu jako v Milsim a ztráta tiketu.
+- 1 medik na každou započatou čtveřici hráčů (přednost mají dobrovolníci z lobby), bílá páska s červeným křížem.
+- 25 tiketů pro tým 4 hráčů (škáluje se podle velikosti). Tým s 0 tikety a všemi hráči vyřazenými prohrává, při vypršení času vyhrává tým s víc tikety. Režim je bez botů.
+
+## 2026-10-22 — Režimy Bomb a VIP Escort
+- Kolové režimy (`RoundMode`): příprava (zmrazení, všichni na své straně, doplněná munice) → kolo s časem → výsledek. Role se každé kolo prohodí, vyhrané kolo = bod. Místo časového limitu zápasu se hraje na kola.
+- Bomb: náhodný útočník nese bombu (při smrti spadne, sebrat ji může kterýkoli útočník), položí ji na A nebo B (držet E 4 s), rozbuška 40 s, obránci ji zneškodní (držet E 6 s). V kole se nerespawnuje, vyřazení sledují spoluhráče. Vyhrává 4 kola.
+- VIP Escort: náhodný člen týmu je VIP (jen pistole 1911 a revolver, bez sprintu, pomalejší) a musí dojít k evakuaci (držet E 3 s). Lovci vyhrají, když VIP padne nebo vyprší čas. Vyhrává 3 kola.
+- Interakce klávesou E s kruhovým průběhem, widget kola, 3D písmena míst. Na mapu Town přibyla místa A/B a start a cíl VIP.
+
+## 2026-10-22 — Opravy před vydáním
+- **Klienti se nemohli spawnout** („NetworkPrefab could not be found“): po přegenerování scén přes `AirsoftSceneBuilder` byl seznam síťových prefabů v lobby prázdný. Builder je registroval přes `NetworkConfig.Prefabs.Add()`, což je seznam jen za běhu a do scény se neuloží. Host mohl spawnovat, klient ne. Lobby teď znovu odkazuje na `Assets/DefaultNetworkPrefabs.asset` a builder ho udržuje.
+- **Plná fronta příjmu** v Unity Transport („Receive queue is full“): kuličky, boti a stav objektivů přeplnili výchozí frontu. Fronta paketů zvětšena ze 128 na 512.
+- LAN host na obsazeném portu 7777 (např. druhá spuštěná hra na stejném počítači) ukáže chybu s možností opakovat, místo prázdné čekárny.
+- Modely mapy se importují s čitelnými meshi, protože `EnemySpawner` staví NavMesh za běhu i v buildu. Jednorázový reimport se nespouští v klonech Multiplayer Play Mode (jsou jen pro čtení).
+- MatchNet: žádná výjimka při vypínání hosta, zrušení čekajícího návratu do lobby po ukončení, hráč připojený do běžícího týmového zápasu jde do menšího týmu.
+
+## 2026-10-22 — Vydání v0.2.0 na itch.io
+- Buildy pro macOS (Universal) a Windows (64-bit) sestaveny lokálně v Unity 6000.6.0f1 v batch módu z commitu `a8c552c` a nahrány nástrojem butler do kanálů `mac` a `windows`.
+- Stránka hry: https://rezdenssps.itch.io/airsoft
+- Workflow GitHub Actions zatím neběžel (chybí secrety s Unity licencí), v repu zatím není tag `v0.2.0`.
