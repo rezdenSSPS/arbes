@@ -83,6 +83,7 @@ namespace AirsoftFPS
         TMP_InputField lobbyName;
         GameObject hostModeKey, clientModeNote, tdmNote;
         readonly List<(KitButton btn, Image frame, CanvasGroup group)> modeCards = new();
+        readonly List<TextMeshProUGUI> modeCardDescs = new();   // one-line description, or why the map can't play it
         Segmented timeSeg;
         CanvasGroup timeGroup;
         GameObject timeUnit, timeCoopNote;
@@ -820,6 +821,9 @@ namespace AirsoftFPS
             key.anchoredPosition = Vector2.zero;
             hostModeKey = key.gameObject;
 
+            // five cards fit the 492 px column at 72 px; more modes get compact one-line cards
+            bool compact = MatchNet.MODE_COUNT > 5;
+            float cardH = compact ? Mathf.Floor((492f - 18f - 32f - 18f - 8f * (MatchNet.MODE_COUNT + 2)) / MatchNet.MODE_COUNT) : 72f;
             for (int i = 0; i < MatchNet.MODE_COUNT; i++)
             {
                 var mode = (MatchNet.GameModeType)i;
@@ -827,16 +831,19 @@ namespace AirsoftFPS
                 {
                     if (isHost && MatchNet.Instance != null) MatchNet.Instance.HostSetMode(mode);
                 });
-                b.LE(-1, 72);   // five cards fit the 492 px column
+                b.LE(-1, cardH);
                 var group = b.gameObject.AddComponent<CanvasGroup>();
                 var frame = Frame(b.transform, Line, 1f);
-                var txt = VCol(b.transform, "Text", 2);
-                txt.padding = new RectOffset(16, 16, 9, 9);
+                var txt = VCol(b.transform, "Text", compact ? 1 : 2);
+                txt.padding = compact ? new RectOffset(16, 16, 6, 6) : new RectOffset(16, 16, 9, 9);
                 txt.GetComponent<RectTransform>().Fill();
-                Label(txt.transform, ModeName(mode).ToUpperInvariant(), F.CondBold, 20, Fg, TextAlignmentOptions.MidlineLeft, 0.02f).LE(-1, 22);
-                Label(txt.transform, ModeDesc(mode), F.Body, 12, Muted).Wrap().LE(-1, 30);
+                Label(txt.transform, ModeName(mode).ToUpperInvariant(), F.CondBold, compact ? 18 : 20, Fg, TextAlignmentOptions.MidlineLeft, 0.02f).LE(-1, compact ? 20 : 22);
+                var desc = Label(txt.transform, ModeDesc(mode), F.Body, 12, Muted);
+                if (compact) { desc.overflowMode = TextOverflowModes.Ellipsis; desc.LE(-1, 16); }
+                else desc.Wrap().LE(-1, 30);
                 b.label.gameObject.SetActive(false);
                 modeCards.Add((b, frame, group));
+                modeCardDescs.Add(desc);
             }
 
             // match time limit (host picks, clients see it read-only; Co-op has none)
@@ -1044,14 +1051,21 @@ namespace AirsoftFPS
             {
                 var (btn, frame, group) = modeCards[i];
                 bool sel = (int)mnet.Mode == i;
+                // objective modes need their points on the map (MapLayout): otherwise greyed out with the reason
+                bool avail = ObjectiveMode.IsAvailable((MatchNet.GameModeType)i, out string why);
                 btn.bgN = btn.bgP = sel ? Raised : Surface;
-                btn.bgH = isHost ? Raised : btn.bgN;
+                btn.bgH = isHost && avail ? Raised : btn.bgN;
                 btn.bgD = btn.bgN;
-                btn.interactable = isHost;
+                btn.interactable = isHost && avail;
                 btn.Refresh();
-                frame.color = sel ? Accent : Line;
+                frame.color = sel ? (avail ? Accent : DangerLine) : Line;
                 frame.pixelsPerUnitMultiplier = 4f / (sel ? 2f : 1f);
-                group.alpha = (!isHost && !sel) ? 0.55f : 1f;
+                group.alpha = !avail ? 0.45f : (!isHost && !sel) ? 0.55f : 1f;
+                if (i < modeCardDescs.Count)
+                {
+                    modeCardDescs[i].text = avail ? ModeDesc((MatchNet.GameModeType)i) : why;
+                    modeCardDescs[i].color = avail ? Muted : DangerSoft;
+                }
             }
             bool tdm = mnet.TeamMode;   // Team Deathmatch or Milsim
             tdmNote.SetActive(tdm);
@@ -1122,7 +1136,14 @@ namespace AirsoftFPS
             int waiting = 0;
             foreach (var e in roster) if (!e.ready) waiting++;
             bool allReady = mnet.AllReady();
-            if (isHost)
+            bool modeOk = ObjectiveMode.IsAvailable(mnet.Mode, out string modeWhy);
+            if (isHost && !modeOk)
+            {
+                startMatchButton.interactable = false;
+                hintText.text = ModeName(mnet.Mode) + ": " + modeWhy + ". Pick another mode.";
+                hintText.color = DangerSoft;
+            }
+            else if (isHost)
             {
                 startMatchButton.interactable = allReady;
                 hintText.text = allReady ? "Everyone is ready. Start the match."

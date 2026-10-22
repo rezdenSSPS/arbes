@@ -123,7 +123,7 @@ namespace AirsoftFPS
 
         class FeedRow { public GameObject go; public Image bg, frame; public TextMeshProUGUI killer, weapon, victim; }
         class SlotView { public Image bg, frame; public TextMeshProUGUI key, name; }
-        class TeamView { public Image header; public TextMeshProUGUI name, score, headK, headD; public readonly List<(GameObject go, Image bg, TextMeshProUGUI n, TextMeshProUGUI k, TextMeshProUGUI d)> rows = new(); }
+        class TeamView { public Image header; public TextMeshProUGUI name, score, headK, headD, headO; public readonly List<(GameObject go, Image bg, TextMeshProUGUI n, TextMeshProUGUI k, TextMeshProUGUI d)> rows = new(); public readonly List<TextMeshProUGUI> obj = new(); }
         class ListRow { public GameObject go; public Image bg, bar; public TextMeshProUGUI rank, name, progress, a, b; public GameObject barBack; }
         class PodiumView { public RectTransform rt; public Image bg, frame; public TextMeshProUGUI rank, name, stat; }
 
@@ -475,6 +475,8 @@ namespace AirsoftFPS
                     tv.score.text = mnet.TeamScore(t + 1).ToString();
                     tv.headK.text = milsimSb ? "HITS" : "KILLS";
                     tv.headD.text = milsimSb ? "OUT" : "DEATHS";
+                    bool objSb = ObjectiveMode.HasObjective(mode);   // CTF / Domination: objective column
+                    tv.headO.text = objSb ? ObjectiveMode.PointsLabelFor(mode) : "";
                     int r = 0;
                     foreach (var e in list)
                     {
@@ -485,6 +487,8 @@ namespace AirsoftFPS
                         row.k.text = e.kills.ToString();
                         row.d.text = e.deaths.ToString();
                         row.bg.color = e.clientId == me ? A(Accent, 0.16f) : Color.clear;
+                        tv.obj[r - 1].text = objSb ? ObjectiveMode.PointsOf(e.clientId).ToString() : "";
+                        row.n.rectTransform.offsetMax = new Vector2(objSb ? -194 : -134, 0);
                     }
                     for (; r < tv.rows.Count; r++) tv.rows[r].go.SetActive(false);
                 }
@@ -542,6 +546,8 @@ namespace AirsoftFPS
             MatchNet.GameModeType.FreeForAll => "first to " + MatchNet.FFA_KILL_TARGET + " kills",
             MatchNet.GameModeType.GunGame => "finish all " + MatchNet.GUNGAME_WEAPONS + " weapons",
             MatchNet.GameModeType.Milsim => "first team to " + MatchNet.MILSIM_HIT_TARGET + " hits",
+            MatchNet.GameModeType.CaptureTheFlag or MatchNet.GameModeType.Domination
+                => "first team to " + ObjectiveMode.TargetFor(m) + ObjectiveMode.UnitFor(m),
             _ => "survive the waves together"
         };
 
@@ -592,6 +598,8 @@ namespace AirsoftFPS
             {
                 case MatchNet.GameModeType.TeamDeathmatch:
                 case MatchNet.GameModeType.Milsim:
+                case MatchNet.GameModeType.CaptureTheFlag:
+                case MatchNet.GameModeType.Domination:
                     pauseScore.text = $"<color={Html(Red)}>{mnet.TeamScore(1)}</color> <color={Html(Faint)}>:</color> <color={Html(Blue)}>{mnet.TeamScore(2)}</color>";
                     break;
                 case MatchNet.GameModeType.GunGame:
@@ -634,7 +642,7 @@ namespace AirsoftFPS
                 resWinner.text = mnet.WinnerTeam == 1 ? "RED TEAM WINS" : "BLUE TEAM WINS";
                 resBanner.color = TeamColor(mnet.WinnerTeam);
                 resSub.text = $"{mnet.TeamScore(1)} : {mnet.TeamScore(2)} · " +
-                              (onTime ? "higher score when time ran out" : $"first team to {mnet.TeamTarget}" + (milsim ? " hits" : ""));
+                              (onTime ? "higher score when time ran out" : $"first team to {mnet.TeamTarget}" + (milsim ? " hits" : ObjectiveMode.UnitFor(mode)));
             }
             else
             {
@@ -661,6 +669,7 @@ namespace AirsoftFPS
                 p.stat.text = mode == MatchNet.GameModeType.GunGame
                     ? $"{WeaponNameAt(Mathf.Min(e.kills, MatchNet.GUNGAME_WEAPONS - 1))} · {Mathf.Min(e.kills, MatchNet.GUNGAME_WEAPONS)} / {MatchNet.GUNGAME_WEAPONS}"
                     : milsim ? $"{e.kills} hits · {e.deaths} out"
+                    : ObjectiveMode.HasObjective(mode) ? $"{ObjectiveMode.PointsOf(e.clientId)} {ObjectiveMode.PointsLabelFor(mode).ToLowerInvariant()} · {e.kills} kills"
                     : $"{e.kills} kills · {e.deaths} deaths";
                 p.bg.color = you ? Surface : Raised;
                 p.frame.color = you ? Accent : Line;
@@ -822,6 +831,8 @@ namespace AirsoftFPS
             Label(blue.transform, "BLUE", F.BodyBold, 11, Ground, TextAlignmentOptions.MidlineLeft, 0.14f);
             var youChip = ScrimRow(tdmWidget.transform, "You", 0, new RectOffset(8, 8, 3, 3));
             tdmYou = Label(youChip, "", F.BodySemi, 12, Fg, TextAlignmentOptions.Center, 0.1f);
+            // objective modes (CTF flags, Domination A/B/C): widget under the score bar + world markers
+            ObjectiveHUD.Create(gameObject, top.transform, tdmWidget.transform.GetSiblingIndex() + 1, root);
 
             var ffa = ScrimRow(top.transform, "FFA", 18, new RectOffset(18, 18, 8, 8), 0.78f);
             ffaWidget = ffa.gameObject;
@@ -1158,8 +1169,8 @@ namespace AirsoftFPS
                 Label(th.transform, t == 0 ? "RED" : "BLUE", F.BodyBold, 13, Ground, TextAlignmentOptions.MidlineLeft, 0.16f).rectTransform.Fill(14, 0, 14, 0);
                 tv.score = Label(th.transform, "0", F.CondBlack, 32, Ground, TextAlignmentOptions.MidlineRight);
                 tv.score.rectTransform.Fill(14, 0, 14, 0);
-                var th2 = ColumnHeads(tc.transform, 34, ("PLAYER", -1f, false), ("KILLS", 60f, true), ("DEATHS", 60f, true));
-                tv.headK = th2[1]; tv.headD = th2[2];
+                var th2 = ColumnHeads(tc.transform, 34, ("PLAYER", -1f, false), ("", 60f, true), ("KILLS", 60f, true), ("DEATHS", 60f, true));
+                tv.headO = th2[1]; tv.headK = th2[2]; tv.headD = th2[3];
                 for (int r = 0; r < 8; r++)
                 {
                     var row = Box(tc.transform, "Row", Color.clear);
@@ -1168,7 +1179,9 @@ namespace AirsoftFPS
                     var n = Label(row.transform, "", F.BodySemi, 15, Fg); n.rectTransform.Fill(14, 0, 134, 0);
                     var k = Label(row.transform, "", F.CondBold, 20, Fg, TextAlignmentOptions.MidlineRight); k.rectTransform.Fill(0, 0, 74, 0);
                     var d = Label(row.transform, "", F.CondSemi, 20, Muted, TextAlignmentOptions.MidlineRight); d.rectTransform.Fill(0, 0, 14, 0);
+                    var o = Label(row.transform, "", F.CondBold, 20, Accent, TextAlignmentOptions.MidlineRight); o.rectTransform.Fill(0, 0, 134, 0);
                     tv.rows.Add((row.gameObject, row, n, k, d));
+                    tv.obj.Add(o);
                 }
                 sbTeamViews[t] = tv;
             }

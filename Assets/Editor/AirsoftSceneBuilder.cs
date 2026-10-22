@@ -634,6 +634,9 @@ namespace AirsoftFPS.Editor
             // ── HUD Canvas ──
             BuildHUDCanvas();
 
+            // ── Objective points (CTF bases, Domination A/B/C) as the map's MapLayout ──
+            ObjectiveMapSetup.AddTownLayout();
+
             EditorSceneManager.SaveScene(scene, ArenaPath);
         }
 
