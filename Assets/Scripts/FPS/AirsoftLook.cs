@@ -273,6 +273,11 @@ namespace AirsoftFPS
             public Transform armL, foreArmL, handL;
             public bool armSearched, armPosed;
             public Quaternion armRest, foreArmRest;   // pose before the hand went up (restored after)
+            // leg bones for the Medic "downed" kneeling pose (looked up on first use)
+            public Transform[] legs;                  // UpperLeg.L, LowerLeg.L, Foot.L, UpperLeg.R, LowerLeg.R, Foot.R
+            public Quaternion[] legRest;
+            public bool legsSearched, legsPosed;
+            public float kneelDrop;
         }
 
         // Builds the character under `parent` (feet at parent's origin, facing parent's +Z).
@@ -656,6 +661,90 @@ namespace AirsoftFPS
             Vector3 dir = (rt.up - rt.right * 0.22f + rt.forward * 0.12f).normalized;
             AimBone(av.armL, av.foreArmL.position, dir, weight);
             if (av.handL) AimBone(av.foreArmL, av.handL.position, dir, weight);
+        }
+
+        // Medic downed pose: on both knees (thighs down, shins flat behind), the body lowered by
+        // the shin length. Call in LateUpdate before RaiseHand; weight 0..1.
+        public static void Kneel(Avatar av, float weight)
+        {
+            if (av == null || av.root == null) return;
+            var rt = av.root.transform;
+            if (weight <= 0.001f)
+            {
+                if (av.legsPosed)
+                {
+                    for (int i = 0; i < av.legs.Length; i++) if (av.legs[i]) av.legs[i].localRotation = av.legRest[i];
+                    rt.localPosition = Vector3.zero;
+                }
+                av.legsPosed = false;
+                return;
+            }
+            if (!av.legsSearched)
+            {
+                av.legsSearched = true;
+                av.legs = new Transform[6];
+                string[] side = { "L", "R" };
+                for (int s = 0; s < 2; s++)
+                {
+                    av.legs[s * 3] = FindDeep(rt, "UpperLeg." + side[s]);
+                    av.legs[s * 3 + 1] = FindDeep(rt, "LowerLeg." + side[s]);
+                    av.legs[s * 3 + 2] = FindDeep(rt, "Foot." + side[s]) ?? FindDeep(rt, "LowerLeg." + side[s] + "_end");
+                }
+                av.legRest = new Quaternion[6];
+            }
+            if (av.legs[0] == null || av.legs[1] == null || av.legs[3] == null || av.legs[4] == null) return;
+            if (!av.legsPosed)
+            {
+                av.legsPosed = true;
+                for (int i = 0; i < 6; i++) if (av.legs[i]) av.legRest[i] = av.legs[i].localRotation;
+                var foot = av.legs[2] ? av.legs[2] : av.legs[1];
+                av.kneelDrop = Mathf.Clamp(Vector3.Distance(av.legs[1].position, foot.position) * 0.92f, 0.2f, 0.7f);
+            }
+            rt.localPosition = new Vector3(0f, -av.kneelDrop * weight, 0f);
+            for (int s = 0; s < 2; s++)
+            {
+                var upper = av.legs[s * 3]; var lower = av.legs[s * 3 + 1]; var foot = av.legs[s * 3 + 2];
+                float sx = s == 0 ? -1f : 1f;
+                Vector3 thigh = (-rt.up + rt.forward * 0.18f + rt.right * (0.1f * sx)).normalized;
+                AimBone(upper, lower.position, thigh, weight);
+                if (foot) AimBone(lower, foot.position, (-rt.forward - rt.up * 0.12f).normalized, weight);
+            }
+        }
+
+        // Medic: a white band with red crosses round the left upper arm (above the team band), so
+        // it shows on the raised arm too. Parented to the bone; returns it (null if no arm bone).
+        public static GameObject BuildMedicArmband(Avatar av, int packedLook)
+        {
+            if (av == null || av.root == null) return null;
+            var upper = FindDeep(av.root.transform, "UpperArm.L");
+            if (upper == null) return null;
+            var lower = FindDeep(av.root.transform, "LowerArm.L");
+            Vector3 axis = lower && lower.parent == upper ? lower.localPosition : Vector3.up;
+            float len = axis.magnitude;
+            if (len < 1e-5f) return null;
+            axis /= len;
+            var l = Unpack(packedLook);
+            float radius = ArmRadius[Mathf.Clamp(l.body, 0, ArmRadius.Length - 1)] * 1.06f;
+            float d = 2f * radius * len, w = 0.3f * len;
+
+            var white = MakeMat(new Color(0.95f, 0.95f, 0.92f), null, "MedicBand");
+            var red = MakeMat(new Color(0.88f, 0.2f, 0.16f), null, "MedicCross");
+            var band = new GameObject("MedicArmband").transform;
+            band.SetParent(upper, false);
+            band.localPosition = axis * (0.68f * len);
+            band.localRotation = Quaternion.FromToRotation(Vector3.up, axis);
+            Prim(PrimitiveType.Cylinder, band, Vector3.zero, new Vector3(d, w * 0.5f, d), white);
+            for (int i = 0; i < 4; i++)
+            {
+                float a = i * 90f;
+                var face = new GameObject("Cross").transform;
+                face.SetParent(band, false);
+                face.localRotation = Quaternion.Euler(0f, a, 0f);
+                face.localPosition = face.localRotation * new Vector3(0f, 0f, d * 0.5f);
+                Prim(PrimitiveType.Cube, face, Vector3.zero, new Vector3(w * 0.22f, w * 0.72f, d * 0.06f), red);
+                Prim(PrimitiveType.Cube, face, Vector3.zero, new Vector3(w * 0.72f, w * 0.22f, d * 0.06f), red);
+            }
+            return band.gameObject;
         }
 
         // Rotates `bone` so the direction to its child points along `dir` (blended by `weight`).

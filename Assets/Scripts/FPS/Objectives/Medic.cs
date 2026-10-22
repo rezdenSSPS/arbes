@@ -419,7 +419,7 @@ namespace AirsoftFPS
         public static void LobbySync(NetworkManager nm)
         {
             if (nm == null) return;
-            if (!nm.IsListening) { volunteers.Clear(); medHandlersOn = null; return; }
+            if (!nm.IsListening || nm.ShutdownInProgress) { if (!nm.IsListening) { volunteers.Clear(); medHandlersOn = null; } return; }
             var cmm = nm.CustomMessagingManager;
             if (cmm != null && cmm != medHandlersOn)
             {

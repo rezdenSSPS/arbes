@@ -27,6 +27,7 @@ namespace AirsoftFPS
         Vector3 velocity;
         float xRotation;
         bool isCrouching;
+        bool wasDowned;   // Medic: downed players kneel in place
         float standHeight = 2f;
         float crouchHeight = 1.2f;
         float speedMultiplier = 1f; // set by weapon weight
@@ -115,7 +116,8 @@ namespace AirsoftFPS
             if (grounded && velocity.y < 0)
                 velocity.y = -2f;
 
-            bool input = !HUDManager.InputBlocked;
+            bool downed = ObjectiveMode.IsDowned(OwnerClientId);   // Medic: down in place until revived / bled out
+            bool input = !HUDManager.InputBlocked && !downed;
             float h = 0f;
             float v = 0f;
             if (input && kb.dKey.isPressed) h += 1f;
@@ -135,6 +137,9 @@ namespace AirsoftFPS
                 if (input && (kb.cKey.wasPressedThisFrame || kb.leftCtrlKey.wasPressedThisFrame)) wantCrouch = !isCrouching;
             }
             else wantCrouch = input && crouchKey;
+            if (downed) wantCrouch = true;              // kneeling: camera low
+            else if (wasDowned) wantCrouch = false;     // stand up again when revived
+            wasDowned = downed;
             if (wantCrouch != isCrouching)
             {
                 isCrouching = wantCrouch;

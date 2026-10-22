@@ -20,6 +20,9 @@ namespace AirsoftFPS
         float speed;
         float deadTilt;
         float handUp;   // Milsim HIT pose blend (0..1)
+        float kneel;    // Medic downed pose blend (0..1)
+        bool builtMedic;
+        GameObject medicBand;
 
         void Start()
         {
@@ -58,6 +61,14 @@ namespace AirsoftFPS
                 nextCheck = Time.time + 0.5f;
                 int look = WantedLook(), team = WantedTeam();
                 if (look != builtLook || team != builtTeam) Rebuild(look, team);
+                bool medic = Medic.IsMedic(Owner);   // white armband with a red cross
+                if (medic != builtMedic && avatar != null)
+                {
+                    builtMedic = medic;
+                    if (medicBand) Destroy(medicBand);
+                    medicBand = medic ? AirsoftLook.BuildMedicArmband(avatar, builtLook) : null;
+                    if (medicBand && IsMine) AirsoftLook.SetShadowsOnly(medicBand, true);
+                }
             }
 
             // horizontal speed (works for remote players too: position is network-synced)
@@ -88,12 +99,15 @@ namespace AirsoftFPS
         {
             bool hit = health != null && health.IsOut;
             handUp = Mathf.MoveTowards(handUp, hit ? 1f : 0f, Time.deltaTime * 5f);
+            kneel = Mathf.MoveTowards(kneel, ObjectiveMode.IsDowned(Owner) ? 1f : 0f, Time.deltaTime * 4f);
+            if (avatar != null) AirsoftLook.Kneel(avatar, kneel);
             if (avatar != null) AirsoftLook.RaiseHand(avatar, handUp);
         }
 
         void Rebuild(int look, int team)
         {
             builtLook = look; builtTeam = team; builtGun = -1;
+            builtMedic = false; medicBand = null;   // the armband goes with the old avatar
             if (avatar != null && avatar.root) Destroy(avatar.root);
             handGun = null;
             try { avatar = AirsoftLook.BuildAvatar(transform, look, team); }
