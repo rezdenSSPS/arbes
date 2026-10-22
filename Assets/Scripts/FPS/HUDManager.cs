@@ -458,7 +458,7 @@ namespace AirsoftFPS
             sbGoal.text = Goal(mode) + (timeLeft >= 0f
                 ? $"  ·  <color={Html(ClockColor(timeLeft))}>{MatchNet.FormatClock(timeLeft)}</color> left" : "");
             string where = !string.IsNullOrEmpty(NetworkUI.JoinCode) ? "ONLINE · " + NetworkUI.JoinCode : "LAN";
-            sbFooterLeft.text = "Town arena · " + where;
+            sbFooterLeft.text = MapCatalog.CurrentDisplayName + " arena · " + where;
             sbFooterRight.text = mnet.Roster.Count + " / 8 players";
 
             var list = new List<MatchNet.Entry>(mnet.Roster);
@@ -616,7 +616,7 @@ namespace AirsoftFPS
             }
             string code = NetworkUI.JoinCode;
             float timeLeft = mnet.TimeLeft;
-            pauseMeta.text = $"Town arena          {mnet.Roster.Count} / 8 players" +
+            pauseMeta.text = $"{MapCatalog.CurrentDisplayName} arena          {mnet.Roster.Count} / 8 players" +
                 (string.IsNullOrEmpty(code) ? "          LAN game" : $"          Code <color={Html(Accent)}>{code}</color>") +
                 (timeLeft >= 0f ? $"          <color={Html(ClockColor(timeLeft))}>{MatchNet.FormatClock(timeLeft)}</color> left" : "");
         }

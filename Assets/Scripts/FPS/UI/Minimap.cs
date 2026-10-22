@@ -221,6 +221,10 @@ namespace AirsoftFPS
                 foreach (var c in no.GetComponentsInChildren<Canvas>())
                     if (c.enabled) { c.enabled = false; hiddenC.Add(c); }
             }
+            // Roofs and ceilings (MinimapHidden) too, so indoor maps show their rooms.
+            foreach (var mh in FindObjectsByType<MinimapHidden>())
+                foreach (var r in mh.GetComponentsInChildren<Renderer>())
+                    if (r.enabled) { r.enabled = false; hiddenR.Add(r); }
             bool fog = RenderSettings.fog;
             RenderSettings.fog = false;   // fog would wash out a shot from 120 m up
             try

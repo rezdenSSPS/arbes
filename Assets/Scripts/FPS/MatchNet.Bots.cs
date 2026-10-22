@@ -221,7 +221,7 @@ namespace AirsoftFPS
         {
             if (CurrentPhase != Phase.InMatch || !ModeHasBots(Mode)) { botSceneSince = -1f; return; }
             var scene = SceneManager.GetActiveScene();
-            if (scene.name != MATCH_SCENE) { botSceneSince = -1f; return; }
+            if (scene.name != MatchScene) { botSceneSince = -1f; return; }   // the voted map (MatchNetMapVote)
             if (botSceneSince < 0f) botSceneSince = Time.unscaledTime;
 
             // Wait until the players are in (PlayerSpawner spawns them once everyone loaded the arena).

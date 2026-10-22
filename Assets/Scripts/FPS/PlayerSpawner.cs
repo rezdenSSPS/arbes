@@ -11,7 +11,7 @@ namespace AirsoftFPS
     public class PlayerSpawner : MonoBehaviour
     {
         public GameObject playerPrefab;
-        public string matchScene = "AirsoftArena";
+        public string matchScene = "AirsoftArena";   // legacy; every MapCatalog map counts as a match scene
 
         bool matchLive;
 
@@ -48,7 +48,18 @@ namespace AirsoftFPS
             List<ulong> clientsCompleted, List<ulong> clientsTimedOut)
         {
             if (!NetworkManager.Singleton.IsServer) return;
-            if (sceneName != matchScene) return;
+            if (sceneName != matchScene && !MapCatalog.IsMatchScene(sceneName))
+            {
+                // Back in the lobby. Avatars survive scene loads, so remove them: the next match (maybe on
+                // another map) then spawns everyone fresh on that map's spawn points.
+                matchLive = false;
+                foreach (var id in NetworkManager.Singleton.ConnectedClientsIds)
+                {
+                    var po = NetworkManager.Singleton.ConnectedClients[id].PlayerObject;
+                    if (po != null && po.IsSpawned) po.Despawn(true);
+                }
+                return;
+            }
 
             matchLive = true;
             foreach (var id in NetworkManager.Singleton.ConnectedClientsIds)
