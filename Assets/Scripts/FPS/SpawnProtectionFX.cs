@@ -37,7 +37,7 @@ namespace AirsoftFPS
             float left = health.isDead.Value ? 0f : health.SpawnProtectionLeft;
             bool on = left > 0f;
 
-            if (netObj.IsOwner)
+            if (netObj.IsOwner && !health.IsBot)   // bots are server-owned: the host sees their shell, not a badge
             {
                 if (on && canvas == null) BuildBadge();
                 if (canvas != null)

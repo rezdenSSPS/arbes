@@ -26,6 +26,15 @@ namespace AirsoftFPS
         Vector3 patrolTarget;
         float searchTimer;
 
+        // PvP bots (Health.IsBot): BotBrain drives this soldier instead of the co-op AI below.
+        // The bot's current weapon slot (WeaponData order), for the gun in its hands on every client.
+        public NetworkVariable<int> botWeapon = new NetworkVariable<int>(-1,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Server);
+
+        bool IsBot => health != null && health.IsBot;
+        static WeaponData[] s_botWeapons;
+
         public override void OnNetworkSpawn()
         {
             agent = GetComponent<NavMeshAgent>();
@@ -43,6 +52,8 @@ namespace AirsoftFPS
                 if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 12f, NavMesh.AllAreas))
                     agent.Warp(hit.position);
             }
+
+            if (IsBot) return;   // BotBrain takes over
 
             if (health)
             {
@@ -63,6 +74,8 @@ namespace AirsoftFPS
         void Update()
         {
             if (!IsServer) return;
+            if (health == null) health = GetComponent<Health>();
+            if (IsBot) return;
             if (state == State.Dead) return;
 
             FindNearestPlayer();
@@ -200,6 +213,35 @@ namespace AirsoftFPS
             {
                 flash.enabled = true;
                 Invoke(nameof(HideFlash), 0.06f);
+            }
+        }
+
+        // A bot fired (BotBrain, server). The server already flies the real BBs; everyone else flies a
+        // visual-only copy from the same origin, direction and seed. Muzzle flash everywhere.
+        [Rpc(SendTo.Everyone)]
+        public void BotShotRpc(int weaponIdx, Vector3 origin, Vector3 dir, uint seed)
+        {
+            if (!IsServer)
+            {
+                s_botWeapons ??= WeaponData.GetAllWeapons();
+                if (weaponIdx >= 0 && weaponIdx < s_botWeapons.Length)
+                {
+                    var w = s_botWeapons[weaponIdx];
+                    var anim = GetComponent<EnemyAnimator>();
+                    Vector3 muzzle = anim != null ? anim.MuzzlePosition : origin;
+                    if ((muzzle - origin).sqrMagnitude > 2.25f) muzzle = origin;
+                    int pellets = Mathf.Max(1, w.pelletsPerShot);
+                    for (int p = 0; p < pellets; p++)
+                        BBProjectile.Fire(w, origin, BBBallistics.PelletDirection(w, dir, seed, p, false), muzzle,
+                                          ~0, transform, null);
+                }
+            }
+            var flash = GetComponentInChildren<Light>(true);
+            if (flash)
+            {
+                flash.enabled = true;
+                CancelInvoke(nameof(HideFlash));
+                Invoke(nameof(HideFlash), 0.05f);
             }
         }
 
