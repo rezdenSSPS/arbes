@@ -66,6 +66,7 @@ namespace AirsoftFPS
         TextMeshProUGUI codeValue, codeHint, fpsText;
         GameObject tdmWidget, ffaWidget, ggWidget, coopWidget;
         TextMeshProUGUI tdmRed, tdmBlue, tdmTarget, tdmYou;
+        TextMeshProUGUI tdmTargetCaption;   // "FIRST TO" (Medic: "TICKETS")
         TextMeshProUGUI ffaYou, ffaLeader, ffaLeaderScore, ffaTarget;
         TextMeshProUGUI ggNext;
         readonly List<Image> ggSteps = new List<Image>();
@@ -237,6 +238,8 @@ namespace AirsoftFPS
             bool showScores = kb != null && kb.tabKey.isPressed && mnet != null && !results && !isPaused;
             bool killcam = dead && killCam != null && killCam.Playing;
             bool hit = playerHealth != null && playerHealth.IsOut;
+            // Medic: a downed / out-for-good player gets the mode's own overlay instead of the Milsim walk-back
+            bool heldOut = hit && NetworkManager.Singleton != null && ObjectiveMode.HoldsHit(NetworkManager.Singleton.LocalClientId);
 
             hudRoot.SetActive(!results && !isPaused && !killcam);
             resultsScreen.SetActive(results);
@@ -244,7 +247,7 @@ namespace AirsoftFPS
             deathScreen.SetActive(dead && !killcam && !results && !isPaused && !showScores);
             killcamScreen.SetActive(killcam && !results && !isPaused && !showScores);
             scoreboard.SetActive(showScores);
-            hitScreen.SetActive(hit && !results && !isPaused && !showScores);
+            hitScreen.SetActive(hit && !heldOut && !results && !isPaused && !showScores);
 
             InputBlocked = isPaused || results || settings.IsOpen;
             bool wantCursor = InputBlocked;
@@ -255,7 +258,7 @@ namespace AirsoftFPS
             if (showScores) { sbTimer -= Time.unscaledDeltaTime; if (sbTimer <= 0f) { sbTimer = 0.2f; UpdateScoreboard(mnet); } }
             else sbTimer = 0f;
             if (dead && !results) UpdateDeath(killcam);
-            if (hit && !results) UpdateHit(mnet);
+            if (hit && !heldOut && !results) UpdateHit(mnet);
             if (isPaused) UpdatePause(mnet);
             if (results) UpdateResults(mnet);
         }
@@ -306,7 +309,9 @@ namespace AirsoftFPS
                 {
                     tdmRed.text = mnet.TeamScore(1).ToString();
                     tdmBlue.text = mnet.TeamScore(2).ToString();
-                    tdmTarget.text = mnet.TeamTarget.ToString();
+                    bool cap = ObjectiveMode.TryScoreCaption(out string capText, out string capValue);   // Medic: tickets
+                    tdmTargetCaption.text = cap ? capText : "FIRST TO";
+                    tdmTarget.text = cap ? capValue : mnet.TeamTarget.ToString();
                     int team = mnet.TeamOf(me);
                     tdmYou.text = team == 0 ? "" : $"YOU ARE <color={Html(TeamColor(team))}>{(team == 1 ? "RED" : "BLUE")}</color>";
                     tdmYou.transform.parent.gameObject.SetActive(team != 0);
@@ -377,7 +382,7 @@ namespace AirsoftFPS
             hpValue.color = hpUnit.color = low ? Hex("#FFD2CC") : Fg;
             hpFill.color = low ? Danger : Fg;
             SetBar(hpFill, hp / (float)max);
-            if (mode == MatchNet.GameModeType.Milsim)
+            if (MatchNet.IsHitRuleMode(mode))   // Milsim, Medic
             {
                 // no HP in Milsim: you're either in the game or HIT
                 bool out_ = playerHealth != null && playerHealth.IsOut;
@@ -434,7 +439,7 @@ namespace AirsoftFPS
                 row.go.SetActive(true);
                 bool envDeath = string.IsNullOrEmpty(k.killer);
                 row.killer.gameObject.SetActive(!envDeath);
-                bool milsim = mode == MatchNet.GameModeType.Milsim;
+                bool milsim = MatchNet.IsHitRuleMode(mode);   // Milsim, Medic
                 row.weapon.gameObject.SetActive(!envDeath && (milsim || !string.IsNullOrEmpty(k.weapon)));
                 row.killer.text = k.killer;
                 row.killer.color = TeamColor(k.killerTeam);
@@ -463,7 +468,7 @@ namespace AirsoftFPS
 
             var list = new List<MatchNet.Entry>(mnet.Roster);
             bool tdm = MatchNet.IsTeamMode(mode);
-            bool milsimSb = mode == MatchNet.GameModeType.Milsim;
+            bool milsimSb = MatchNet.IsHitRuleMode(mode);   // Milsim, Medic: hits instead of kills
             sbTeams.SetActive(tdm);
             sbList.SetActive(!tdm);
             if (tdm)
@@ -483,7 +488,7 @@ namespace AirsoftFPS
                         if (e.team != t + 1 || r >= tv.rows.Count) continue;
                         var row = tv.rows[r++];
                         row.go.SetActive(true);
-                        row.n.text = e.clientId == me ? e.name + " (you)" : e.name;
+                        row.n.text = (e.clientId == me ? e.name + " (you)" : e.name) + ObjectiveMode.TagFor(e.clientId);   // Medic: +MEDIC / DOWN
                         row.k.text = e.kills.ToString();
                         row.d.text = e.deaths.ToString();
                         row.bg.color = e.clientId == me ? A(Accent, 0.16f) : Color.clear;
@@ -548,6 +553,7 @@ namespace AirsoftFPS
             MatchNet.GameModeType.Milsim => "first team to " + MatchNet.MILSIM_HIT_TARGET + " hits",
             MatchNet.GameModeType.CaptureTheFlag or MatchNet.GameModeType.Domination
                 => "first team to " + ObjectiveMode.TargetFor(m) + ObjectiveMode.UnitFor(m),
+            MatchNet.GameModeType.Medic => "medics revive · out of tickets and players = lose",
             _ => "survive the waves together"
         };
 
@@ -600,6 +606,7 @@ namespace AirsoftFPS
                 case MatchNet.GameModeType.Milsim:
                 case MatchNet.GameModeType.CaptureTheFlag:
                 case MatchNet.GameModeType.Domination:
+                case MatchNet.GameModeType.Medic:
                     pauseScore.text = $"<color={Html(Red)}>{mnet.TeamScore(1)}</color> <color={Html(Faint)}>:</color> <color={Html(Blue)}>{mnet.TeamScore(2)}</color>";
                     break;
                 case MatchNet.GameModeType.GunGame:
@@ -627,22 +634,23 @@ namespace AirsoftFPS
             ulong me = nm != null ? nm.LocalClientId : 0;
             var mode = mnet.Mode;
             bool tdm = MatchNet.IsTeamMode(mode);
-            bool milsim = mode == MatchNet.GameModeType.Milsim;
+            bool milsim = MatchNet.IsHitRuleMode(mode);   // Milsim, Medic
             bool onTime = mnet.EndedOnTime;
+            string objLine = ObjectiveMode.ResultLine(mnet.WinnerTeam, onTime, mnet.IsDraw);   // Medic: tickets
             resMode.text = ModeName(mode).ToUpperInvariant() + (onTime ? " · TIME'S UP" : " · MATCH OVER");
             if (mnet.IsDraw)
             {
                 resWinner.text = "DRAW";
                 resBanner.color = Muted;
-                resSub.text = tdm ? $"{mnet.TeamScore(1)} : {mnet.TeamScore(2)} · time's up, scores level"
-                                  : "time's up · tied for first place";
+                resSub.text = objLine ?? (tdm ? $"{mnet.TeamScore(1)} : {mnet.TeamScore(2)} · time's up, scores level"
+                                  : "time's up · tied for first place");
             }
             else if (tdm && mnet.WinnerTeam != 0)
             {
                 resWinner.text = mnet.WinnerTeam == 1 ? "RED TEAM WINS" : "BLUE TEAM WINS";
                 resBanner.color = TeamColor(mnet.WinnerTeam);
-                resSub.text = $"{mnet.TeamScore(1)} : {mnet.TeamScore(2)} · " +
-                              (onTime ? "higher score when time ran out" : $"first team to {mnet.TeamTarget}" + (milsim ? " hits" : ObjectiveMode.UnitFor(mode)));
+                resSub.text = objLine ?? ($"{mnet.TeamScore(1)} : {mnet.TeamScore(2)} · " +
+                              (onTime ? "higher score when time ran out" : $"first team to {mnet.TeamTarget}" + (milsim ? " hits" : ObjectiveMode.UnitFor(mode))));
             }
             else
             {
@@ -668,8 +676,8 @@ namespace AirsoftFPS
                 p.name.color = tdm ? TeamColor(e.team) : Fg;
                 p.stat.text = mode == MatchNet.GameModeType.GunGame
                     ? $"{WeaponNameAt(Mathf.Min(e.kills, MatchNet.GUNGAME_WEAPONS - 1))} · {Mathf.Min(e.kills, MatchNet.GUNGAME_WEAPONS)} / {MatchNet.GUNGAME_WEAPONS}"
+                    : ObjectiveMode.HasObjective(mode) ? $"{ObjectiveMode.PointsOf(e.clientId)} {ObjectiveMode.PointsLabelFor(mode).ToLowerInvariant()} · {e.kills} {(milsim ? "hits" : "kills")}"
                     : milsim ? $"{e.kills} hits · {e.deaths} out"
-                    : ObjectiveMode.HasObjective(mode) ? $"{ObjectiveMode.PointsOf(e.clientId)} {ObjectiveMode.PointsLabelFor(mode).ToLowerInvariant()} · {e.kills} kills"
                     : $"{e.kills} kills · {e.deaths} deaths";
                 p.bg.color = you ? Surface : Raised;
                 p.frame.color = you ? Accent : Line;
@@ -683,7 +691,9 @@ namespace AirsoftFPS
             {
                 SetStat(0, kills.ToString(), milsim ? "HITS" : "KILLS");
                 SetStat(1, deaths.ToString(), milsim ? "TIMES HIT" : "DEATHS");
-                SetStat(2, (deaths == 0 ? kills : kills / (float)deaths).ToString("0.0"), milsim ? "H/O" : "K/D");
+                if (milsim && ObjectiveMode.HasObjective(mode))   // Medic: revives
+                    SetStat(2, ObjectiveMode.PointsOf(me).ToString(), ObjectiveMode.PointsLabelFor(mode));
+                else SetStat(2, (deaths == 0 ? kills : kills / (float)deaths).ToString("0.0"), milsim ? "H/O" : "K/D");
             }
             else
             {
@@ -823,7 +833,7 @@ namespace AirsoftFPS
             Label(red.transform, "RED", F.BodyBold, 11, Ground, TextAlignmentOptions.MidlineLeft, 0.14f);
             tdmRed = Label(red.transform, "0", F.CondBlack, 34, Ground);
             var mid = VCol(tdmRow.transform, "Target", 0, TextAnchor.MiddleCenter, false); mid.padding = new RectOffset(16, 16, 4, 4);
-            Label(mid.transform, "FIRST TO", F.BodyBold, 10, Muted, TextAlignmentOptions.Center, 0.14f);
+            tdmTargetCaption = Label(mid.transform, "FIRST TO", F.BodyBold, 10, Muted, TextAlignmentOptions.Center, 0.14f);
             tdmTarget = Label(mid.transform, "40", F.CondBold, 20, Fg, TextAlignmentOptions.Center);
             var blue = HRow(tdmRow.transform, "Blue", 10); blue.padding = new RectOffset(16, 16, 6, 6);
             blue.gameObject.AddComponent<Image>().color = Blue;

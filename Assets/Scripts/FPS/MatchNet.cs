@@ -15,8 +15,8 @@ namespace AirsoftFPS
     // the whole state to clients whenever it changes.
     public partial class MatchNet : MonoBehaviour   // bots: MatchNet.Bots.cs, map vote: MatchNetMapVote.cs
     {
-        public enum GameModeType { Coop = 0, FreeForAll = 1, TeamDeathmatch = 2, GunGame = 3, Milsim = 4, CaptureTheFlag = 5, Domination = 6 }
-        public const int MODE_COUNT = 7;
+        public enum GameModeType { Coop = 0, FreeForAll = 1, TeamDeathmatch = 2, GunGame = 3, Milsim = 4, CaptureTheFlag = 5, Domination = 6, Medic = 7 }
+        public const int MODE_COUNT = 8;
         public enum Phase { Lobby = 0, InMatch = 1, Results = 2 }
 
         public struct Entry
@@ -347,7 +347,10 @@ namespace AirsoftFPS
 
         void CheckTeamTarget()
         {
+            // an objective mode that decides the result itself (Medic: a team out of tickets and players)
+            if (ObjectiveMode.TryDeclaredResult(out int objWinner, out bool objDraw)) { EndMatch(ulong.MaxValue, objWinner, false, objDraw); return; }
             int target = TeamTarget;
+            if (target <= 0) return;   // no score race (Medic tickets)
             if (TeamScore(1) >= target) EndMatch(ulong.MaxValue, 1);
             else if (TeamScore(2) >= target) EndMatch(ulong.MaxValue, 2);
         }
@@ -757,9 +760,13 @@ namespace AirsoftFPS
         }
         // Red vs Blue modes (Team Deathmatch, Milsim, Capture the Flag, Domination).
         public static bool IsTeamMode(GameModeType m) => m == GameModeType.TeamDeathmatch || m == GameModeType.Milsim
-                                                         || m == GameModeType.CaptureTheFlag || m == GameModeType.Domination;
+                                                         || m == GameModeType.CaptureTheFlag || m == GameModeType.Domination
+                                                         || m == GameModeType.Medic;
         public bool TeamMode => IsTeamMode(Mode);
         public bool IsMilsim => Mode == GameModeType.Milsim;
+        // One BB = out with a raised hand (Milsim, and objective modes built on it such as Medic).
+        public static bool IsHitRuleMode(GameModeType m) => m == GameModeType.Milsim || ObjectiveMode.UsesHitRule(m);
+        public bool UsesHitRule => IsHitRuleMode(Mode);
         // Team score that wins the match: kills in TDM, hits in Milsim.
         public int TeamTarget => ObjectiveMode.HasObjective(Mode) ? ObjectiveMode.TargetFor(Mode)
                                  : IsMilsim ? MILSIM_HIT_TARGET : TDM_KILL_TARGET;

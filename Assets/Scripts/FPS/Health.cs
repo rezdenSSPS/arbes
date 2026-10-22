@@ -108,7 +108,7 @@ namespace AirsoftFPS
             if (isDead.Value || isHit.Value) return;
             if (IsSpawnProtected) return;
 
-            if (IsCombatant && MatchNet.Instance != null && MatchNet.Instance.IsMilsim)
+            if (IsCombatant && MatchNet.Instance != null && MatchNet.Instance.UsesHitRule)   // Milsim, Medic
             {
                 MarkHit(attackerClientId, weapon);
                 return;
@@ -201,6 +201,8 @@ namespace AirsoftFPS
             var nm = NetworkManager;
             if (nm == null) return;
             double now = nm.ServerTime.Time;
+            // the objective keeps them out for now (Medic: downed waiting for a medic, or no tickets left)
+            if (ObjectiveMode.HoldsHit(MatchId)) { if (hitRespawnAt.Value != 0) hitRespawnAt.Value = 0; return; }
             int team = mn != null ? mn.TeamOf(MatchId) : 0;
             float outside = MilsimZone.DistanceOutside(team, transform.position, out _);
             bool inZone = outside <= 0f;   // no zone in this arena (-1): respawn where they stand
@@ -216,6 +218,14 @@ namespace AirsoftFPS
             hitRespawnAt.Value = 0;
             isHit.Value = false;
             StartSpawnProtection();
+        }
+
+        // Server: back in the game right where they are (Medic revive), with a short spawn protection.
+        public void ReviveFromHit(float protectSeconds)
+        {
+            if (!IsServer || !isHit.Value) return;
+            ClearHit();
+            spawnProtectedUntil.Value = NetworkManager.ServerTime.Time + protectSeconds;
         }
 
         void DespawnEnemy()

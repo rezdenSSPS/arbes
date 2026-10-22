@@ -643,6 +643,7 @@ namespace AirsoftFPS
             MatchNet.GameModeType.Milsim => "Milsim",
             MatchNet.GameModeType.CaptureTheFlag => "Capture the Flag",
             MatchNet.GameModeType.Domination => "Domination",
+            MatchNet.GameModeType.Medic => "Medic",
             _ => "Co-op Survival"
         };
 
@@ -654,6 +655,7 @@ namespace AirsoftFPS
             MatchNet.GameModeType.Milsim => $"One BB = out: walk back to respawn. First to {MatchNet.MILSIM_HIT_TARGET}.",
             MatchNet.GameModeType.CaptureTheFlag => $"Grab the enemy flag, bring it home. First to {CaptureTheFlag.CAPTURE_TARGET}.",
             MatchNet.GameModeType.Domination => $"Hold points A, B and C to score. First to {Domination.SCORE_TARGET}.",
+            MatchNet.GameModeType.Medic => $"One BB = down. Medics revive (hold E). {Medic.BASE_TICKETS} tickets.",
             _ => "Team up against waves of AI enemies."
         };
 

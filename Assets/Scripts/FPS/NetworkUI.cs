@@ -915,6 +915,7 @@ namespace AirsoftFPS
             tdmNote = note.gameObject;
 
             BuildBotOptions(colRt, 34 + 4 * 62 + 52);
+            BuildMedicOptions(colRt, 34 + 4 * 62 + 52 + 122);   // Medic mode volunteer (NetworkUI.Medic.cs)
         }
 
         // "Fill with bots" (Off / up to 4 / up to 8 players) and bot difficulty, under the player slots.
@@ -1084,6 +1085,7 @@ namespace AirsoftFPS
             timeGroup.blocksRaycasts = isHost;
 
             RefreshBotOptions(mnet);
+            RefreshMedicOptions(mnet);
 
             // roster
             var roster = mnet.Roster;

@@ -16,6 +16,7 @@ namespace AirsoftFPS
         public List<WeaponKills> weaponKills = new List<WeaponKills>();
         // The look saved before unlocks existed: its items stay usable at any level.
         public int legacyLook = -1;
+        public int revives;   // Medic mode: teammates revived (older profiles load it as 0)
     }
 
     [Serializable]
@@ -28,6 +29,7 @@ namespace AirsoftFPS
         public float time;   // Time.unscaledTime when committed
         public int xpBefore, xpAfter;
         public int kills, hits, enemyKills;
+        public int revives;   // Medic mode
         public bool won, completed;
         public readonly List<(string what, int xp)> lines = new List<(string, int)>();
         public readonly List<string> unlocked = new List<string>();
@@ -44,6 +46,7 @@ namespace AirsoftFPS
         public const int XP_HIT = 3;           // every server-confirmed hit
         public const int XP_MATCH = 50;        // finished a match (co-op: stayed 2+ minutes)
         public const int XP_WIN = 100;         // won it (FFA / Gun Game winner, or winning team)
+        public const int XP_REVIVE = 15;       // revived a teammate (Medic)
 
         // XP needed to go from `level` to the next: 150, 225, 300, ... Level 10 = 4 050 XP,
         // roughly three evenings of matches.
@@ -150,6 +153,7 @@ namespace AirsoftFPS
             if (m.kills > 0) { xp += m.kills * XP_KILL; m.lines.Add((m.kills == 1 ? "1 kill" : m.kills + " kills", m.kills * XP_KILL)); }
             if (m.enemyKills > 0) { xp += m.enemyKills * XP_ENEMY_KILL; m.lines.Add((m.enemyKills + " enemies", m.enemyKills * XP_ENEMY_KILL)); }
             if (m.hits > 0) { xp += m.hits * XP_HIT; m.lines.Add((m.hits == 1 ? "1 hit" : m.hits + " hits", m.hits * XP_HIT)); }
+            if (m.revives > 0) { xp += m.revives * XP_REVIVE; m.lines.Add((m.revives == 1 ? "1 revive" : m.revives + " revives", m.revives * XP_REVIVE)); }
 
             if (m.completed) d.matchesPlayed++;
             if (m.won) d.wins++;
@@ -157,6 +161,7 @@ namespace AirsoftFPS
             d.deaths += deaths;
             d.hitsDealt += m.hits;
             d.hitsTaken += hitsTaken;
+            d.revives += m.revives;
             d.bestStreak = Mathf.Max(d.bestStreak, bestStreak);
             foreach (var w in weaponKills) AddWeaponKill(w);
             d.totalXp += xp;
@@ -297,6 +302,9 @@ namespace AirsoftFPS
                 seenKills = Mathf.Max(seenKills, k);
                 seenDeaths = Mathf.Max(seenDeaths, d);
             }
+
+            // Medic: revives are the objective points (server-counted, synced with the objective state).
+            if (ObjectiveMode.Active is Medic) match.revives = Mathf.Max(match.revives, ObjectiveMode.PointsOf(nm.LocalClientId));
 
             // Local player: confirmed hits (weapon) and hits taken (own health going down).
             var po = nm.LocalClient != null ? nm.LocalClient.PlayerObject : null;
