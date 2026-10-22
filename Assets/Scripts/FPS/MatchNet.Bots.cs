@@ -39,7 +39,7 @@ namespace AirsoftFPS
         public int BotFill { get; private set; }
         public BotDifficulty BotSkill { get; private set; } = BotDifficulty.Normal;
 
-        // Modes that get bots. Explicit list: modes added later (objectives) stay bot-free.
+        // Modes that get bots. Explicit list: modes added later (objectives, Medic) stay bot-free.
         public static bool ModeHasBots(GameModeType m) =>
             m == GameModeType.FreeForAll || m == GameModeType.TeamDeathmatch ||
             m == GameModeType.GunGame || m == GameModeType.Milsim;

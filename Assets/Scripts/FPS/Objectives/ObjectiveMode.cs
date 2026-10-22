@@ -30,6 +30,7 @@ namespace AirsoftFPS
             public string unit;         // "captures", "points"
             public string pointsLabel;  // scoreboard column
             public Func<MapCaps, string> missing;   // null = map has what the mode needs, else a short reason
+            public bool hitRule;        // Milsim HIT rule: one BB = out (no HP), hand up
         }
 
         static readonly Dictionary<MatchNet.GameModeType, Def> defs = new Dictionary<MatchNet.GameModeType, Def>
@@ -44,6 +45,11 @@ namespace AirsoftFPS
                 type = typeof(Domination), target = Domination.SCORE_TARGET, unit = "points",
                 pointsLabel = "CAPS", missing = Domination.MissingOnMap
             },
+            [MatchNet.GameModeType.Medic] = new Def
+            {
+                type = typeof(Medic), target = 0, unit = "tickets",   // no score race: tickets run down
+                pointsLabel = "REVIVES", missing = null, hitRule = true
+            },
         };
 
         public static bool HasObjective(MatchNet.GameModeType m) => defs.ContainsKey(m);
@@ -55,6 +61,9 @@ namespace AirsoftFPS
         public static string UnitFor(MatchNet.GameModeType m) => defs.TryGetValue(m, out var d) ? " " + d.unit : "";
 
         public static string PointsLabelFor(MatchNet.GameModeType m) => defs.TryGetValue(m, out var d) ? d.pointsLabel : "";
+
+        // Plays with the Milsim HIT rule (one BB = out, raised hand) instead of HP.
+        public static bool UsesHitRule(MatchNet.GameModeType m) => defs.TryGetValue(m, out var d) && d.hitRule;
 
         // Can the current match map play this mode? reason = short text for the lobby card when not.
         public static bool IsAvailable(MatchNet.GameModeType m, out string reason)
@@ -74,6 +83,7 @@ namespace AirsoftFPS
         {
             if (mn == null || nm == null) return;
             EnsureHandlers(nm);
+            Medic.LobbySync(nm);   // medic volunteers (lobby) + medic input messages
             bool want = nm.IsListening && mn.CurrentPhase != MatchNet.Phase.Lobby && HasObjective(mn.Mode)
                         && SceneManager.GetActiveScene().name == MatchNet.CurrentMapScene;
             if (want && (Active == null || Active.Mode != mn.Mode))
@@ -130,6 +140,37 @@ namespace AirsoftFPS
 
         public static int PointsOf(ulong clientId) =>
             Active != null && Active.playerPoints.TryGetValue(clientId, out int p) ? p : 0;
+
+        // Downed in place (Medic): can't move, kneels (FPSController, PlayerAvatar). Any peer.
+        public static bool IsDowned(ulong clientId) => Active != null && Active.Downed(clientId);
+
+        // Server: keep this HIT player out (no Milsim walk-back respawn) for now. Health.TickHitRespawn.
+        // Clients: the Milsim HIT overlay stays hidden (the mode shows its own).
+        public static bool HoldsHit(ulong clientId) => Active != null && Active.HoldsOut(clientId);
+
+        // Scoreboard: extra text after a player's name ("" = none).
+        public static string TagFor(ulong clientId) => Active != null ? Active.NameTag(clientId) ?? "" : "";
+
+        // HUD team score bar: replaces "FIRST TO <target>" (false = keep it).
+        public static bool TryScoreCaption(out string caption, out string value)
+        {
+            caption = value = null;
+            return Active != null && Active.ScoreCaption(out caption, out value);
+        }
+
+        // Results banner subtitle (null = the default "first team to ..." / "higher score ...").
+        public static string ResultLine(int winnerTeam, bool onTime, bool draw) =>
+            Active != null ? Active.ResultText(winnerTeam, onTime, draw) : null;
+
+        // The mode ended the match itself (e.g. a team out of tickets): MatchNet asks this when
+        // NotifyObjectiveScore runs. false = no result yet.
+        public static bool TryDeclaredResult(out int winnerTeam, out bool draw)
+        {
+            winnerTeam = 0; draw = false;
+            if (Active == null || !Active.HasDeclared) return false;
+            winnerTeam = Active.DeclaredWinner; draw = Active.DeclaredDraw;
+            return true;
+        }
 
         // Objective events ("Alex took the BLUE flag"): text + team colour (0 = neutral). Raised on everyone.
         public static event Action<string, int> OnAnnounce;
@@ -199,6 +240,26 @@ namespace AirsoftFPS
         // Server: a player was eliminated (death, or HIT in Milsim).
         public virtual void ServerPlayerOut(ulong victim, ulong killer) { }
         protected virtual bool BlocksSprint(ulong clientId) => false;
+        protected virtual bool Downed(ulong clientId) => false;
+        protected virtual bool HoldsOut(ulong clientId) => false;
+        protected virtual string NameTag(ulong clientId) => "";
+        protected virtual bool ScoreCaption(out string caption, out string value) { caption = value = null; return false; }
+        protected virtual string ResultText(int winnerTeam, bool onTime, bool draw) => null;
+
+        // Match result decided by the mode (server). Read by MatchNet through TryDeclaredResult.
+        public bool HasDeclared { get; private set; }
+        public int DeclaredWinner { get; private set; }
+        public bool DeclaredDraw { get; private set; }
+
+        protected void DeclareWinner(int winnerTeam, bool draw = false)
+        {
+            if (HasDeclared) return;
+            HasDeclared = true;
+            DeclaredWinner = draw ? 0 : winnerTeam;
+            DeclaredDraw = draw;
+            dirty = true;
+            if (testParticipants == null) MatchNet.Instance?.NotifyObjectiveScore();
+        }
 
         public virtual void WinnerOnTimeout(out int winnerTeam, out bool draw)
         {
