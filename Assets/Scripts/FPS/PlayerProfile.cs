@@ -355,7 +355,7 @@ namespace AirsoftFPS
             for (int i = 0; i < n; i++)
             {
                 var h = s_overlap[i].GetComponentInParent<Health>();
-                if (h == null || h.isPlayer || credited.Contains(h)) continue;
+                if (h == null || h.IsCombatant || credited.Contains(h)) continue;   // co-op AI only (bots score via the roster)
                 float dist = (s_overlap[i].ClosestPoint(point) - point).sqrMagnitude;
                 if (dist < bestD) { bestD = dist; best = h; }
             }

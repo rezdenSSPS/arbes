@@ -96,11 +96,11 @@ namespace AirsoftFPS
             foreach (var h in Object.FindObjectsByType<Health>(FindObjectsSortMode.None))
             {
                 if (!h.IsSpawned || h.isDead.Value) continue;
-                if (h.isPlayer && h.OwnerClientId == clientId) continue;
+                if (h.IsCombatant && h.MatchId == clientId) continue;
                 bool enemy;
-                if (!h.isPlayer) enemy = true;                                     // AI (co-op)
+                if (!h.IsCombatant) enemy = true;                                  // AI (co-op)
                 else if (mode == MatchNet.GameModeType.Coop) enemy = false;        // co-op teammates
-                else if (team != 0) enemy = mn.TeamOf(h.OwnerClientId) != team;   // TDM
+                else if (team != 0) enemy = mn.TeamOf(h.MatchId) != team;         // TDM (players and bots)
                 else enemy = true;                                                 // FFA / Gun Game
                 others.Add((h.transform.position, enemy));
             }

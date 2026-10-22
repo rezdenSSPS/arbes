@@ -24,7 +24,7 @@ namespace AirsoftFPS
         public NetworkVariable<double> spawnProtectedUntil = new NetworkVariable<double>(0,
             NetworkVariableReadPermission.Everyone,
             NetworkVariableWritePermission.Server);
-        public float SpawnProtectionLeft => IsSpawned && isPlayer
+        public float SpawnProtectionLeft => IsSpawned && IsCombatant
             ? Mathf.Max(0f, (float)(spawnProtectedUntil.Value - NetworkManager.ServerTime.Time)) : 0f;
         public bool IsSpawnProtected => SpawnProtectionLeft > 0f;
 
@@ -43,6 +43,20 @@ namespace AirsoftFPS
             NetworkVariableWritePermission.Server);
 
         public bool IsOut => isHit.Value;
+
+        // PvP bots (BotBrain): an AI soldier (Enemy prefab) that plays as a roster entry. It has
+        // no owning client, so it is identified by its bot id (MatchNet.BOT_ID_BASE + n) instead.
+        // Set by the server before Spawn, so clients have it in OnNetworkSpawn.
+        public const ulong NO_BOT = ulong.MaxValue;
+        public const int BOT_MAX_HEALTH = 100;   // same as a player
+        public NetworkVariable<ulong> botId = new NetworkVariable<ulong>(NO_BOT,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Server);
+        public bool IsBot => botId.Value != NO_BOT;
+        // Plays like a player (roster entry, scoring, spawn protection, Milsim HIT, respawn).
+        public bool IsCombatant => isPlayer || IsBot;
+        // Roster id: the owning client for players, the bot id for bots.
+        public ulong MatchId => IsBot ? botId.Value : OwnerClientId;
         public System.Action<bool> OnHitChanged;   // true = just got hit, false = back in the game
 
         public System.Action<int, int> OnHealthChanged; // current, max
@@ -55,10 +69,11 @@ namespace AirsoftFPS
 
         public override void OnNetworkSpawn()
         {
+            if (IsBot) maxHealth = BOT_MAX_HEALTH;
             if (IsServer)
                 currentHealth.Value = maxHealth;
-            if (IsServer && isPlayer) StartSpawnProtection();
-            if (isPlayer && GetComponent<SpawnProtectionFX>() == null) gameObject.AddComponent<SpawnProtectionFX>();
+            if (IsServer && IsCombatant) StartSpawnProtection();
+            if (IsCombatant && GetComponent<SpawnProtectionFX>() == null) gameObject.AddComponent<SpawnProtectionFX>();
 
             currentHealth.OnValueChanged += (prev, curr) =>
             {
@@ -93,7 +108,7 @@ namespace AirsoftFPS
             if (isDead.Value || isHit.Value) return;
             if (IsSpawnProtected) return;
 
-            if (isPlayer && MatchNet.Instance != null && MatchNet.Instance.IsMilsim)
+            if (IsCombatant && MatchNet.Instance != null && MatchNet.Instance.IsMilsim)
             {
                 MarkHit(attackerClientId, weapon);
                 return;
@@ -113,10 +128,10 @@ namespace AirsoftFPS
             if (!IsServer) return;
             isDead.Value = true;
 
-            if (isPlayer)
+            if (IsCombatant)
             {
                 // Tell the match director who died (and who got the kill, for FFA scoring)
-                MatchNet.Instance?.ReportKill(OwnerClientId, lastAttackerClientId, lastAttackerWeapon, lastAttackerObject);
+                MatchNet.Instance?.ReportKill(MatchId, lastAttackerClientId, lastAttackerWeapon, lastAttackerObject);
                 // Respawn after delay
                 Invoke(nameof(Respawn), respawnDelay);
             }
@@ -133,8 +148,10 @@ namespace AirsoftFPS
 
             // Team side / away from enemies (PlayerSpawner). The owner moves the player: its
             // ClientNetworkTransform is owner-authoritative, so a server-side move would be undone.
-            var spawn = PlayerSpawner.GetSpawnFor(OwnerClientId);
-            RespawnTeleportRpc(spawn.position, spawn.rotation);
+            var spawn = PlayerSpawner.GetSpawnFor(MatchId);
+            var bot = IsBot ? GetComponent<BotBrain>() : null;
+            if (bot != null) bot.Teleport(spawn.position, spawn.rotation);   // bots: the server moves them
+            else RespawnTeleportRpc(spawn.position, spawn.rotation);
 
             currentHealth.Value = maxHealth;
             StartSpawnProtection();
@@ -168,7 +185,7 @@ namespace AirsoftFPS
         {
             isHit.Value = true;
             hitRespawnAt.Value = 0;
-            MatchNet.Instance?.ReportHit(OwnerClientId, shooterClientId, weapon);
+            MatchNet.Instance?.ReportHit(MatchId, shooterClientId, weapon);
         }
 
         void Update()
@@ -184,7 +201,7 @@ namespace AirsoftFPS
             var nm = NetworkManager;
             if (nm == null) return;
             double now = nm.ServerTime.Time;
-            int team = mn != null ? mn.TeamOf(OwnerClientId) : 0;
+            int team = mn != null ? mn.TeamOf(MatchId) : 0;
             float outside = MilsimZone.DistanceOutside(team, transform.position, out _);
             bool inZone = outside <= 0f;   // no zone in this arena (-1): respawn where they stand
 

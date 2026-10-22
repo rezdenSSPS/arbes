@@ -13,7 +13,7 @@ namespace AirsoftFPS
     // Networking uses the NetworkManager's CustomMessagingManager, which works
     // WITHOUT a spawned NetworkObject -- the server owns the roster and broadcasts
     // the whole state to clients whenever it changes.
-    public class MatchNet : MonoBehaviour
+    public partial class MatchNet : MonoBehaviour   // bots: MatchNet.Bots.cs
     {
         public enum GameModeType { Coop = 0, FreeForAll = 1, TeamDeathmatch = 2, GunGame = 3, Milsim = 4 }
         public const int MODE_COUNT = 5;
@@ -139,6 +139,7 @@ namespace AirsoftFPS
             if (nm.IsServer && !serverHandlersUp) RegisterServerHandlers();
 
             if (nm.IsServer) TickMatchClock();
+            BotsUpdate();
         }
 
         // ───────────────────────── Local player API (UI calls these) ─────────────────────────
@@ -643,21 +644,23 @@ namespace AirsoftFPS
         // hit record (Health.TakeDamage), so a client can't fake its killer or the killer's HP.
         void SendDeathInfo(ulong victim, ulong killer, string weapon, NetworkObject killerObj)
         {
+            if (IsBotId(victim)) return;   // bots have no client to tell
             if (killerObj == null && killer != victim && HasEntry(killer)
                 && nm.ConnectedClients.TryGetValue(killer, out var client))
                 killerObj = client.PlayerObject;
+            if (killerObj == null && killer != victim) killerObj = BotObject(killer);
 
             var info = new DeathInfo { kind = KillerKind.None, killerClientId = ulong.MaxValue, killerName = "",
                                        weapon = weapon ?? "", killerHp = -1, killerMaxHp = -1 };
             var kh = killerObj != null && killerObj.IsSpawned ? killerObj.GetComponent<Health>() : null;
-            bool player = kh != null && kh.isPlayer;
-            if (kh != null && !(player && killerObj.OwnerClientId == victim))
+            bool player = kh != null && kh.IsCombatant;   // players and bots
+            if (kh != null && !(player && kh.MatchId == victim))
             {
                 info.kind = player ? KillerKind.Player : KillerKind.Enemy;
-                info.killerClientId = player ? killerObj.OwnerClientId : ulong.MaxValue;
+                info.killerClientId = player ? kh.MatchId : ulong.MaxValue;
                 info.killerObjectId = killerObj.NetworkObjectId;
-                info.killerName = player ? NameFor(killerObj.OwnerClientId) : "Enemy soldier";
-                info.killerTeam = player && TeamMode ? TeamOf(killerObj.OwnerClientId) : 0;
+                info.killerName = player ? NameFor(kh.MatchId) : "Enemy soldier";
+                info.killerTeam = player && TeamMode ? TeamOf(kh.MatchId) : 0;
                 info.killerHp = kh.currentHealth.Value;
                 info.killerMaxHp = kh.maxHealth;
                 info.killerPos = killerObj.transform.position;

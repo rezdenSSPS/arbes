@@ -87,6 +87,11 @@ namespace AirsoftFPS
         CanvasGroup timeGroup;
         GameObject timeUnit, timeCoopNote;
         readonly List<Slot> slots = new List<Slot>();
+        // bots (host: "Fill with bots" + difficulty; clients see them read-only)
+        Segmented botFillSeg, botSkillSeg;
+        CanvasGroup botFillGroup, botSkillGroup;
+        GameObject botSkillRow;
+        TextMeshProUGUI botNote;
         float copyFlashUntil;
         float refreshTimer;
 
@@ -901,6 +906,60 @@ namespace AirsoftFPS
             var note = Label(colRt, "Teams are split automatically when the match starts. Friendly fire is off.", F.Body, 13, Muted).Wrap();
             note.rectTransform.TL(0, 34 + 4 * 62 + 4, 556, 36);
             tdmNote = note.gameObject;
+
+            BuildBotOptions(colRt, 34 + 4 * 62 + 52);
+        }
+
+        // "Fill with bots" (Off / up to 4 / up to 8 players) and bot difficulty, under the player slots.
+        void BuildBotOptions(RectTransform colRt, float y)
+        {
+            var fill = Rect(colRt, "BotFill").TL(0, y, 556, 32);
+            Caption(fill, "FILL WITH BOTS", 12, Muted, 0.16f).rectTransform.Fill();
+            var fillOpts = new string[MatchNet.BOT_FILL_OPTIONS.Length];
+            for (int i = 0; i < fillOpts.Length; i++)
+                fillOpts[i] = MatchNet.BOT_FILL_OPTIONS[i] == 0 ? "OFF" : "UP TO " + MatchNet.BOT_FILL_OPTIONS[i];
+            botFillSeg = Segments(fill, fillOpts, 0, 28, 12, i =>
+            {
+                if (isHost && MatchNet.Instance != null) MatchNet.Instance.HostSetBotFill(MatchNet.BOT_FILL_OPTIONS[i]);
+            }, 12f);
+            var fillRt = (RectTransform)botFillSeg.transform;
+            fillRt.anchorMin = fillRt.anchorMax = fillRt.pivot = new Vector2(1f, 0.5f);
+            fillRt.anchoredPosition = Vector2.zero;
+            botFillGroup = botFillSeg.gameObject.AddComponent<CanvasGroup>();
+
+            var skill = Rect(colRt, "BotSkill").TL(0, y + 40, 556, 32);
+            Caption(skill, "BOT DIFFICULTY", 12, Muted, 0.16f).rectTransform.Fill();
+            var skillOpts = new string[MatchNet.BOT_DIFFICULTY_NAMES.Length];
+            for (int i = 0; i < skillOpts.Length; i++) skillOpts[i] = MatchNet.BOT_DIFFICULTY_NAMES[i].ToUpperInvariant();
+            botSkillSeg = Segments(skill, skillOpts, 1, 28, 12, i =>
+            {
+                if (isHost && MatchNet.Instance != null) MatchNet.Instance.HostSetBotDifficulty(i);
+            }, 12f);
+            var skillRt = (RectTransform)botSkillSeg.transform;
+            skillRt.anchorMin = skillRt.anchorMax = skillRt.pivot = new Vector2(1f, 0.5f);
+            skillRt.anchoredPosition = Vector2.zero;
+            botSkillGroup = botSkillSeg.gameObject.AddComponent<CanvasGroup>();
+            botSkillRow = skill.gameObject;
+
+            botNote = Label(colRt, "", F.Body, 13, Muted).Wrap();
+            botNote.rectTransform.TL(0, y + 80, 556, 36);
+        }
+
+        void RefreshBotOptions(MatchNet mnet)
+        {
+            if (botFillSeg == null) return;
+            bool modeHasBots = MatchNet.ModeHasBots(mnet.Mode);
+            int fi = Array.IndexOf(MatchNet.BOT_FILL_OPTIONS, mnet.BotFill);
+            if (fi >= 0 && botFillSeg.Selected != fi) botFillSeg.Select(fi, false);
+            int si = (int)mnet.BotSkill;
+            if (botSkillSeg.Selected != si) botSkillSeg.Select(si, false);
+            botFillGroup.blocksRaycasts = botSkillGroup.blocksRaycasts = isHost;
+            botFillGroup.alpha = modeHasBots ? 1f : 0.45f;
+            botSkillGroup.alpha = modeHasBots && mnet.BotFill > 0 ? 1f : 0.45f;
+            botSkillRow.SetActive(true);
+            botNote.text = !modeHasBots ? "No bots in this mode."
+                : mnet.BotFill > 0 ? "Bots fill the empty slots and leave when players join."
+                : isHost ? "Bots can fill empty slots in Free-for-All, Team Deathmatch, Gun Game and Milsim." : "";
         }
 
         void BuildCharacterColumn(RectTransform colRt)
@@ -1005,6 +1064,8 @@ namespace AirsoftFPS
             int ti = Array.IndexOf(MatchNet.TIME_LIMIT_OPTIONS, mnet.TimeLimitMinutes);
             if (ti >= 0 && timeSeg.Selected != ti) timeSeg.Select(ti, false);
             timeGroup.blocksRaycasts = isHost;
+
+            RefreshBotOptions(mnet);
 
             // roster
             var roster = mnet.Roster;

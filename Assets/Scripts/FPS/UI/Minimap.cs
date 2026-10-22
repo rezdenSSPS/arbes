@@ -31,6 +31,7 @@ namespace AirsoftFPS
         float readyAt = -1f;
         float scanTimer;
         readonly List<FPSController> players = new List<FPSController>();
+        readonly List<Health> bots = new List<Health>();   // PvP bots (teammates show like players)
         readonly List<Image> dots = new List<Image>();
 
         public static Minimap Create(Transform parent)
@@ -118,6 +119,9 @@ namespace AirsoftFPS
                 scanTimer = 0.5f;
                 players.Clear();
                 players.AddRange(FindObjectsByType<FPSController>());
+                bots.Clear();
+                foreach (var bh in FindObjectsByType<Health>())
+                    if (bh.IsSpawned && bh.IsBot) bots.Add(bh);
             }
 
             var mn = MatchNet.Instance;
@@ -145,6 +149,19 @@ namespace AirsoftFPS
                 dot.rectTransform.anchoredPosition = off;
                 dot.transform.GetChild(0).GetComponent<Image>().color = team != 0 ? TeamColor(team) : Fg;
             }
+            if (MatchNet.IsTeamMode(mode))
+                foreach (var b in bots)
+                {
+                    if (b == null || !b.IsSpawned || b.isDead.Value) continue;
+                    int team = mn.TeamOf(b.MatchId);
+                    if (team == 0 || team != myTeam) continue;
+                    Vector3 d = b.transform.position - p;
+                    Vector2 off = mapRot * new Vector3(d.x * Ppm, d.z * Ppm, 0);
+                    if (off.magnitude > DotEdge) off = off.normalized * DotEdge;
+                    var dot = Dot(used++);
+                    dot.rectTransform.anchoredPosition = off;
+                    dot.transform.GetChild(0).GetComponent<Image>().color = TeamColor(team);
+                }
             for (int i = 0; i < dots.Count; i++) dots[i].gameObject.SetActive(i < used);
         }
 

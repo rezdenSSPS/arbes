@@ -677,7 +677,7 @@ namespace AirsoftFPS
             rec.usedPellets |= 1 << match;
 
             // Team modes: no friendly fire between teammates.
-            if (MatchNet.Instance != null && MatchNet.Instance.BlocksDamage(OwnerClientId, netObj.OwnerClientId))
+            if (MatchNet.Instance != null && MatchNet.Instance.BlocksDamage(OwnerClientId, health.MatchId))
                 return;
             health.TakeDamage(w.damage, OwnerClientId, w.weaponName);
             HitConfirmRpc(hitPoint, RpcTarget.Single(OwnerClientId, RpcTargetUse.Temp));
