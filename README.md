@@ -67,6 +67,7 @@ už používá jiná spuštěná hra na stejném počítači, hostování skonč
 | Střelba | levé tlačítko myši |
 | Míření / puškohled | pravé tlačítko myši |
 | Bang (eliminace na blízko bez výstřelu) | V |
+| Kouřový granát (gadget, vestoje) | G |
 | Přebití | R |
 | Zbraně | 1 – 0, kolečko myši |
 | Scoreboard | Tab (držet) |

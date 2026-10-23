@@ -304,6 +304,7 @@ namespace AirsoftFPS
         bool LineOfSight(Health h)
         {
             Vector3 a = Eye, b = Chest(h);
+            if (SmokeField.Blocks(a, b)) return false;   // can't see through smoke
             Vector3 d = b - a;
             float dist = d.magnitude;
             if (dist < 0.01f) return true;

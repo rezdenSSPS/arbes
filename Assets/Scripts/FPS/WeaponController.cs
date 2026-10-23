@@ -119,6 +119,22 @@ namespace AirsoftFPS
         float nextBang;      // owner
         float svNextBang;    // server
 
+        // ───── Smoke grenade (gadget, key G) ─────
+        // No NetworkObject: the owner asks the server (ThrowSmokeRpc), the server works out where it lands,
+        // registers a SmokeField cloud (so bots can't see through it) and tells everyone (SmokePopRpc) to
+        // bloom a local smoke cloud there. Smoke is visual concealment for players and a real LOS block for bots.
+        const int SMOKE_MAX = 2;
+        const float SMOKE_COOLDOWN = 0.8f;
+        const float SMOKE_DURATION = 15f;
+        const float SMOKE_RADIUS = 4.5f;
+        const float SMOKE_THROW_SPEED = 18f;
+        int smokeCount = SMOKE_MAX;   // owner (HUD)
+        int svSmoke = SMOKE_MAX;      // server (authoritative)
+        float nextSmoke;
+        static Material s_smokeMat;
+
+        public int CurrentSmoke => smokeCount;
+
         static readonly RaycastHit[] s_losHits = new RaycastHit[16];
 
         static Material s_glowMat;
@@ -168,6 +184,7 @@ namespace AirsoftFPS
             fpsController = GetComponent<FPSController>();
             playerCam = GetComponentInChildren<Camera>();
             ownHealth = GetComponent<Health>();
+            if (ownHealth != null) ownHealth.OnRespawn += RefillSmokeOnRespawn;   // fresh smoke each life
 
             // Capture weapon rest pose for recoil animation
             if (weaponHolder)
@@ -315,6 +332,7 @@ namespace AirsoftFPS
             HandleAim();
             HandleFire();
             HandleBang();
+            HandleSmoke();
         }
 
         // ───── Weapon view animation (owner only) ─────
@@ -440,6 +458,7 @@ namespace AirsoftFPS
             ammoReserve = reserveAmmos[currentIndex];
             isReloading = false;
             reloadCutWeapon = -1;
+            smokeCount = SMOKE_MAX;
             NotifyAmmo();
             if (IsSpawned) RefillAmmoRpc();   // keep the server's authoritative ammo in sync (round start)
         }
@@ -477,6 +496,7 @@ namespace AirsoftFPS
             if (svMag == null) return;
             for (int i = 0; i < weapons.Length; i++) { svMag[i] = weapons[i].magSize; svReserve[i] = weapons[i].maxReserve; }
             svReloadWeapon = -1;
+            svSmoke = SMOKE_MAX;
         }
 
         [Rpc(SendTo.Server)]
@@ -633,6 +653,120 @@ namespace AirsoftFPS
             if (ownHealth != null) ownHealth.EndSpawnProtection();
             health.TakeDamage(9999, OwnerClientId, "Bang!");   // lethal; hit-rule modes convert it to a HIT
             HitConfirmRpc(point, RpcTarget.Single(OwnerClientId, RpcTargetUse.Temp));
+        }
+
+        // ───── Smoke grenade ─────
+        void HandleSmoke()
+        {
+            var kb = Keyboard.current;
+            if (kb == null || !kb.gKey.wasPressedThisFrame || Time.time < nextSmoke || smokeCount <= 0) return;
+            if (!playerCam || ObjectiveMode.IsDowned(OwnerClientId)) return;   // G = "give up" while downed
+            nextSmoke = Time.time + SMOKE_COOLDOWN;
+            smokeCount--;
+            NotifyAmmo();
+            ThrowSmokeRpc(playerCam.transform.position, playerCam.transform.forward);
+        }
+
+        [Rpc(SendTo.Server)]
+        void ThrowSmokeRpc(Vector3 origin, Vector3 dir, RpcParams rpcParams = default)
+        {
+            if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
+            if (svSmoke <= 0) return;
+            if (ownHealth != null && (ownHealth.isDead.Value || ownHealth.IsOut)) return;
+            svSmoke--;
+            Vector3 land = SmokeLanding(origin, dir);
+            SmokeField.Add(land, SMOKE_RADIUS, SMOKE_DURATION + 1.5f);   // bots can't see through it
+            SmokePopRpc(land);
+        }
+
+        // Server: trace the thrown grenade's arc to where it settles (ignores players).
+        static Vector3 SmokeLanding(Vector3 origin, Vector3 dir)
+        {
+            Vector3 pos = origin;
+            Vector3 vel = dir.normalized * SMOKE_THROW_SPEED;
+            const float dt = 0.04f;
+            for (int i = 0; i < 90; i++)
+            {
+                Vector3 next = pos + vel * dt;
+                if (Physics.Linecast(pos, next, out RaycastHit hit, ~0, QueryTriggerInteraction.Ignore)
+                    && hit.collider.GetComponentInParent<Health>() == null)
+                    return hit.point + hit.normal * 0.25f;
+                vel += Vector3.up * (-9.8f * dt);
+                pos = next;
+            }
+            return pos;
+        }
+
+        [Rpc(SendTo.Everyone)]
+        void SmokePopRpc(Vector3 pos) => SpawnSmokeVisual(pos);
+
+        void SpawnSmokeVisual(Vector3 pos)
+        {
+            var root = new GameObject("Smoke");
+            root.transform.position = pos + Vector3.up * 1.0f;
+            const int puffs = 8;
+            var targets = new float[puffs];
+            var mat = SmokeMat();
+            for (int i = 0; i < puffs; i++)
+            {
+                var s = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                var col = s.GetComponent<Collider>(); if (col) Destroy(col);
+                s.name = "Puff";
+                s.transform.SetParent(root.transform, false);
+                Vector3 off = Random.insideUnitSphere * SMOKE_RADIUS * 0.55f;
+                off.y = Mathf.Abs(off.y) * 0.5f;
+                s.transform.localPosition = off;
+                targets[i] = SMOKE_RADIUS * Random.Range(1.4f, 2.2f);
+                s.transform.localScale = Vector3.zero;
+                var r = s.GetComponent<Renderer>();
+                r.sharedMaterial = mat;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+            StartCoroutine(AnimateSmoke(root, targets));
+        }
+
+        IEnumerator AnimateSmoke(GameObject root, float[] targets)
+        {
+            const float grow = 1.3f, fade = 3f;
+            float total = SMOKE_DURATION, t = 0f;
+            var tr = root.transform;
+            while (t < total && root != null)
+            {
+                t += Time.deltaTime;
+                float k = t < grow ? Mathf.SmoothStep(0f, 1f, t / grow)
+                        : t > total - fade ? Mathf.Clamp01((total - t) / fade) : 1f;
+                for (int i = 0; i < tr.childCount && i < targets.Length; i++)
+                    tr.GetChild(i).localScale = Vector3.one * (targets[i] * k);
+                tr.position += Vector3.up * (0.06f * Time.deltaTime);
+                yield return null;
+            }
+            if (root != null) Destroy(root);
+        }
+
+        static Material SmokeMat()
+        {
+            if (s_smokeMat == null)
+            {
+                var sh = Shader.Find("Sprites/Default");
+                if (sh == null) sh = Shader.Find("Universal Render Pipeline/Unlit");
+                s_smokeMat = new Material(sh);
+                var c = new Color(0.80f, 0.82f, 0.78f, 0.42f);
+                s_smokeMat.color = c;
+                if (s_smokeMat.HasProperty("_BaseColor")) s_smokeMat.SetColor("_BaseColor", c);
+            }
+            return s_smokeMat;
+        }
+
+        void RefillSmokeOnRespawn()
+        {
+            smokeCount = SMOKE_MAX;
+            if (IsServer) svSmoke = SMOKE_MAX;
+            NotifyAmmo();
+        }
+
+        public override void OnNetworkDespawn()
+        {
+            if (ownHealth != null) ownHealth.OnRespawn -= RefillSmokeOnRespawn;
         }
 
         void ApplyWeaponKick(WeaponData w)
