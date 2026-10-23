@@ -2,10 +2,10 @@
 
 Hra je na <https://rezdenssps.itch.io/airsoft> (kanály `mac` a `windows`). Jsou dvě cesty, jak ji sestavit a nahrát:
 
-- **Lokálně** na vlastním počítači a nahrání nástrojem **butler** – viz [část 6](#6-lokální-build-a-butler-takhle-vyšlo-v020).
-  Takhle vyšla verze **v0.2.0** (2026-10-22, macOS Universal + Windows 64-bit, commit `a8c552c`).
+- **Lokálně** na vlastním počítači a nahrání nástrojem **butler** – viz [část 6](#6-lokální-build-a-butler).
+  Takhle vyšly verze **v0.2.0** (2026-10-22, commit `a8c552c`) a **v0.2.1** (2026-10-23), obě macOS Universal + Windows 64-bit.
 - **Automaticky na GitHubu** (části 1–4). Workflow je připravený, ale zatím neběžel: v repozitáři chybí secrety
-  s Unity licencí a tag `v0.2.0` zatím neexistuje.
+  s Unity licencí a tagy vydání zatím neexistují.
 
 ## Automatický build (GitHub Actions)
 
@@ -130,21 +130,21 @@ Tag piš vždy ve tvaru `vMAJOR.MINOR.PATCH`.
 
 ---
 
-## 6. Lokální build a butler (takhle vyšlo v0.2.0)
+## 6. Lokální build a butler
 
 Bez GitHubu a bez secretů, stačí Unity na vlastním počítači. Na Macu jde sestavit macOS i Windows build,
 pokud má Unity 6000.6.0f1 v Unity Hubu modul *Windows Build Support (Mono)*.
 
 ### Verze
 Před buildem nastav verzi v *Edit → Project Settings → Player → Version* (`bundleVersion`). Menu hry ji ukazuje
-jako „v…“. Pozor: v repu je zatím `0.1.0`, takže build v0.2.0 ukazuje v menu „v0.1.0“.
+jako „v…“. Od v0.2.1 odpovídá verze v repu vydání (build v0.2.0 ještě ukazoval „v0.1.0“).
 
 ### Build v editoru
 *File → Build Profiles* → vyber platformu (macOS / Windows) → **Build** → vyber složku, např. `Builds/mac`
 nebo `Builds/windows` (složka `Builds/` je v `.gitignore`).
 
 ### Build z terminálu (batch mode)
-Tak vznikl build v0.2.0. Projekt nesmí být ve stejnou chvíli otevřený v editoru (buď editor zavři, nebo builduj
+Tak vznikly buildy v0.2.0 a v0.2.1. Projekt nesmí být ve stejnou chvíli otevřený v editoru (buď editor zavři, nebo builduj
 z jiného checkoutu, např. `git worktree`). Příkazy spusť v kořeni projektu.
 
 macOS (Universal = Intel i Apple Silicon):

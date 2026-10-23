@@ -158,3 +158,22 @@ AutoConnect.cs, NetDiag.cs.
 - Cíle: vlajka (sebrání, zisk, návrat), body v Domination, bomba (položení, zrychlující pípání, zneškodnění, výbuch), extrakce VIP, oživení, píšťalka a odpočet kola, výhra/prohra kola, posledních 10 s zápasu, úvodní a závěrečná znělka (výhra/prohra/remíza).
 - UI: hover/klik tlačítek, přepínače, posuvníky, ready.
 - 3D zvuk s útlumem a dolní propustí podle vzdálenosti; AudioMixer Master → SFX / Music / UI napojený na Nastavení → Zvuk (nově přepínač ambientu).
+
+## 2026-10-23 — Testy host + klient a vydání v0.2.1
+- Automatické end-to-end testy: dvě (u Medic a Bomb tři) instance hry v Unity batch módu na jednom počítači, jedna hostuje a ostatní se připojí přes LAN (127.0.0.1). Harness ovládá virtuální klávesnici a myš, takže postavy opravdu chodí, skáčou a střílejí, a kontroly se čtou na obou stranách (na klientovi hodnoty klienta). Prošly všechny režimy na obou mapách, boti, hlasování o mapě, pozdní připojení, odchod hosta uprostřed zápasu, časový limit a cesta výsledky → lobby → odveta.
+- Opravy z testů (commity `468b08a`, `d17dd75`, `9197ce0`, `b71c9b1`, `81c4b5f`, `8c19f57`):
+  - Vzdálení hráči začínali zápas v bodě (0, 0, 0) místo na spawnu (CharacterController zůstal na pozici z prefabu).
+  - Respawnutý klient byl na serveru chvíli živý na místě smrti, v CTF tak dostal zpátky upuštěnou vlajku. Server ho teď nechá mrtvého, dokud klient opravdu nedorazí na spawn, a když neodpovídá, pošle mu teleport znovu.
+  - Pozdě připojený hráč se spawnul na straně soupeře. Stejná jména dostanou číslo („Jméno 2“).
+  - Co-op: číslo vlny a životy nepřátel se synchronizují i klientům, nepřátelé míří z výšky hlavy.
+  - Bomb: vzdálený nosič na začátku kola přišel o bombu.
+  - Mrtvý hráč mohl lokálně střílet. Přebíjení přerušené smrtí začne po respawnu znovu a výstřel s prázdným zásobníkem sám přebije.
+  - Klient po odchodu hosta zůstal v zápase bez kamery, teď se vrátí do menu s hláškou. Host po LEAVE MATCH už neprojde vlastní čekárnou s falešnou chybou.
+  - Hra běží i v okně na pozadí. Dřív se zastavila, takže host přepnutím okna zastavil zápas všem.
+  - Skok nefungoval při velmi vysokém FPS (`minMoveDistance`).
+  - Zvuk: varování o chybějícím nebo dvojitém AudioListeneru při přechodech mezi scénami, 40 varování „Only custom filters can be played“ při startu, odcházející hudba se ztlumila hlasitostí nové skladby.
+  - Profil se ukládá atomicky a počítá i kill, který ukončil zápas.
+  - Výsledková obrazovka u klienta ukazuje hned konečné skóre, HUD se ukáže až s vlastní postavou.
+  - Pódium a tabulka v objektivových režimech řadí hráče podle bodů za cíle, potom podle killů.
+- Menu ukazuje správnou verzi (dřív „v0.1.0“).
+- Vydání v0.2.1 na itch.io: buildy pro macOS (Universal) a Windows (64-bit), lokálně v batch módu a nahrané nástrojem butler.

@@ -3,7 +3,7 @@
 Multiplayerová FPS ze světa airsoftu pro až 8 hráčů. Školní projekt DPM (Denis Řezníček).
 Unity 6.6 (URP), Netcode for GameObjects, Unity Relay.
 
-- **Stáhnout hru (v0.2.0, macOS a Windows):** <https://rezdenssps.itch.io/airsoft>
+- **Stáhnout hru (v0.2.1, macOS a Windows):** <https://rezdenssps.itch.io/airsoft>
 - **Repozitář:** <https://github.com/rezdenSSPS/arbes>
 - **Vývojový deník:** [DEVLOG.md](DEVLOG.md)
 - **Build a vydání:** [docs/BUILD.md](docs/BUILD.md)
@@ -156,7 +156,7 @@ Nová mapa potřebuje: scénu v build settings, záznam v `MapCatalog.Maps`, kom
 
 ### Build a vydání
 Podrobně v [docs/BUILD.md](docs/BUILD.md). Jsou dvě cesty:
-- **Lokálně** v Unity (batch mode) a nahrání na itch.io nástrojem **butler**. Takhle vzniklo vydání v0.2.0.
+- **Lokálně** v Unity (batch mode) a nahrání na itch.io nástrojem **butler**. Takhle vznikla vydání v0.2.0 a v0.2.1.
 - **GitHub Actions** (`.github/workflows/build.yml`, GameCI): připravené, ale zatím nespuštěné, chybí secrety s Unity licencí.
 
 ### Struktura projektu
@@ -214,8 +214,6 @@ Při vývoji byl použit AI asistent Claude Code (commity s `Co-Authored-By: Cla
 ## Známá omezení a co není otestované
 
 Omezení v kódu:
-- Hra zatím nemá zvuky ani hudbu. Posuvníky hlasitosti v *Settings → Audio* zatím nic neovládají.
-- Menu ukazuje verzi z *Player Settings* (`bundleVersion` = 0.1.0), i když vydání na itch.io je v0.2.0.
 - Server nepočítá munici a přebíjení vzdálených hráčů. Poškození za sekundu omezuje kadence zbraně.
 - AI nepřátelé v Co-op střílejí okamžitým zásahem (raycast), ne kuličkami. Boti v PvP kuličky střílejí.
 - Boti jsou jen ve FFA, TDM, Gun Game a Milsim. Objektivové režimy a Medic potřebují dost skutečných hráčů.
@@ -225,14 +223,17 @@ Omezení v kódu:
 - Profil a XP jsou jen lokálně v souboru na počítači (`airsoft_profile.json` v `persistentDataPath`), takže jdou ručně upravit.
   Virtuální hráči MPPM na jednom počítači sdílejí jeden profil.
 - Buildy nejsou podepsané (macOS Gatekeeper, Windows SmartScreen).
-- Workflow GitHub Actions ještě neběžel a v repu není tag `v0.2.0`.
+- Workflow GitHub Actions ještě neběžel a v repu nejsou tagy vydání (`v0.2.0`, `v0.2.1`).
 - Kosmetika: AK a RPK drží postava kousek dál vzadu (úchop se počítá podle zásobníku).
 
 Co je a není ověřené (podle commitů a poznámek z vývoje):
 - Ověřeno: kompilace, kontroly pravidel režimů v editoru (`ObjectiveLogicCheck`, `MedicLogicCheck`), kontroly
   v play módu s hostem (`ObjectivePlayCheck`, `MedicPlayCheck`), vykreslené snímky UI a postav.
-- Bez zdokumentovaného testu se skutečnými hráči: zápas s 8 hráči, hra přes internet (Relay) mezi více počítači
-  a delší dobu, killcam a minimapa v PvP zápase, oživování v Medic se vzdáleným klientem, XP z reálného zápasu,
-  editor postavy a výsledková obrazovka u klienta.
+- Ověřeno automatickými testy host + klient (2–3 instance v Unity batch módu na jednom počítači přes LAN, postavy
+  ovládané virtuální klávesnicí a myší, viz DEVLOG 2026-10-23): všechny režimy na obou mapách, boti, hlasování
+  o mapě, pozdní připojení, odchod hosta uprostřed zápasu, killcam a sledování spoluhráče, oživování v Medic se
+  vzdáleným klientem, výsledková obrazovka a profil u klienta.
+- Bez testu se skutečnými hráči: zápas s 8 hráči, hra přes internet (Relay) mezi více počítači a delší dobu,
+  minimapa a editor postavy u klienta, výkon na slabších počítačích.
 - Oprava `0d267c8` ukázala, že klienti se nějakou dobu vůbec nemohli spawnout, přestože host fungoval. Funkce
   ověřované jen s hostem je proto dobré před odevzdáním projít i s druhým počítačem.
