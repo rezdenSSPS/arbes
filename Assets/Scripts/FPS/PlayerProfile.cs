@@ -17,6 +17,7 @@ namespace AirsoftFPS
         // The look saved before unlocks existed: its items stay usable at any level.
         public int legacyLook = -1;
         public int revives;   // Medic mode: teammates revived (older profiles load it as 0)
+        public int credits;   // in-game currency earned per match (older profiles load it as 0)
     }
 
     [Serializable]
@@ -30,10 +31,16 @@ namespace AirsoftFPS
         public int xpBefore, xpAfter;
         public int kills, hits, enemyKills;
         public int revives;   // Medic mode
+        public int objPoints; // objective points scored (caps, plants/defuses, extracts, revives)
         public bool won, completed;
         public readonly List<(string what, int xp)> lines = new List<(string, int)>();
         public readonly List<string> unlocked = new List<string>();
         public int Gained => xpAfter - xpBefore;
+
+        // Credits (currency) earned this match.
+        public int creditsBefore, creditsAfter;
+        public readonly List<(string what, int cr)> creditLines = new List<(string, int)>();
+        public int CreditsGained => creditsAfter - creditsBefore;
         public int LevelBefore => PlayerProfile.LevelFor(xpBefore);
         public int LevelAfter => PlayerProfile.LevelFor(xpAfter);
     }
@@ -47,6 +54,14 @@ namespace AirsoftFPS
         public const int XP_MATCH = 50;        // finished a match (co-op: stayed 2+ minutes)
         public const int XP_WIN = 100;         // won it (FFA / Gun Game winner, or winning team)
         public const int XP_REVIVE = 15;       // revived a teammate (Medic)
+
+        // ───────────── Credit rules (currency) ─────────────
+        public const int CR_MATCH = 40;        // finished a match
+        public const int CR_KILL = 10;         // player kill
+        public const int CR_ENEMY_KILL = 5;    // AI soldier (co-op)
+        public const int CR_WIN = 120;         // won it
+        public const int CR_OBJECTIVE = 15;    // per objective point (capture, plant/defuse, extract, revive)
+        public const int CR_STREAK = 10;       // per kill of the best streak
 
         // XP needed to go from `level` to the next: 150, 225, 300, ... Level 10 = 4 050 XP,
         // roughly three evenings of matches.
@@ -95,6 +110,7 @@ namespace AirsoftFPS
         }
 
         public static int Level => LevelFor(Data.totalXp);
+        public static int Credits => Data.credits;
         public static MatchXp LastMatch { get; private set; }
 
         static void Load()
@@ -160,6 +176,18 @@ namespace AirsoftFPS
             if (m.enemyKills > 0) { xp += m.enemyKills * XP_ENEMY_KILL; m.lines.Add((m.enemyKills + " enemies", m.enemyKills * XP_ENEMY_KILL)); }
             if (m.hits > 0) { xp += m.hits * XP_HIT; m.lines.Add((m.hits == 1 ? "1 hit" : m.hits + " hits", m.hits * XP_HIT)); }
             if (m.revives > 0) { xp += m.revives * XP_REVIVE; m.lines.Add((m.revives == 1 ? "1 revive" : m.revives + " revives", m.revives * XP_REVIVE)); }
+
+            // Credits (currency): a separate reward track from XP.
+            int cr = 0;
+            if (m.completed) { cr += CR_MATCH; m.creditLines.Add(("Match", CR_MATCH)); }
+            if (m.won) { cr += CR_WIN; m.creditLines.Add(("Win", CR_WIN)); }
+            if (m.kills > 0) { int v = m.kills * CR_KILL; cr += v; m.creditLines.Add((m.kills + " kills", v)); }
+            if (m.enemyKills > 0) { int v = m.enemyKills * CR_ENEMY_KILL; cr += v; m.creditLines.Add((m.enemyKills + " enemies", v)); }
+            if (m.objPoints > 0) { int v = m.objPoints * CR_OBJECTIVE; cr += v; m.creditLines.Add((m.objPoints + " objectives", v)); }
+            if (bestStreak > 1) { int v = bestStreak * CR_STREAK; cr += v; m.creditLines.Add(("Best streak " + bestStreak, v)); }
+            m.creditsBefore = d.credits;
+            d.credits += cr;
+            m.creditsAfter = d.credits;
 
             if (m.completed) d.matchesPlayed++;
             if (m.won) d.wins++;
@@ -311,6 +339,8 @@ namespace AirsoftFPS
 
             // Medic: revives are the objective points (server-counted, synced with the objective state).
             if (ObjectiveMode.Active is Medic) match.revives = Mathf.Max(match.revives, ObjectiveMode.PointsOf(nm.LocalClientId));
+            // Any objective mode: objective points scored (caps, plants/defuses, extracts, revives) for credits.
+            if (ObjectiveMode.Active != null) match.objPoints = Mathf.Max(match.objPoints, ObjectiveMode.PointsOf(nm.LocalClientId));
 
             // Local player: confirmed hits (weapon) and hits taken (own health going down).
             var po = nm.LocalClient != null ? nm.LocalClient.PlayerObject : null;

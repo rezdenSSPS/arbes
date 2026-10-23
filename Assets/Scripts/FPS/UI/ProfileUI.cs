@@ -53,7 +53,9 @@ namespace AirsoftFPS
             view.callsign.overflowMode = TextOverflowModes.Ellipsis;
             view.callsign.rectTransform.TL(72, 10, 150, 26);
             var open = Label(chip.transform, "PROFILE", F.BodyBold, 10, Muted, TextAlignmentOptions.MidlineRight, 0.14f);
-            open.rectTransform.TL(200, 12, 80, 20);
+            open.rectTransform.TL(200, 10, 80, 14);
+            view.credits = Label(chip.transform, "", F.MonoBold, 13, Accent, TextAlignmentOptions.MidlineRight);
+            view.credits.rectTransform.TL(160, 24, 120, 16);
             view.fill = Bar(chip.transform, "Xp", Line, Accent);
             view.fill.transform.parent.GetComponent<RectTransform>().TL(72, 40, 208, 4);
             view.xp = Label(chip.transform, "", F.Mono, 11, Muted);
@@ -62,7 +64,7 @@ namespace AirsoftFPS
 
         class ProfileChipView : MonoBehaviour
         {
-            public TextMeshProUGUI level, callsign, xp;
+            public TextMeshProUGUI level, callsign, xp, credits;
             public Image fill;
             float t;
 
@@ -75,6 +77,7 @@ namespace AirsoftFPS
                 level.text = PlayerProfile.Level.ToString();
                 callsign.text = Callsign.ToUpperInvariant();
                 xp.text = $"{Num(into)} / {Num(need)} XP";
+                if (credits != null) credits.text = "◆ " + Num(PlayerProfile.Credits);
                 SetBar(fill, into / (float)need);
             }
         }
@@ -136,7 +139,7 @@ namespace AirsoftFPS
             {
                 new[] { "MATCHES", "WINS", "WIN RATE", "BEST STREAK" },
                 new[] { "KILLS", "DEATHS", "K/D", "TOTAL XP" },
-                new[] { "HITS DEALT", "HITS TAKEN", "FAVORITE WEAPON" },
+                new[] { "HITS DEALT", "HITS TAKEN", "CREDITS", "FAVORITE WEAPON" },
             };
             foreach (var row in keys)
             {
@@ -209,7 +212,7 @@ namespace AirsoftFPS
                     Num(d.bestStreak),
                     Num(d.kills), Num(d.deaths), (d.deaths == 0 ? d.kills : d.kills / (float)d.deaths).ToString("0.00"),
                     Num(d.totalXp),
-                    Num(d.hitsDealt), Num(d.hitsTaken), string.IsNullOrEmpty(fav) ? "-" : fav.ToUpperInvariant(),
+                    Num(d.hitsDealt), Num(d.hitsTaken), Num(d.credits), string.IsNullOrEmpty(fav) ? "-" : fav.ToUpperInvariant(),
                 };
                 for (int i = 0; i < stats.Count && i < v.Length; i++) stats[i].text = v[i];
 
@@ -240,7 +243,7 @@ namespace AirsoftFPS
         public static void AddToResults(Transform column)
         {
             var card = Card(column, "ProfileXp", Surface, Line, 1f);
-            card.LE(-1, 164);
+            card.LE(-1, 210);
             var view = card.gameObject.AddComponent<ResultsXpView>();
             var col = VCol(card.transform, "Col", 6);
             col.padding = new RectOffset(14, 14, 12, 12);
@@ -264,6 +267,14 @@ namespace AirsoftFPS
             view.breakdown.overflowMode = TextOverflowModes.Ellipsis;
             view.breakdown.LE(-1, 16);
 
+            var crTop = Rect(col.transform, "CrTop").LE(-1, 26);
+            Caption(crTop, "CREDITS", 12, Muted, 0.16f).rectTransform.Fill();
+            view.credits = Label(crTop, "", F.CondBlack, 24, Accent, TextAlignmentOptions.MidlineRight);
+            view.credits.rectTransform.Fill();
+            view.creditBreakdown = Label(col.transform, "", F.Body, 11, Muted);
+            view.creditBreakdown.overflowMode = TextOverflowModes.Ellipsis;
+            view.creditBreakdown.LE(-1, 14);
+
             view.levelUp = Box(col.transform, "LevelUp", Accent);
             Chamfer(view.levelUp, 8);
             view.levelUp.LE(-1, 40);
@@ -275,7 +286,7 @@ namespace AirsoftFPS
         class ResultsXpView : MonoBehaviour
         {
             const float ANIM = 1.8f;
-            public TextMeshProUGUI gained, level, progress, breakdown, levelUpText;
+            public TextMeshProUGUI gained, level, progress, breakdown, levelUpText, credits, creditBreakdown;
             public Image fill, levelUp;
             int shownSerial = -1;
             float animStart;
@@ -297,6 +308,8 @@ namespace AirsoftFPS
                     progress.text = $"{Num(i0)} / {Num(n0)} XP";
                     SetBar(fill, i0 / (float)n0);
                     breakdown.text = "";
+                    if (credits != null) credits.text = "◆ " + Num(PlayerProfile.Credits);
+                    if (creditBreakdown != null) creditBreakdown.text = "";
                     levelUp.gameObject.SetActive(false);
                     return;
                 }
@@ -315,6 +328,18 @@ namespace AirsoftFPS
                 var parts = new List<string>();
                 foreach (var (what, x) in m.lines) parts.Add($"{what} <color={Html(Fg)}>+{x}</color>");
                 breakdown.text = parts.Count > 0 ? string.Join("  ·  ", parts) : "No XP this match";
+
+                if (credits != null)
+                {
+                    int cr = Mathf.RoundToInt(Mathf.Lerp(m.creditsBefore, m.creditsAfter, k));
+                    credits.text = "+" + Num(Mathf.RoundToInt(m.CreditsGained * k)) + "   ◆ " + Num(cr);
+                }
+                if (creditBreakdown != null)
+                {
+                    var cparts = new List<string>();
+                    foreach (var (what, c) in m.creditLines) cparts.Add($"{what} <color={Html(Accent)}>+{c}</color>");
+                    creditBreakdown.text = cparts.Count > 0 ? string.Join("  ·  ", cparts) : "No credits this match";
+                }
 
                 bool up = lv > m.LevelBefore;
                 levelUp.gameObject.SetActive(up);
