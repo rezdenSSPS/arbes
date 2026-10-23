@@ -79,6 +79,24 @@ namespace AirsoftFPS
             Vip = escorts.Count > 0 ? escorts[Random.Range(0, escorts.Count)] : ulong.MaxValue;
         }
 
+        // ───────────────────────── bots ─────────────────────────
+        protected override bool BotGoal(ulong botId, out Vector3 pos, out BotTask task)
+        {
+            pos = default; task = BotTask.GoTo;
+            var mn = MatchNet.Instance;
+            int team = mn != null ? mn.TeamOf(botId) : 0;
+            if ((team != 1 && team != 2) || Vip == ulong.MaxValue) return false;
+            if (RoundStage != Stage.Live && RoundStage != Stage.Prep) return false;
+
+            if (botId == Vip) { pos = ExtractPoint; task = BotTask.Deliver; return true; }   // VIP beelines to the extraction
+            pos = TryGetParticipant(Vip, out var v) ? v.position : VipPos;                    // escorts & hunters converge on the VIP
+            return true;
+        }
+
+        // The VIP "holds E" to extract once it's standing on the extraction point.
+        protected override bool BotWantsUse(ulong id) =>
+            id == Vip && TryGetParticipant(id, out var p) && p.active && Near(p.position, ExtractPoint, EXTRACT_RADIUS, 3f);
+
         protected override void RoundTick(float dt, double now)
         {
             if (Vip == ulong.MaxValue)   // the escorting team has nobody: the hunters take the round

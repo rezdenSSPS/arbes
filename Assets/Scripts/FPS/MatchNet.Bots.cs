@@ -43,7 +43,8 @@ namespace AirsoftFPS
         public static bool ModeHasBots(GameModeType m) =>
             m == GameModeType.FreeForAll || m == GameModeType.TeamDeathmatch ||
             m == GameModeType.GunGame || m == GameModeType.Milsim ||
-            m == GameModeType.CaptureTheFlag || m == GameModeType.Domination;
+            m == GameModeType.CaptureTheFlag || m == GameModeType.Domination ||
+            m == GameModeType.Bomb || m == GameModeType.VipEscort;
 
         public bool BotsActive => ModeHasBots(Mode) && BotFill > 0;
 

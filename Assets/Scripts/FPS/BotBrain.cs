@@ -172,8 +172,10 @@ namespace AirsoftFPS
             // Objective modes give the bot a goal (flag, control point, …). "Deliver" (carrying the flag home)
             // overrides fighting; otherwise the bot fights when it sees someone and pursues the goal when it doesn't.
             bool hasObj = ObjectiveMode.BotObjective(BotId, out Vector3 objPos, out var objTask);
+            bool priority = hasObj && (objTask == ObjectiveMode.BotTask.Deliver || objTask == ObjectiveMode.BotTask.Plant
+                                    || objTask == ObjectiveMode.BotTask.Defuse || objTask == ObjectiveMode.BotTask.Revive);
 
-            if (hasObj && objTask == ObjectiveMode.BotTask.Deliver) PursueObjective(objPos, objTask);
+            if (priority) PursueObjective(objPos, objTask);          // carry / plant / defuse / revive: get it done
             else if (target != null && targetVisible) Engage(mn);
             else if (target != null && Time.time - lastSeenTime < 4f && !hasObj) Chase();
             else if (hasObj) PursueObjective(objPos, objTask);
@@ -204,10 +206,21 @@ namespace AirsoftFPS
             if (mn != null && mn.Mode == MatchNet.GameModeType.GunGame)
                 want = Mathf.Clamp(mn.GunLevelOf(BotId), 0, weapons.Length - 1);
             else if (weaponIdx < 0 || first) want = weaponIdx < 0 ? PickWeapon() : weaponIdx;
+            // Objective roles may restrict weapons (VIP escort: the VIP carries sidearms only).
+            if (want >= 0 && want < weapons.Length && !ObjectiveMode.WeaponAllowed(BotId, weapons[want]))
+                want = FirstAllowedWeapon(want);
             if (want != weaponIdx) Equip(want);
         }
 
         int PickWeapon() => Random.Range(0, weapons.Length);
+
+        int FirstAllowedWeapon(int preferred)
+        {
+            if (ObjectiveMode.WeaponAllowed(BotId, weapons[preferred])) return preferred;
+            for (int i = 0; i < weapons.Length; i++)
+                if (ObjectiveMode.WeaponAllowed(BotId, weapons[i])) return i;
+            return preferred;
+        }
 
         void Equip(int idx)
         {
@@ -423,7 +436,7 @@ namespace AirsoftFPS
         void Go(Vector3 p, float speed)
         {
             if (agent == null || !agent.enabled || !agent.isOnNavMesh) return;
-            agent.speed = speed;
+            agent.speed = speed * Mathf.Clamp(ObjectiveMode.SpeedFactor(BotId), 0.1f, 1f);   // VIP walks slower
             agent.isStopped = false;
             agent.SetDestination(p);
         }
