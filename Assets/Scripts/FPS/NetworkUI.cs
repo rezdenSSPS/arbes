@@ -577,6 +577,7 @@ namespace AirsoftFPS
             ApplyFont(metaText, F.Body); metaText.characterSpacing = 0;
 
             ProfileUI.AddToMenu(screen, stage);   // level chip (top right) + profile/stats panel
+            ShopUI.AddToMenu(screen, stage);      // ARMORY button + shop panel (spend Credits on weapons)
             SetLanTab(LastWasLan);
             return screen.gameObject;
         }
