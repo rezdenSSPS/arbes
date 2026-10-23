@@ -250,12 +250,16 @@ namespace AirsoftFPS
 
             if (!IsOwner) return;
             if (Time.timeScale == 0) return;
-            if (HUDManager.InputBlocked || (ownHealth != null && (ownHealth.IsOut || (ownHealth.IsSpawned && ownHealth.isDead.Value))))
+            bool dead = ownHealth != null && ownHealth.IsSpawned && ownHealth.isDead.Value;
+            if (HUDManager.InputBlocked || dead || (ownHealth != null && ownHealth.IsOut))
             {
                 // a menu is open, Milsim HIT, or dead (death screen / spectating): no shooting/switching,
                 // drop out of the scope
                 isAiming = false;
                 if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, GameSettings.FieldOfView, Time.deltaTime * 10f);
+                // dead: drop a reload in progress; otherwise let it finish
+                if (dead) isReloading = false;
+                else if (isReloading) HandleReload();
                 return;
             }
 

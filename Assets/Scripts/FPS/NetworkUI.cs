@@ -121,8 +121,10 @@ namespace AirsoftFPS
 
             // If we're still connected (e.g. returned here after a match), skip the
             // connect screen and go straight back to the lobby.
+            // (Not while a shutdown is still running: a host that just left the match keeps IsServer
+            // for a moment while its clients are disconnected.)
             var net = NetworkManager.Singleton;
-            if (net != null && (net.IsServer || net.IsConnectedClient))
+            if (net != null && !net.ShutdownInProgress && (net.IsServer || net.IsConnectedClient))
                 EnterWaitingRoom(net.IsServer);
         }
 

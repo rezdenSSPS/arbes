@@ -466,6 +466,14 @@ namespace AirsoftFPS
             handlersOn = cmm;
         }
 
+        // Server: send the state right now. MatchNet calls this before it announces the results, so clients
+        // get the final score and round reason first (both go over the same reliable sequenced pipeline).
+        public void ServerFlushState()
+        {
+            var nm = NetworkManager.Singleton;
+            if (nm != null && nm.IsServer) Broadcast(nm);
+        }
+
         void Broadcast(NetworkManager nm)
         {
             dirty = false;

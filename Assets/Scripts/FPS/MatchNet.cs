@@ -388,6 +388,7 @@ namespace AirsoftFPS
         void EndMatch(ulong winnerClient, int winnerTeam, bool onTime = false, bool draw = false)
         {
             if (CurrentPhase == Phase.Results) return;
+            ObjectiveMode.Active?.ServerFlushState();   // final objective score before the results
             CurrentPhase = Phase.Results;
             WinnerClientId = draw ? ulong.MaxValue : winnerClient;
             WinnerTeam = draw ? 0 : winnerTeam;

@@ -342,15 +342,27 @@ namespace AirsoftFPS
             musicB = MakeMusic("musicB");
             fallback = gameObject.AddComponent<AudioListener>();
             fallback.enabled = false;
+            SceneManager.sceneLoaded += OnSceneLoaded;
         }
 
-        void LateUpdate()
+        void OnDestroy() => SceneManager.sceneLoaded -= OnSceneLoaded;
+
+        // A scene load swaps the cameras (and their listeners) before this frame's LateUpdate: switch now.
+        void OnSceneLoaded(Scene s, LoadSceneMode m) => UpdateFallbackListener();
+
+        void LateUpdate() => UpdateFallbackListener();
+
+        void UpdateFallbackListener()
         {
             if (fallback == null) return;
             bool other = false;
             foreach (var l in FindObjectsByType<AudioListener>())
                 if (l != fallback && l.isActiveAndEnabled) { other = true; break; }
-            if (fallback.enabled == other) fallback.enabled = !other;
+            if (fallback.enabled == other)
+            {
+                fallback.enabled = !other;
+                nextListenerSearch = 0f;   // Listener() may have cached the fallback
+            }
         }
 
         Voice MakeVoice(string name, bool spatial)

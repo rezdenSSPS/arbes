@@ -56,6 +56,9 @@ namespace AirsoftFPS
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void Boot()
         {
+            // Keep running when the window loses focus: a paused host freezes the match for everyone,
+            // and a paused client misses its respawn teleport and network updates.
+            Application.runInBackground = true;
             loaded = false;
             Load();
             Apply();

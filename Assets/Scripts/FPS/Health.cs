@@ -180,34 +180,46 @@ namespace AirsoftFPS
             // A remote owner moves its own avatar (ClientNetworkTransform): until its teleport comes back
             // the server still has the body at the death spot. Keep it dead until then, or it could be shot
             // or pick up a flag there (health and protection are restored when it is really back).
-            if (bot == null && ExpectOwnerMove(spawn.position)) return;
+            if (bot == null && ExpectOwnerMove(spawn)) return;
             currentHealth.Value = maxHealth;
             StartSpawnProtection();
             isDead.Value = false;
         }
 
         // ───── waiting for a remote owner's respawn teleport (server) ─────
-        const double OWNER_MOVE_TIMEOUT = 2.0;
-        Vector3 pendingSpawnPos;
+        const double OWNER_MOVE_TIMEOUT = 2.0;   // per teleport request
+        const int OWNER_MOVE_TRIES = 15;          // then bring it back anyway (30 s)
+        Pose pendingSpawn;
         double pendingSpawnUntil;   // 0 = not waiting
+        int pendingSpawnTries;
 
         // Server: true while the owner of this avatar hasn't arrived at its new spawn point yet
         // (objectives ignore the player meanwhile).
         public bool ServerAwaitingRespawnMove => pendingSpawnUntil > 0;
 
-        bool ExpectOwnerMove(Vector3 pos)
+        bool ExpectOwnerMove(Pose pose)
         {
             if (IsOwnedByServer) return false;   // the host's own avatar teleports at once
-            pendingSpawnPos = pos;
+            pendingSpawn = pose;
+            pendingSpawnTries = 1;
             pendingSpawnUntil = NetworkManager.ServerTime.Time + OWNER_MOVE_TIMEOUT;
             return true;
         }
 
         void TickOwnerMove()
         {
-            Vector3 d = transform.position - pendingSpawnPos; d.y = 0;
+            Vector3 d = transform.position - pendingSpawn.position; d.y = 0;
             bool arrived = d.sqrMagnitude < 4f;
             if (!arrived && NetworkManager.ServerTime.Time < pendingSpawnUntil) return;
+            if (!arrived && pendingSpawnTries < OWNER_MOVE_TRIES)
+            {
+                // No answer yet (the client stalled or lags): ask again and stay dead. Reviving now would
+                // bring the player back at the death spot, where it could take a dropped flag or hold a point.
+                pendingSpawnTries++;
+                pendingSpawnUntil = NetworkManager.ServerTime.Time + OWNER_MOVE_TIMEOUT;
+                RespawnTeleportRpc(pendingSpawn.position, pendingSpawn.rotation);
+                return;
+            }
             pendingSpawnUntil = 0;
             if (isDead.Value)
             {

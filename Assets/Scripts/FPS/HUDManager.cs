@@ -225,10 +225,10 @@ namespace AirsoftFPS
             // Host left / connection dropped during the match: back to the menu (NetworkUI only handles
             // this in the lobby scene).
             var nmL = NetworkManager.Singleton;
-            if (nmL != null && (nmL.IsConnectedClient || nmL.IsServer)) sawConnected = true;
+            if (nmL != null && (nmL.IsConnectedClient || nmL.IsServer)) { sawConnected = true; wasHost = nmL.IsServer; }
             else if (sawConnected && !leaving && (nmL == null || (!nmL.IsListening && !nmL.ShutdownInProgress)))
             {
-                NetworkUI.PendingMenuHint = "The host left the match.";
+                NetworkUI.PendingMenuHint = wasHost ? "The match session ended." : "The host left the match.";
                 QuitToMenu();
                 return;
             }
@@ -756,7 +756,7 @@ namespace AirsoftFPS
 
         public void ResumeGame() { if (isPaused) TogglePause(); }
 
-        bool sawConnected, leaving;
+        bool sawConnected, wasHost, leaving;
 
         public void QuitToMenu()
         {
