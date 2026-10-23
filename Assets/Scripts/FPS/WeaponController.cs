@@ -111,6 +111,14 @@ namespace AirsoftFPS
         const float RELOAD_SERVER_FACTOR = 0.85f;   // finish a touch early so client/server RTT never false-rejects a shot
         const int AMMO_SLACK = 1;                   // allow this many shots past empty (boundary jitter); a cheat gains at most 1 BB/mag
 
+        // ───── Bang rule (airsoft close-range elimination) ─────
+        // At point-blank an airsofter calls "bang" instead of firing. Press V near an enemy to eliminate
+        // them without a shot; the server checks range, line of sight and team like any other hit.
+        const float BANG_RANGE = 6f;
+        const float BANG_COOLDOWN = 1f;
+        float nextBang;      // owner
+        float svNextBang;    // server
+
         static readonly RaycastHit[] s_losHits = new RaycastHit[16];
 
         static Material s_glowMat;
@@ -306,6 +314,7 @@ namespace AirsoftFPS
             HandleReload();
             HandleAim();
             HandleFire();
+            HandleBang();
         }
 
         // ───── Weapon view animation (owner only) ─────
@@ -583,6 +592,47 @@ namespace AirsoftFPS
                 if (ammoInMag <= 0 && ammoReserve > 0)
                     StartReload();
             }
+        }
+
+        // Bang rule: press V to eliminate an enemy at point-blank without firing.
+        void HandleBang()
+        {
+            var kb = Keyboard.current;
+            if (kb == null || !kb.vKey.wasPressedThisFrame || Time.time < nextBang || !playerCam) return;
+            nextBang = Time.time + BANG_COOLDOWN;
+            Vector3 origin = playerCam.transform.position;
+            if (Physics.Raycast(origin, playerCam.transform.forward, out RaycastHit hit, BANG_RANGE, hitMask, QueryTriggerInteraction.Ignore))
+            {
+                var no = hit.collider.GetComponentInParent<NetworkObject>();
+                if (no != null && no != NetworkObject && no.GetComponent<Health>() != null)
+                    BangRpc(no.NetworkObjectId, origin, hit.point);
+            }
+        }
+
+        // Server: validate a bang (close range, line of sight, not a teammate) and take the target out.
+        [Rpc(SendTo.Server)]
+        void BangRpc(ulong targetNetId, Vector3 origin, Vector3 point, RpcParams rpcParams = default)
+        {
+            if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
+            if (ownHealth != null && (ownHealth.isDead.Value || ownHealth.IsOut)) return;
+            float now = Time.unscaledTime;
+            if (now < svNextBang) return;
+            svNextBang = now + BANG_COOLDOWN * 0.9f;
+
+            if (!NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(targetNetId, out var netObj)) return;
+            if (netObj == NetworkObject) return;
+            var health = netObj.GetComponent<Health>();
+            if (health == null || health.isDead.Value || health.IsOut || health.IsSpawnProtected) return;
+
+            Vector3 serverEye = transform.position + Vector3.up * 1.6f;
+            Vector3 targetC = netObj.transform.position + Vector3.up * 1.2f;
+            if (Vector3.Distance(serverEye, targetC) > BANG_RANGE + 1.5f) return;   // close range only
+            if (WorldBlocks(serverEye, targetC)) return;                            // must see them
+            if (MatchNet.Instance != null && MatchNet.Instance.BlocksDamage(OwnerClientId, health.MatchId)) return;
+
+            if (ownHealth != null) ownHealth.EndSpawnProtection();
+            health.TakeDamage(9999, OwnerClientId, "Bang!");   // lethal; hit-rule modes convert it to a HIT
+            HitConfirmRpc(point, RpcTarget.Single(OwnerClientId, RpcTargetUse.Temp));
         }
 
         void ApplyWeaponKick(WeaponData w)

@@ -60,11 +60,13 @@ už používá jiná spuštěná hra na stejném počítači, hostování skonč
 | Akce | Klávesa |
 |---|---|
 | Pohyb | W A S D |
-| Sprint | Shift |
+| Sprint | Shift (omezený výdrží – ukazatel u zdraví) |
+| Náklon (lean) | Q / E (držet) |
 | Přikrčení | C / Ctrl (v nastavení přepnutí nebo držení) |
 | Skok | Space |
 | Střelba | levé tlačítko myši |
 | Míření / puškohled | pravé tlačítko myši |
+| Bang (eliminace na blízko bez výstřelu) | V |
 | Přebití | R |
 | Zbraně | 1 – 0, kolečko myši |
 | Scoreboard | Tab (držet) |

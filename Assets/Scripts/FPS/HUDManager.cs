@@ -39,6 +39,7 @@ namespace AirsoftFPS
 
         Health playerHealth;
         WeaponController weaponCtrl;
+        FPSController fpsCtrl;
         bool wired;
         bool isPaused;
         bool killFeedSub;
@@ -82,6 +83,8 @@ namespace AirsoftFPS
         Image vignette;
         TextMeshProUGUI hpValue, hpUnit;
         Image hpFill;
+        Image staminaFill;
+        CanvasGroup staminaGroup;
         readonly List<SlotView> slotViews = new List<SlotView>();
         TextMeshProUGUI ammoWeapon, ammoMag, ammoReserve;
         GameObject reloadHint;
@@ -135,6 +138,7 @@ namespace AirsoftFPS
             if (wired) return;
             playerHealth = health;
             weaponCtrl = wc;
+            fpsCtrl = health != null ? health.GetComponent<FPSController>() : null;
 
             if (playerHealth != null)
             {
@@ -412,6 +416,16 @@ namespace AirsoftFPS
             else hpUnit.text = "HP";
             vignette.gameObject.SetActive(low && !dead);
             if (low) vignette.color = A(Hex("#C8281E"), 0.4f + 0.12f * Mathf.Sin(Time.unscaledTime * 4f));
+
+            // stamina bar: visible while it is draining or not yet full
+            if (fpsCtrl != null && staminaFill != null)
+            {
+                float st = fpsCtrl.Stamina;
+                SetBar(staminaFill, st);
+                staminaFill.color = st < 0.25f ? Danger : Accent;
+                float targetA = !dead && (st < 0.999f || fpsCtrl.IsSprinting) ? 1f : 0f;
+                if (staminaGroup != null) staminaGroup.alpha = Mathf.MoveTowards(staminaGroup.alpha, targetA, Time.unscaledDeltaTime * 4f);
+            }
 
             // weapons + ammo
             if (weaponCtrl != null && weaponCtrl.AmmoReady)
@@ -978,6 +992,12 @@ namespace AirsoftFPS
             hpUnit.margin = new Vector4(0, 0, 0, 8);
             hpFill = Bar(hpBox.transform, "Bar", Line, Fg);
             hpFill.transform.parent.GetComponent<Image>().LE(-1, 8);
+            // thin stamina bar under the health bar; fades in while draining / sprinting
+            staminaFill = Bar(hpBox.transform, "Stamina", Line, Accent);
+            var sbBack = staminaFill.transform.parent.GetComponent<Image>();
+            sbBack.LE(-1, 4);
+            staminaGroup = sbBack.gameObject.AddComponent<CanvasGroup>();
+            staminaGroup.alpha = 0f;
 
             // bottom-center weapon slots
             var slotsRow = HRow(root, "Slots", 4, TextAnchor.LowerCenter);
