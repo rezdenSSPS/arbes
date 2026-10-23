@@ -18,6 +18,7 @@ namespace AirsoftFPS
         public int legacyLook = -1;
         public int revives;   // Medic mode: teammates revived (older profiles load it as 0)
         public int credits;   // in-game currency earned per match (older profiles load it as 0)
+        public List<string> owned = new List<string>();   // ids of weapons / parts bought from the shop
     }
 
     [Serializable]
@@ -121,7 +122,7 @@ namespace AirsoftFPS
                     s_data = JsonUtility.FromJson<ProfileData>(File.ReadAllText(FilePath));
             }
             catch (Exception e) { Debug.LogWarning("[Airsoft] profile could not be read, starting fresh: " + e.Message); }
-            if (s_data != null) { s_data.weaponKills ??= new List<WeaponKills>(); return; }
+            if (s_data != null) { s_data.weaponKills ??= new List<WeaponKills>(); s_data.owned ??= new List<string>(); return; }
 
             // First run with profiles: whatever look was saved before keeps its items.
             s_data = new ProfileData { legacyLook = PlayerPrefs.GetInt(AirsoftLook.PrefKey, -1) };
@@ -162,6 +163,43 @@ namespace AirsoftFPS
             if (string.IsNullOrEmpty(weapon)) return;
             foreach (var w in Data.weaponKills) if (w.weapon == weapon) { w.kills++; return; }
             Data.weaponKills.Add(new WeaponKills { weapon = weapon, kills = 1 });
+        }
+
+        // ───────────── shop / ownership (currency spending) ─────────────
+        // An id the player has bought from the shop (weapon or part). Items not sold in the shop are
+        // considered always owned, so callers only check ids that are actually gated.
+        public static bool Owns(string id) => string.IsNullOrEmpty(id) || Data.owned.Contains(id);
+
+        // Buy an item: deducts credits and records ownership. false if unaffordable or already owned.
+        public static bool Buy(string id, int cost)
+        {
+            var d = Data;
+            if (string.IsNullOrEmpty(id) || cost < 0 || d.owned.Contains(id) || d.credits < cost) return false;
+            d.credits -= cost;
+            d.owned.Add(id);
+            Save();
+            Changed?.Invoke();
+            return true;
+        }
+
+        // Spend credits without an ownership record (e.g. consumables). false if unaffordable.
+        public static bool Spend(int cost)
+        {
+            var d = Data;
+            if (cost < 0 || d.credits < cost) return false;
+            d.credits -= cost;
+            Save();
+            Changed?.Invoke();
+            return true;
+        }
+
+        // Grant an item for free (rewards / defaults).
+        public static void Grant(string id)
+        {
+            var d = Data;
+            if (string.IsNullOrEmpty(id) || d.owned.Contains(id)) return;
+            d.owned.Add(id);
+            Save();
         }
 
         // Applies a finished (or abandoned) match: stats + XP, saves, and remembers it for the results screen.
