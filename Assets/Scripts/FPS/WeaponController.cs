@@ -27,6 +27,7 @@ namespace AirsoftFPS
         bool isReloading;
         float reloadEndTime;
         int reloadSfx;           // reload sounds played so far (0 = mag out, 1 = mag in, 2 = rack)
+        bool reloadCut;          // a reload was cut short by dying: start it again on respawn
         bool isAiming;
 
         FPSController fpsController;
@@ -257,10 +258,16 @@ namespace AirsoftFPS
                 // drop out of the scope
                 isAiming = false;
                 if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, GameSettings.FieldOfView, Time.deltaTime * 10f);
-                // dead: drop a reload in progress; otherwise let it finish
-                if (dead) isReloading = false;
+                // dead: drop a reload in progress (restarted on respawn); otherwise let it finish
+                if (dead) { if (isReloading) reloadCut = true; isReloading = false; }
                 else if (isReloading) HandleReload();
                 return;
+            }
+
+            if (reloadCut)
+            {
+                reloadCut = false;
+                if (!isReloading && ammoInMag < weapons[currentIndex].magSize && ammoReserve > 0) StartReload();
             }
 
             HandleWeaponSwitch();
@@ -391,6 +398,7 @@ namespace AirsoftFPS
             ammoInMag = magAmmos[currentIndex];
             ammoReserve = reserveAmmos[currentIndex];
             isReloading = false;
+            reloadCut = false;
             NotifyAmmo();
         }
 
@@ -481,7 +489,10 @@ namespace AirsoftFPS
             var w = weapons[currentIndex];
             bool fireInput = w.isAutomatic ? mouse.leftButton.isPressed : mouse.leftButton.wasPressedThisFrame;
             if (mouse.leftButton.wasPressedThisFrame && ammoInMag <= 0 && Time.time >= nextFireTime)
+            {
                 AirsoftAudio.Play2D("dryfire", 0.6f, AirsoftAudio.Bus.Sfx, 0.05f, 0.1f);   // empty: click
+                if (ammoReserve > 0) { StartReload(); return; }                              // and reload
+            }
 
             if (fireInput && Time.time >= nextFireTime && ammoInMag > 0)
             {

@@ -489,7 +489,7 @@ namespace AirsoftFPS
             sbList.SetActive(!tdm);
             if (tdm)
             {
-                list.Sort((a, b) => b.kills.CompareTo(a.kills));
+                list.Sort((a, b) => CompareForRanking(a, b, mode));
                 for (int t = 0; t < 2; t++)
                 {
                     var tv = sbTeamViews[t];
@@ -550,6 +550,18 @@ namespace AirsoftFPS
                 row.a.text = coop ? "" : e.kills.ToString();
                 row.b.text = e.deaths.ToString();
             }
+        }
+
+        // Scoreboard and podium order: objective modes rank by objective points first, then kills, then
+        // fewer deaths.
+        static int CompareForRanking(MatchNet.Entry a, MatchNet.Entry b, MatchNet.GameModeType mode)
+        {
+            if (ObjectiveMode.HasObjective(mode))
+            {
+                int pa = ObjectiveMode.PointsOf(a.clientId), pb = ObjectiveMode.PointsOf(b.clientId);
+                if (pa != pb) return pb.CompareTo(pa);
+            }
+            return b.kills != a.kills ? b.kills.CompareTo(a.kills) : a.deaths.CompareTo(b.deaths);
         }
 
         string WeaponNameAt(int i)
@@ -692,7 +704,7 @@ namespace AirsoftFPS
             }
 
             var list = new List<MatchNet.Entry>(mnet.Roster);
-            list.Sort((a, b) => b.kills != a.kills ? b.kills.CompareTo(a.kills) : a.deaths.CompareTo(b.deaths));
+            list.Sort((a, b) => CompareForRanking(a, b, mode));
             for (int i = 0; i < podium.Count; i++)
             {
                 var p = podium[i];
