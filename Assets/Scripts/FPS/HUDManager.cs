@@ -256,7 +256,8 @@ namespace AirsoftFPS
             // Medic: a downed / out-for-good player gets the mode's own overlay instead of the Milsim walk-back
             bool heldOut = hit && NetworkManager.Singleton != null && ObjectiveMode.HoldsHit(NetworkManager.Singleton.LocalClientId);
 
-            hudRoot.SetActive(!results && !isPaused && !killcam);
+            // (no HUD before the own avatar, and with it the only camera, has spawned)
+            hudRoot.SetActive(wired && !results && !isPaused && !killcam);
             resultsScreen.SetActive(results);
             pauseScreen.SetActive(isPaused && !results);
             deathScreen.SetActive(dead && !killcam && !results && !isPaused && !showScores

@@ -57,6 +57,7 @@ namespace AirsoftFPS
                 Cursor.visible = false;
                 if (playerCamera)
                 {
+                    AirsoftAudio.BeforeListenerOn();   // the camera carries the local AudioListener
                     playerCamera.gameObject.SetActive(true);
                     // post-processing (bloom / tonemapping from the map's global Volume)
                     var urp = playerCamera.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
@@ -75,6 +76,16 @@ namespace AirsoftFPS
             }
         }
 
+        public override void OnNetworkDespawn()
+        {
+            // The local camera's AudioListener goes away with the avatar (back to the lobby, or the session
+            // ended): hand over to the audio fallback listener right now.
+            if (!IsOwner) return;
+            var listener = GetComponentInChildren<AudioListener>(true);
+            if (listener) listener.enabled = false;
+            AirsoftAudio.AfterListenerOff();
+        }
+
         void Update()
         {
             // a dead body doesn't block anyone (round modes keep players down for a while)
@@ -84,7 +95,10 @@ namespace AirsoftFPS
             if (!IsOwner) return;
             if (cc == null) return;
             if (playerCamera && !playerCamera.gameObject.activeSelf)
+            {
+                AirsoftAudio.BeforeListenerOn();
                 playerCamera.gameObject.SetActive(true);
+            }
             if (Time.timeScale == 0) return;
 
             // Pause / results menus own the mouse; the match (and gravity) keeps running.

@@ -129,6 +129,14 @@ namespace AirsoftFPS
             hub?.RefreshFallbackVolumes();
         }
 
+        // Another AudioListener (the local player's camera) is about to be enabled: the fallback listener
+        // goes off first, or Unity warns about two listeners.
+        public static void BeforeListenerOn() => hub?.SetFallback(false);
+
+        // An AudioListener was just disabled or is going away: the fallback takes over at once if it was the
+        // last one, instead of at the end of the frame.
+        public static void AfterListenerOff() => hub?.UpdateFallbackListener();
+
         // Slider 0..1 -> mixer dB (perceptually even: 50% = -12 dB, 0 = off).
         public static float ToDb(float v) => v <= 0.0001f ? -80f : Mathf.Max(-80f, 40f * Mathf.Log10(v));
 
@@ -343,26 +351,38 @@ namespace AirsoftFPS
             fallback = gameObject.AddComponent<AudioListener>();
             fallback.enabled = false;
             SceneManager.sceneLoaded += OnSceneLoaded;
+            SceneManager.sceneUnloaded += OnSceneUnloaded;
         }
 
-        void OnDestroy() => SceneManager.sceneLoaded -= OnSceneLoaded;
+        void OnDestroy()
+        {
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+            SceneManager.sceneUnloaded -= OnSceneUnloaded;
+        }
 
-        // A scene load swaps the cameras (and their listeners) before this frame's LateUpdate: switch now.
+        // Unity warns the moment a second listener is enabled, and at every audio update with none. So the
+        // fallback is also switched where the other listeners come and go, not only once per frame:
+        // the old scene is gone, so the next scene's camera listener must not find the fallback still on;
+        void OnSceneUnloaded(Scene s) => SetFallback(false);
+        // the new scene is in (before this frame's audio update): on again if it has no listener.
         void OnSceneLoaded(Scene s, LoadSceneMode m) => UpdateFallbackListener();
 
         void LateUpdate() => UpdateFallbackListener();
 
-        void UpdateFallbackListener()
+        public void UpdateFallbackListener()
         {
             if (fallback == null) return;
             bool other = false;
             foreach (var l in FindObjectsByType<AudioListener>())
                 if (l != fallback && l.isActiveAndEnabled) { other = true; break; }
-            if (fallback.enabled == other)
-            {
-                fallback.enabled = !other;
-                nextListenerSearch = 0f;   // Listener() may have cached the fallback
-            }
+            SetFallback(!other);
+        }
+
+        public void SetFallback(bool on)
+        {
+            if (fallback == null || fallback.enabled == on) return;
+            fallback.enabled = on;
+            nextListenerSearch = 0f;   // Listener() may have cached the fallback
         }
 
         Voice MakeVoice(string name, bool spatial)
