@@ -518,7 +518,7 @@ namespace AirsoftFPS
 
             bool coop = mode == MatchNet.GameModeType.Coop;
             if (coop) list.Sort((a, b) => a.deaths.CompareTo(b.deaths));
-            else list.Sort((a, b) => b.kills.CompareTo(a.kills));
+            else list.Sort((a, b) => CompareForRanking(a, b, mode));
             sbHeadProgress.text = mode == MatchNet.GameModeType.GunGame ? "CURRENT WEAPON" : coop ? "" : "PROGRESS";
             sbHeadA.text = coop ? "" : "KILLS";
             sbHeadB.text = coop ? "DOWNS" : "DEATHS";
