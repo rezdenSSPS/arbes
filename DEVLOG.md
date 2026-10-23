@@ -176,4 +176,4 @@ AutoConnect.cs, NetDiag.cs.
   - Výsledková obrazovka u klienta ukazuje hned konečné skóre, HUD se ukáže až s vlastní postavou.
   - Pódium a tabulka v objektivových režimech řadí hráče podle bodů za cíle, potom podle killů.
 - Menu ukazuje správnou verzi (dřív „v0.1.0“).
-- Vydání v0.2.1 na itch.io: buildy pro macOS (Universal) a Windows (64-bit), lokálně v batch módu a nahrané nástrojem butler.
+- Vydání v0.2.1 na itch.io: buildy pro macOS (Universal, `x86_64 arm64`) a Windows (64-bit), lokálně v batch módu a nahrané nástrojem butler. Build v0.2.0 byl pro macOS ve skutečnosti jen pro Apple silicon: architekturu bere Unity z lokálního nastavení *Build Profiles → macOS → Architecture* (výchozí *Apple silicon*), ne z `-buildTarget OSXUniversal`. Postup je teď popsaný v `docs/BUILD.md`.

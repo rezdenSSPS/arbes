@@ -147,7 +147,10 @@ nebo `Builds/windows` (složka `Builds/` je v `.gitignore`).
 Tak vznikly buildy v0.2.0 a v0.2.1. Projekt nesmí být ve stejnou chvíli otevřený v editoru (buď editor zavři, nebo builduj
 z jiného checkoutu, např. `git worktree`). Příkazy spusť v kořeni projektu.
 
-macOS (Universal = Intel i Apple Silicon):
+macOS (Universal = Intel i Apple Silicon). Architekturu bere Unity z *File → Build Profiles → macOS → Architecture*,
+nastavení je jen lokální (v `Library/`) a výchozí je *Apple silicon*. Před prvním buildem tam vyber
+*Intel 64-bit + Apple silicon*, jinak příkaz níže sestaví build jen pro Apple silicon (v0.2.0 tak vyšla jen pro arm64).
+Kontrola po buildu: `lipo -archs Builds/mac/Airsoft.app/Contents/MacOS/Airsoft` má vypsat `x86_64 arm64`.
 ```bash
 /Applications/Unity/Hub/Editor/6000.6.0f1/Unity.app/Contents/MacOS/Unity -batchmode -quit -nographics -projectPath "$PWD" -buildTarget OSXUniversal -buildOSXUniversalPlayer "$PWD/Builds/mac/Airsoft.app" -logFile "$PWD/Logs/build_mac.log"
 ```
