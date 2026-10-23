@@ -674,13 +674,13 @@ namespace AirsoftFPS
             if (svSmoke <= 0) return;
             if (ownHealth != null && (ownHealth.isDead.Value || ownHealth.IsOut)) return;
             svSmoke--;
-            Vector3 land = SmokeLanding(origin, dir);
-            SmokeField.Add(land, SMOKE_RADIUS, SMOKE_DURATION + 1.5f);   // bots can't see through it
-            SmokePopRpc(land);
+            SmokeArc(origin, dir, out Vector3 land, out float flight);
+            SmokeField.Add(land, SMOKE_RADIUS, SMOKE_DURATION + 1.5f, flight);   // blocks bot sight only once it lands
+            SmokeThrowRpc(origin, dir);
         }
 
-        // Server: trace the thrown grenade's arc to where it settles (ignores players).
-        static Vector3 SmokeLanding(Vector3 origin, Vector3 dir)
+        // Trace the thrown grenade's arc to where it settles (ignores players), with the flight time.
+        static void SmokeArc(Vector3 origin, Vector3 dir, out Vector3 landing, out float flightTime)
         {
             Vector3 pos = origin;
             Vector3 vel = dir.normalized * SMOKE_THROW_SPEED;
@@ -690,15 +690,63 @@ namespace AirsoftFPS
                 Vector3 next = pos + vel * dt;
                 if (Physics.Linecast(pos, next, out RaycastHit hit, ~0, QueryTriggerInteraction.Ignore)
                     && hit.collider.GetComponentInParent<Health>() == null)
-                    return hit.point + hit.normal * 0.25f;
+                { landing = hit.point + hit.normal * 0.25f; flightTime = i * dt; return; }
                 vel += Vector3.up * (-9.8f * dt);
                 pos = next;
             }
-            return pos;
+            landing = pos; flightTime = 90 * dt;
         }
 
+        // Everyone flies a visible grenade along the arc; the smoke blooms where (and when) it lands.
         [Rpc(SendTo.Everyone)]
-        void SmokePopRpc(Vector3 pos) => SpawnSmokeVisual(pos);
+        void SmokeThrowRpc(Vector3 origin, Vector3 dir) => StartCoroutine(FlySmokeGrenade(origin, dir));
+
+        IEnumerator FlySmokeGrenade(Vector3 origin, Vector3 dir)
+        {
+            var g = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            var col = g.GetComponent<Collider>(); if (col) Destroy(col);
+            g.name = "SmokeGrenade";
+            g.transform.localScale = new Vector3(0.08f, 0.09f, 0.08f);
+            var r = g.GetComponent<Renderer>();
+            r.sharedMaterial = GrenadeMat();
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+            Vector3 pos = origin;
+            Vector3 vel = dir.normalized * SMOKE_THROW_SPEED;
+            Vector3 spin = new Vector3(520f, 160f, 0f);
+            float t = 0f;
+            while (t < 4f && g != null)
+            {
+                float step = Time.deltaTime;
+                Vector3 next = pos + vel * step;
+                if (Physics.Linecast(pos, next, out RaycastHit hit, ~0, QueryTriggerInteraction.Ignore)
+                    && hit.collider.GetComponentInParent<Health>() == null)
+                { pos = hit.point + hit.normal * 0.12f; break; }
+                vel += Vector3.up * (-9.8f * step);
+                pos = next;
+                g.transform.position = pos;
+                g.transform.Rotate(spin * step, Space.Self);
+                t += step;
+                yield return null;
+            }
+            if (g != null) Destroy(g);
+            SpawnSmokeVisual(pos);
+        }
+
+        static Material s_grenadeMat;
+        static Material GrenadeMat()
+        {
+            if (s_grenadeMat == null)
+            {
+                var sh = Shader.Find("Universal Render Pipeline/Lit");
+                if (sh == null) sh = Shader.Find("Sprites/Default");
+                s_grenadeMat = new Material(sh);
+                var c = new Color(0.24f, 0.27f, 0.19f);
+                s_grenadeMat.color = c;
+                if (s_grenadeMat.HasProperty("_BaseColor")) s_grenadeMat.SetColor("_BaseColor", c);
+            }
+            return s_grenadeMat;
+        }
 
         void SpawnSmokeVisual(Vector3 pos)
         {

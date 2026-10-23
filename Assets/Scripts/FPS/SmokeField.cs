@@ -8,17 +8,19 @@ namespace AirsoftFPS
     // volume here is only used for the server-side line-of-sight test against bots and remote shooters.
     public static class SmokeField
     {
-        struct Cloud { public Vector3 pos; public float radius; public float until; }
+        struct Cloud { public Vector3 pos; public float radius; public float from; public float until; }
         static readonly List<Cloud> clouds = new List<Cloud>();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void Reset() => clouds.Clear();
 
-        // Server: register a cloud that blocks sight for `duration` seconds.
-        public static void Add(Vector3 pos, float radius, float duration)
+        // Server: register a cloud that starts blocking sight after `delay` seconds (once the thrown
+        // grenade has landed) and lasts `duration` seconds from then.
+        public static void Add(Vector3 pos, float radius, float duration, float delay = 0f)
         {
             Prune();
-            clouds.Add(new Cloud { pos = pos, radius = radius, until = Time.time + duration });
+            float from = Time.time + Mathf.Max(0f, delay);
+            clouds.Add(new Cloud { pos = pos, radius = radius, from = from, until = from + duration });
         }
 
         // True if the segment a..b passes through any active smoke cloud.
@@ -26,8 +28,9 @@ namespace AirsoftFPS
         {
             if (clouds.Count == 0) return false;
             Prune();
+            float now = Time.time;
             for (int i = 0; i < clouds.Count; i++)
-                if (SegmentHitsSphere(a, b, clouds[i].pos, clouds[i].radius)) return true;
+                if (now >= clouds[i].from && SegmentHitsSphere(a, b, clouds[i].pos, clouds[i].radius)) return true;
             return false;
         }
 
