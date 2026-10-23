@@ -94,7 +94,6 @@ namespace AirsoftFPS
         }
 
         // ───────────── store ─────────────
-        const string FileName = "airsoft_profile.json";
         static ProfileData s_data;
 
         public static event Action Changed;
@@ -102,7 +101,11 @@ namespace AirsoftFPS
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics() { s_data = null; LastMatch = null; Changed = null; }
 
-        static string FilePath => Path.Combine(Application.persistentDataPath, FileName);
+        // Per-account profile file; a guest (not signed in) keeps the original airsoft_profile.json.
+        static string FilePath => Path.Combine(Application.persistentDataPath, "airsoft_profile" + AccountStore.ProfileSuffix + ".json");
+
+        // Switch to the active account's profile (AccountStore calls this on sign in / out).
+        public static void Reload() { s_data = null; LastMatch = null; Changed?.Invoke(); }
 
         public static ProfileData Data
         {
