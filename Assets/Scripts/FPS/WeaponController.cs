@@ -27,7 +27,8 @@ namespace AirsoftFPS
         bool isReloading;
         float reloadEndTime;
         int reloadSfx;           // reload sounds played so far (0 = mag out, 1 = mag in, 2 = rack)
-        bool reloadCut;          // a reload was cut short by dying: start it again on respawn
+        int reloadCutWeapon = -1;   // weapon whose reload was cut short by dying (-1 = none): reloaded after respawn
+        float lastDeadTime;
         bool isAiming;
 
         FPSController fpsController;
@@ -216,6 +217,7 @@ namespace AirsoftFPS
             ammoInMag = magAmmos[idx];
             ammoReserve = reserveAmmos[idx];
             isReloading = false;
+            reloadCutWeapon = -1;
             isAiming = false;
             nextFireTime = Time.time + 0.25f;
             switchLower = 1f; // animate weapon raising
@@ -259,18 +261,25 @@ namespace AirsoftFPS
                 isAiming = false;
                 if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, GameSettings.FieldOfView, Time.deltaTime * 10f);
                 // dead: drop a reload in progress (restarted on respawn); otherwise let it finish
-                if (dead) { if (isReloading) reloadCut = true; isReloading = false; }
+                if (dead)
+                {
+                    if (isReloading) reloadCutWeapon = currentIndex;
+                    isReloading = false;
+                    lastDeadTime = Time.time;
+                }
                 else if (isReloading) HandleReload();
                 return;
             }
 
-            if (reloadCut)
-            {
-                reloadCut = false;
-                if (!isReloading && ammoInMag < weapons[currentIndex].magSize && ammoReserve > 0) StartReload();
-            }
-
             HandleWeaponSwitch();
+            // A moment after respawning (forced weapon changes and the round-start refill come first), finish the
+            // reload that dying cut short, if that weapon is still in hand.
+            if (reloadCutWeapon >= 0 && Time.time - lastDeadTime >= 0.3f)
+            {
+                if (reloadCutWeapon == currentIndex && !isReloading &&
+                    ammoInMag < weapons[currentIndex].magSize && ammoReserve > 0) StartReload();
+                reloadCutWeapon = -1;
+            }
             HandleReload();
             HandleAim();
             HandleFire();
@@ -398,7 +407,7 @@ namespace AirsoftFPS
             ammoInMag = magAmmos[currentIndex];
             ammoReserve = reserveAmmos[currentIndex];
             isReloading = false;
-            reloadCut = false;
+            reloadCutWeapon = -1;
             NotifyAmmo();
         }
 
