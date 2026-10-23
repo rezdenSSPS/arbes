@@ -19,6 +19,9 @@ namespace AirsoftFPS
         public int revives;   // Medic mode: teammates revived (older profiles load it as 0)
         public int credits;   // in-game currency earned per match (older profiles load it as 0)
         public List<string> owned = new List<string>();   // ids of weapons / parts bought from the shop
+        public string loadoutPrimary = "";
+        public string loadoutSecondary = "";
+        public int bbWeightIndex = 2;   // index into PlayerProfile.BB_WEIGHTS (default 0.28 g)
     }
 
     [Serializable]
@@ -113,6 +116,30 @@ namespace AirsoftFPS
         public static int Level => LevelFor(Data.totalXp);
         public static int Credits => Data.credits;
         public static MatchXp LastMatch { get; private set; }
+
+        // ───────────── loadout ─────────────
+        public static readonly float[] BB_WEIGHTS = { 0.20f, 0.25f, 0.28f, 0.32f, 0.40f };
+
+        // Chosen weapons, falling back to a starter when the saved one isn't owned.
+        public static string LoadoutPrimary
+        {
+            get { var p = Data.loadoutPrimary; return ShopCatalog.OwnedWeapon(p) ? p : "Uzi GBB SMG"; }
+        }
+        public static string LoadoutSecondary
+        {
+            get { var s = Data.loadoutSecondary; return ShopCatalog.OwnedWeapon(s) ? s : "1911 GBB Pistol"; }
+        }
+        public static float BbWeight => BB_WEIGHTS[Mathf.Clamp(Data.bbWeightIndex, 0, BB_WEIGHTS.Length - 1)];
+
+        public static void SetLoadout(string primary, string secondary, int bbIndex)
+        {
+            var d = Data;
+            if (ShopCatalog.OwnedWeapon(primary)) d.loadoutPrimary = primary;
+            if (ShopCatalog.OwnedWeapon(secondary)) d.loadoutSecondary = secondary;
+            d.bbWeightIndex = Mathf.Clamp(bbIndex, 0, BB_WEIGHTS.Length - 1);
+            Save();
+            Changed?.Invoke();
+        }
 
         static void Load()
         {

@@ -446,7 +446,7 @@ namespace AirsoftFPS
                 {
                     var sv = slotViews[i];
                     bool on = i == active;
-                    bool locked = gg && !on;
+                    bool locked = !on && (gg || !weaponCtrl.SlotOwned(i));   // Gun Game level-locked, or not bought yet
                     string shortName = ws != null && i < ws.Length ? (string.IsNullOrEmpty(ws[i].shortName) ? ws[i].weaponName : ws[i].shortName) : "";
                     sv.name.text = locked ? "—" : shortName;
                     sv.bg.color = on ? Accent : locked ? Scrim(0.35f) : Scrim(0.72f);

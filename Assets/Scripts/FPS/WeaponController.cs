@@ -396,8 +396,8 @@ namespace AirsoftFPS
                 return;
             }
 
-            // objective modes (VIP escort: sidearms only): off-limits weapons are skipped
-            if (!ObjectiveMode.WeaponAllowed(OwnerClientId, weapons[currentIndex]))
+            // off-limits weapons are skipped: VIP escort (sidearms only) and weapons you don't own yet
+            if (!WeaponUsable(currentIndex))
             {
                 int ok = NextAllowedWeapon(currentIndex, 1);
                 if (ok != currentIndex) SwitchWeaponRpc(ok);
@@ -412,7 +412,7 @@ namespace AirsoftFPS
                 int weaponIdx = i < 9 ? i : 9;
                 if (kb[digitKeys[i]].wasPressedThisFrame)
                 {
-                    if (weaponIdx != currentIndex && ObjectiveMode.WeaponAllowed(OwnerClientId, weapons[weaponIdx]))
+                    if (weaponIdx != currentIndex && WeaponUsable(weaponIdx))
                         SwitchWeaponRpc(weaponIdx);
                     return;
                 }
@@ -434,15 +434,35 @@ namespace AirsoftFPS
             }
         }
 
-        // First weapon from `from` (stepping by dir) this player may use right now (ObjectiveMode.WeaponAllowed).
+        // First weapon from `from` (stepping by dir) this player may use right now.
         int NextAllowedWeapon(int from, int dir)
         {
             for (int k = 0; k < weapons.Length; k++)
             {
                 int i = ((from + dir * k) % weapons.Length + weapons.Length) % weapons.Length;
-                if (ObjectiveMode.WeaponAllowed(OwnerClientId, weapons[i])) return i;
+                if (WeaponUsable(i)) return i;
             }
             return currentIndex;
+        }
+
+        // Owner (client-side): may this player switch to this weapon? Gun Game uses all ten by level;
+        // otherwise the weapon must be allowed by the mode (VIP: sidearms) and owned (starter or bought).
+        bool WeaponUsable(int idx)
+        {
+            if (idx < 0 || idx >= weapons.Length) return false;
+            var mn = MatchNet.Instance;
+            if (mn != null && mn.Mode == MatchNet.GameModeType.GunGame) return true;
+            if (!ObjectiveMode.WeaponAllowed(OwnerClientId, weapons[idx])) return false;
+            return ShopCatalog.OwnedWeapon(weapons[idx].weaponName);
+        }
+
+        // HUD: is a slot owned (for dimming locked weapons)? Gun Game shows all.
+        public bool SlotOwned(int idx)
+        {
+            if (idx < 0 || weapons == null || idx >= weapons.Length) return true;
+            var mn = MatchNet.Instance;
+            if (mn != null && mn.Mode == MatchNet.GameModeType.GunGame) return true;
+            return ShopCatalog.OwnedWeapon(weapons[idx].weaponName);
         }
 
         // Owner: full magazines and reserves again (round modes, when a new round starts).
