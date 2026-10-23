@@ -120,6 +120,7 @@ namespace AirsoftFPS
             foreach (var c in bleed) BleedOut(c, giveUps.Contains(c.id) && now < c.bleedAt);
             giveUps.Clear();
 
+            UpdateBotMedicHolding();
             TickRevives(dt);
             CheckElimination();
         }
@@ -245,6 +246,53 @@ namespace AirsoftFPS
             c.state == CasualtyState.Downed && c.team == medic.team && c.id != medic.id
             && Near(medic.position, c.pos, REVIVE_RADIUS, 2f);
 
+        // ───────────────────────── bots ─────────────────────────
+        // An up bot medic heads to the nearest downed teammate; everyone else fights / roams as usual.
+        protected override bool BotGoal(ulong botId, out Vector3 pos, out BotTask task)
+        {
+            pos = default; task = BotTask.Revive;
+            if (!medics.Contains(botId) || casualties.ContainsKey(botId)) return false;
+            var mn = MatchNet.Instance;
+            int team = mn != null ? mn.TeamOf(botId) : 0;
+            Vector3 from = TryGetParticipant(botId, out var mp) ? mp.position : Vector3.zero;
+            Casualty best = null; float bd = float.MaxValue;
+            foreach (var c in casualties.Values)
+            {
+                if (c.team != team || c.state != CasualtyState.Downed || c.id == botId) continue;
+                float d = (c.pos - from).sqrMagnitude;
+                if (d < bd) { bd = d; best = c; }
+            }
+            if (best == null) return false;
+            pos = best.pos;
+            return true;
+        }
+
+        // Server: bot medics "hold E" automatically when a downed teammate is within revive range.
+        void UpdateBotMedicHolding()
+        {
+            foreach (var m in medics)
+            {
+                if (!MatchNet.IsBotId(m)) continue;
+                if (!TryGetParticipant(m, out var mp) || !mp.active) { holding.Remove(m); lockOn.Remove(m); continue; }
+                bool any = false;
+                foreach (var c in casualties.Values) if (CanRevive(mp, c)) { any = true; break; }
+                if (any) holding.Add(m); else { holding.Remove(m); lockOn.Remove(m); }
+            }
+        }
+
+        static Health ReviveHealth(ulong id)
+        {
+            var nm = NetworkManager.Singleton;
+            if (nm == null || !nm.IsServer) return null;
+            if (MatchNet.IsBotId(id))
+            {
+                var no = MatchNet.Instance != null ? MatchNet.Instance.BotObject(id) : null;
+                return no != null ? no.GetComponent<Health>() : null;
+            }
+            return nm.ConnectedClients.TryGetValue(id, out var cl) && cl.PlayerObject != null
+                ? cl.PlayerObject.GetComponent<Health>() : null;
+        }
+
         void TickRevives(float dt)
         {
             var progressed = new HashSet<ulong>();
@@ -286,12 +334,7 @@ namespace AirsoftFPS
             AddPlayerPoints(medic, 1);
             Announce($"{NameOf(medic)} revived {NameOf(c.id)}", c.team);
             if (testParticipants != null) testRevived?.Invoke(c.id);
-            else
-            {
-                var nm = NetworkManager.Singleton;
-                if (nm != null && nm.ConnectedClients.TryGetValue(c.id, out var cl) && cl.PlayerObject != null)
-                    cl.PlayerObject.GetComponent<Health>()?.ReviveFromHit(REVIVE_PROTECTION);
-            }
+            else ReviveHealth(c.id)?.ReviveFromHit(REVIVE_PROTECTION);   // player or bot
             MarkDirty();
         }
 

@@ -152,6 +152,19 @@ namespace AirsoftFPS
         // FPSController: e.g. a flag carrier can't sprint.
         public static bool CannotSprint(ulong clientId) => Active != null && Active.BlocksSprint(clientId);
 
+        // ── bots in objective modes (server) ──
+        public enum BotTask { None, GoTo, Deliver, Plant, Defuse, Revive }
+
+        // Server (BotBrain): where a bot on the current mode should head now, and what to do there.
+        // false = nothing special; the bot fights / roams as usual. Deliver overrides fighting (e.g. run the
+        // flag home); Plant / Defuse / Revive mean "do the action once you're there".
+        public static bool BotObjective(ulong botId, out Vector3 pos, out BotTask task)
+        {
+            pos = default; task = BotTask.None;
+            return Active != null && IsServerNow && Active.BotGoal(botId, out pos, out task);
+        }
+        protected virtual bool BotGoal(ulong botId, out Vector3 pos, out BotTask task) { pos = default; task = BotTask.None; return false; }
+
         // ── round modes (Bomb, VIP escort): respawn, spawn, movement and weapon rules ──
 
         // Server (Health.Respawn): keep this dead player down for now (e.g. no respawn during a bomb round).

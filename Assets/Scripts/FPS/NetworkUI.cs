@@ -577,6 +577,8 @@ namespace AirsoftFPS
             ApplyFont(metaText, F.Body); metaText.characterSpacing = 0;
 
             ProfileUI.AddToMenu(screen, stage);   // level chip (top right) + profile/stats panel
+            ShopUI.AddToMenu(screen, stage);      // ARMORY button + shop panel (spend Credits on weapons)
+            AccountUI.AddToMenu(screen, stage);   // ACCOUNT button + sign-in panel (local username/password)
             SetLanTab(LastWasLan);
             return screen.gameObject;
         }
@@ -987,7 +989,7 @@ namespace AirsoftFPS
             botSkillRow.SetActive(true);
             botNote.text = !modeHasBots ? "No bots in this mode."
                 : mnet.BotFill > 0 ? "Bots fill the empty slots and leave when players join."
-                : isHost ? "Bots can fill empty slots in Free-for-All, Team Deathmatch, Gun Game and Milsim." : "";
+                : isHost ? "Bots can fill the empty slots in this mode." : "";
         }
 
         void BuildCharacterColumn(RectTransform colRt)

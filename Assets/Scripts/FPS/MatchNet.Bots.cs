@@ -39,10 +39,13 @@ namespace AirsoftFPS
         public int BotFill { get; private set; }
         public BotDifficulty BotSkill { get; private set; } = BotDifficulty.Normal;
 
-        // Modes that get bots. Explicit list: modes added later (objectives, Medic) stay bot-free.
+        // Modes that get bots. Explicit list so a new mode stays bot-free until its bot behaviour is written.
         public static bool ModeHasBots(GameModeType m) =>
             m == GameModeType.FreeForAll || m == GameModeType.TeamDeathmatch ||
-            m == GameModeType.GunGame || m == GameModeType.Milsim;
+            m == GameModeType.GunGame || m == GameModeType.Milsim ||
+            m == GameModeType.CaptureTheFlag || m == GameModeType.Domination ||
+            m == GameModeType.Bomb || m == GameModeType.VipEscort ||
+            m == GameModeType.Medic;
 
         public bool BotsActive => ModeHasBots(Mode) && BotFill > 0;
 
@@ -95,6 +98,32 @@ namespace AirsoftFPS
             return botObjects.TryGetValue(botId, out var no) && no != null && no.IsSpawned ? no : null;
         }
 
+        // ObjectiveMode hooks: bots take part in objective logic like players.
+        void AddBotParticipants(List<ObjectiveMode.Participant> list)
+        {
+            if (nm == null || !nm.IsServer) return;
+            foreach (var e in roster)
+            {
+                if (!IsBotId(e.clientId)) continue;
+                var no = BotObject(e.clientId);
+                if (no == null) continue;
+                var h = no.GetComponent<Health>();
+                list.Add(new ObjectiveMode.Participant
+                {
+                    id = e.clientId,
+                    team = TeamOf(e.clientId),
+                    position = no.transform.position,
+                    active = h == null || (h.IsSpawned && !h.isDead.Value && !h.IsOut)
+                });
+            }
+        }
+
+        Transform BotTransform(ulong id)
+        {
+            var no = BotObject(id);
+            return no != null ? no.transform : null;
+        }
+
         // Called from Update every frame.
         void BotsUpdate()
         {
@@ -115,6 +144,11 @@ namespace AirsoftFPS
                 cmm.RegisterNamedMessageHandler(MSG_BOTS, OnClientRecvBots);
                 botSentClients = -1;
                 botObjects.Clear();
+                // Let objective modes count bots (flag carriers, point holders, bomb planters, …) and
+                // find their avatars. Server-only in effect; on clients these are no-ops (no bot objects).
+                ObjectiveMode.CollectExtraParticipants -= AddBotParticipants;
+                ObjectiveMode.CollectExtraParticipants += AddBotParticipants;
+                ObjectiveMode.ResolveExtraTransform = BotTransform;
             }
 
             if (!nm.IsServer || !nm.IsListening) return;

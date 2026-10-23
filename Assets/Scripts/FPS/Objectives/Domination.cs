@@ -57,6 +57,25 @@ namespace AirsoftFPS
                 points.Add(new Point { label = ((char)('A' + i)).ToString(), pos = positions[i] });
         }
 
+        // Bots: head for a point we don't own (capture / neutralise), spreading out by id; if we own them
+        // all, fan out to defend. Standing inside the ring is scored by ServerTick.
+        protected override bool BotGoal(ulong botId, out Vector3 pos, out BotTask task)
+        {
+            pos = default; task = BotTask.GoTo;
+            var mn = MatchNet.Instance;
+            int team = mn != null ? mn.TeamOf(botId) : 0;
+            if (points.Count == 0 || (team != 1 && team != 2)) return false;
+
+            var cands = new List<Point>();
+            foreach (var p in points) if (p.owner != team) cands.Add(p);
+            if (cands.Count == 0) cands = points;
+
+            var pick = cands[(int)(botId % (ulong)cands.Count)];
+            float ang = (botId % 8) * Mathf.PI * 2f / 8f;   // off-centre so several bots don't share one spot
+            pos = pick.pos + new Vector3(Mathf.Cos(ang), 0f, Mathf.Sin(ang)) * (RADIUS * 0.4f);
+            return true;
+        }
+
         // ───────────────────────── server rules ─────────────────────────
         public override void ServerTick(float dt)
         {

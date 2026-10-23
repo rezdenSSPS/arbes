@@ -23,6 +23,16 @@ namespace AirsoftFPS
         public Transform cameraHolder;
         public Camera playerCamera;
 
+        [Header("Stamina")]
+        public float sprintSeconds = 6f;         // sprint time from full stamina
+        public float staminaRegenSeconds = 8f;   // empty -> full while not sprinting
+        public float minStaminaToSprint = 0.15f; // after exhaustion, this much must regen before sprinting again
+
+        [Header("Lean")]
+        public float leanOffset = 0.5f;          // metres the camera shifts sideways
+        public float leanRoll = 11f;             // camera roll, degrees
+        public float leanSpeed = 9f;
+
         CharacterController cc;
         Vector3 velocity;
         float xRotation;
@@ -31,10 +41,15 @@ namespace AirsoftFPS
         float standHeight = 2f;
         float crouchHeight = 1.2f;
         float speedMultiplier = 1f; // set by weapon weight
+        float stamina = 1f;
+        bool staminaExhausted;
+        float lean;       // -1..1, smoothed
         Health health;
 
         public bool IsSprinting { get; private set; }
         public bool IsCrouching => isCrouching;
+        public float Stamina => stamina;          // 0..1, for the HUD
+        public float LeanAmount => lean;          // -1..1
 
         public override void OnNetworkSpawn()
         {
@@ -104,12 +119,16 @@ namespace AirsoftFPS
             // Pause / results menus own the mouse; the match (and gravity) keeps running.
             if (!HUDManager.InputBlocked) HandleLook();
             HandleMovement();
+            HandleLean();
 
             if (transform.position.y < -30f)
             {
-                // respawn
+                // Fell through the map: put the player back on a real spawn point for their team instead of
+                // the old fixed (0, 2, 0) (which could be off the map, in the open, or on top of enemies).
+                // GetSpawnFor is static and reads only the scene + MatchNet, so it's safe to call on the owner.
+                var pose = PlayerSpawner.GetSpawnFor(OwnerClientId);
                 cc.enabled = false;
-                transform.position = new Vector3(0, 2, 0);
+                transform.SetPositionAndRotation(pose.position, pose.rotation);
                 velocity = Vector3.zero;
                 cc.enabled = true;
             }
@@ -154,9 +173,22 @@ namespace AirsoftFPS
             if (input && kb.wKey.isPressed) v += 1f;
             if (input && kb.sKey.isPressed) v -= 1f;
 
-            // Sprint
-            IsSprinting = input && kb.leftShiftKey.isPressed && v > 0.1f && !isCrouching
-                          && !ObjectiveMode.CannotSprint(OwnerClientId);   // e.g. carrying the flag (CTF)
+            // Sprint (gated by stamina: drains while sprinting, regens otherwise; after it empties you
+            // can't sprint again until it has recovered a little)
+            bool wantSprint = input && kb.leftShiftKey.isPressed && v > 0.1f && !isCrouching
+                              && !ObjectiveMode.CannotSprint(OwnerClientId);   // e.g. carrying the flag (CTF)
+            if (staminaExhausted && stamina < minStaminaToSprint) wantSprint = false;
+            IsSprinting = wantSprint && stamina > 0f;
+            if (IsSprinting)
+            {
+                stamina -= Time.deltaTime / Mathf.Max(0.1f, sprintSeconds);
+                if (stamina <= 0f) { stamina = 0f; staminaExhausted = true; }
+            }
+            else
+            {
+                stamina = Mathf.Min(1f, stamina + Time.deltaTime / Mathf.Max(0.1f, staminaRegenSeconds));
+                if (stamina >= minStaminaToSprint) staminaExhausted = false;
+            }
 
             // Crouch: toggle on press, or hold (Settings > Controls)
             bool crouchKey = kb.cKey.isPressed || kb.leftCtrlKey.isPressed;
@@ -191,6 +223,35 @@ namespace AirsoftFPS
 
             velocity.y += gravity * Time.deltaTime;
             cc.Move(velocity * Time.deltaTime);
+        }
+
+        // Peek left (Q) / right (E): shift the camera sideways with a little roll, shortened if a wall is
+        // in the way. Owner-only and camera-only (the body collider doesn't move). E doubles as the objective
+        // interact key; the overlap is harmless (interacting happens standing still at an objective).
+        void HandleLean()
+        {
+            if (cameraHolder == null) return;
+            var kb = Keyboard.current;
+            float target = 0f;
+            bool canLean = kb != null && !HUDManager.InputBlocked
+                           && !(health != null && health.IsSpawned && health.isDead.Value)
+                           && !ObjectiveMode.IsDowned(OwnerClientId);
+            if (canLean)
+            {
+                if (kb.qKey.isPressed) target -= 1f;
+                if (kb.eKey.isPressed) target += 1f;
+            }
+            if (target != 0f)
+            {
+                Vector3 head = transform.position + Vector3.up * (cc.height - 0.15f);
+                Vector3 dir = transform.right * Mathf.Sign(target);
+                if (Physics.Raycast(head, dir, out RaycastHit hit, leanOffset + 0.3f, ~0, QueryTriggerInteraction.Ignore)
+                    && hit.collider.GetComponentInParent<Health>() == null)   // walls block the lean, not people
+                    target *= Mathf.Clamp01((hit.distance - 0.3f) / leanOffset);
+            }
+            lean = Mathf.MoveTowards(lean, target, leanSpeed * Time.deltaTime);
+            cameraHolder.localPosition = new Vector3(lean * leanOffset, cc.height - 0.15f, 0f);
+            cameraHolder.localRotation = Quaternion.Euler(xRotation, 0f, -lean * leanRoll);
         }
 
         public void SetSpeedMultiplier(float mult) => speedMultiplier = mult;

@@ -22,6 +22,7 @@ namespace AirsoftFPS.Editor
         static int fails, passes;
         static bool batch, skipBleed;
         static int startTickets;
+        static int savedBotFill;
         static int mapIndex = -1;   // -map N: host locks that map (MapCatalog index), else the default
         static readonly System.Text.StringBuilder log = new System.Text.StringBuilder();
 
@@ -41,6 +42,9 @@ namespace AirsoftFPS.Editor
         static void Run()
         {
             stage = 0; fails = passes = 0;
+            savedBotFill = UnityEngine.PlayerPrefs.GetInt("Airsoft.BotFill", 0);
+            UnityEngine.PlayerPrefs.SetInt("Airsoft.BotFill", 0);   // host-only check: no bots (they would interfere)
+            UnityEngine.PlayerPrefs.Save();
             log.Clear();
             log.AppendLine("[Airsoft] Play check Medic");
             EditorSceneManager.OpenScene("Assets/Scenes/AirsoftLobby.unity", OpenSceneMode.Single);
@@ -66,6 +70,8 @@ namespace AirsoftFPS.Editor
             log.AppendLine($"  => {passes} passed, {fails} failed");
             if (fails == 0) Debug.Log(log.ToString()); else Debug.LogError(log.ToString());
             EditorApplication.update -= Tick;
+            UnityEngine.PlayerPrefs.SetInt("Airsoft.BotFill", savedBotFill);   // restore the host's bot-fill
+            UnityEngine.PlayerPrefs.Save();
             if (batch) EditorApplication.Exit(fails == 0 ? 0 : 1);
             else EditorApplication.isPlaying = false;
         }

@@ -17,6 +17,11 @@ namespace AirsoftFPS
         // The look saved before unlocks existed: its items stay usable at any level.
         public int legacyLook = -1;
         public int revives;   // Medic mode: teammates revived (older profiles load it as 0)
+        public int credits;   // in-game currency earned per match (older profiles load it as 0)
+        public List<string> owned = new List<string>();   // ids of weapons / parts bought from the shop
+        public string loadoutPrimary = "";
+        public string loadoutSecondary = "";
+        public int bbWeightIndex = 2;   // index into PlayerProfile.BB_WEIGHTS (default 0.28 g)
     }
 
     [Serializable]
@@ -30,10 +35,16 @@ namespace AirsoftFPS
         public int xpBefore, xpAfter;
         public int kills, hits, enemyKills;
         public int revives;   // Medic mode
+        public int objPoints; // objective points scored (caps, plants/defuses, extracts, revives)
         public bool won, completed;
         public readonly List<(string what, int xp)> lines = new List<(string, int)>();
         public readonly List<string> unlocked = new List<string>();
         public int Gained => xpAfter - xpBefore;
+
+        // Credits (currency) earned this match.
+        public int creditsBefore, creditsAfter;
+        public readonly List<(string what, int cr)> creditLines = new List<(string, int)>();
+        public int CreditsGained => creditsAfter - creditsBefore;
         public int LevelBefore => PlayerProfile.LevelFor(xpBefore);
         public int LevelAfter => PlayerProfile.LevelFor(xpAfter);
     }
@@ -47,6 +58,14 @@ namespace AirsoftFPS
         public const int XP_MATCH = 50;        // finished a match (co-op: stayed 2+ minutes)
         public const int XP_WIN = 100;         // won it (FFA / Gun Game winner, or winning team)
         public const int XP_REVIVE = 15;       // revived a teammate (Medic)
+
+        // ───────────── Credit rules (currency) ─────────────
+        public const int CR_MATCH = 40;        // finished a match
+        public const int CR_KILL = 10;         // player kill
+        public const int CR_ENEMY_KILL = 5;    // AI soldier (co-op)
+        public const int CR_WIN = 120;         // won it
+        public const int CR_OBJECTIVE = 15;    // per objective point (capture, plant/defuse, extract, revive)
+        public const int CR_STREAK = 10;       // per kill of the best streak
 
         // XP needed to go from `level` to the next: 150, 225, 300, ... Level 10 = 4 050 XP,
         // roughly three evenings of matches.
@@ -75,7 +94,6 @@ namespace AirsoftFPS
         }
 
         // ───────────── store ─────────────
-        const string FileName = "airsoft_profile.json";
         static ProfileData s_data;
 
         public static event Action Changed;
@@ -83,7 +101,11 @@ namespace AirsoftFPS
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics() { s_data = null; LastMatch = null; Changed = null; }
 
-        static string FilePath => Path.Combine(Application.persistentDataPath, FileName);
+        // Per-account profile file; a guest (not signed in) keeps the original airsoft_profile.json.
+        static string FilePath => Path.Combine(Application.persistentDataPath, "airsoft_profile" + AccountStore.ProfileSuffix + ".json");
+
+        // Switch to the active account's profile (AccountStore calls this on sign in / out).
+        public static void Reload() { s_data = null; LastMatch = null; Changed?.Invoke(); }
 
         public static ProfileData Data
         {
@@ -95,7 +117,32 @@ namespace AirsoftFPS
         }
 
         public static int Level => LevelFor(Data.totalXp);
+        public static int Credits => Data.credits;
         public static MatchXp LastMatch { get; private set; }
+
+        // ───────────── loadout ─────────────
+        public static readonly float[] BB_WEIGHTS = { 0.20f, 0.25f, 0.28f, 0.32f, 0.40f };
+
+        // Chosen weapons, falling back to a starter when the saved one isn't owned.
+        public static string LoadoutPrimary
+        {
+            get { var p = Data.loadoutPrimary; return ShopCatalog.OwnedWeapon(p) ? p : "Uzi GBB SMG"; }
+        }
+        public static string LoadoutSecondary
+        {
+            get { var s = Data.loadoutSecondary; return ShopCatalog.OwnedWeapon(s) ? s : "1911 GBB Pistol"; }
+        }
+        public static float BbWeight => BB_WEIGHTS[Mathf.Clamp(Data.bbWeightIndex, 0, BB_WEIGHTS.Length - 1)];
+
+        public static void SetLoadout(string primary, string secondary, int bbIndex)
+        {
+            var d = Data;
+            if (ShopCatalog.OwnedWeapon(primary)) d.loadoutPrimary = primary;
+            if (ShopCatalog.OwnedWeapon(secondary)) d.loadoutSecondary = secondary;
+            d.bbWeightIndex = Mathf.Clamp(bbIndex, 0, BB_WEIGHTS.Length - 1);
+            Save();
+            Changed?.Invoke();
+        }
 
         static void Load()
         {
@@ -105,7 +152,7 @@ namespace AirsoftFPS
                     s_data = JsonUtility.FromJson<ProfileData>(File.ReadAllText(FilePath));
             }
             catch (Exception e) { Debug.LogWarning("[Airsoft] profile could not be read, starting fresh: " + e.Message); }
-            if (s_data != null) { s_data.weaponKills ??= new List<WeaponKills>(); return; }
+            if (s_data != null) { s_data.weaponKills ??= new List<WeaponKills>(); s_data.owned ??= new List<string>(); return; }
 
             // First run with profiles: whatever look was saved before keeps its items.
             s_data = new ProfileData { legacyLook = PlayerPrefs.GetInt(AirsoftLook.PrefKey, -1) };
@@ -148,6 +195,43 @@ namespace AirsoftFPS
             Data.weaponKills.Add(new WeaponKills { weapon = weapon, kills = 1 });
         }
 
+        // ───────────── shop / ownership (currency spending) ─────────────
+        // An id the player has bought from the shop (weapon or part). Items not sold in the shop are
+        // considered always owned, so callers only check ids that are actually gated.
+        public static bool Owns(string id) => string.IsNullOrEmpty(id) || Data.owned.Contains(id);
+
+        // Buy an item: deducts credits and records ownership. false if unaffordable or already owned.
+        public static bool Buy(string id, int cost)
+        {
+            var d = Data;
+            if (string.IsNullOrEmpty(id) || cost < 0 || d.owned.Contains(id) || d.credits < cost) return false;
+            d.credits -= cost;
+            d.owned.Add(id);
+            Save();
+            Changed?.Invoke();
+            return true;
+        }
+
+        // Spend credits without an ownership record (e.g. consumables). false if unaffordable.
+        public static bool Spend(int cost)
+        {
+            var d = Data;
+            if (cost < 0 || d.credits < cost) return false;
+            d.credits -= cost;
+            Save();
+            Changed?.Invoke();
+            return true;
+        }
+
+        // Grant an item for free (rewards / defaults).
+        public static void Grant(string id)
+        {
+            var d = Data;
+            if (string.IsNullOrEmpty(id) || d.owned.Contains(id)) return;
+            d.owned.Add(id);
+            Save();
+        }
+
         // Applies a finished (or abandoned) match: stats + XP, saves, and remembers it for the results screen.
         public static void Commit(MatchXp m, int deaths, int hitsTaken, int bestStreak, List<string> weaponKills)
         {
@@ -160,6 +244,18 @@ namespace AirsoftFPS
             if (m.enemyKills > 0) { xp += m.enemyKills * XP_ENEMY_KILL; m.lines.Add((m.enemyKills + " enemies", m.enemyKills * XP_ENEMY_KILL)); }
             if (m.hits > 0) { xp += m.hits * XP_HIT; m.lines.Add((m.hits == 1 ? "1 hit" : m.hits + " hits", m.hits * XP_HIT)); }
             if (m.revives > 0) { xp += m.revives * XP_REVIVE; m.lines.Add((m.revives == 1 ? "1 revive" : m.revives + " revives", m.revives * XP_REVIVE)); }
+
+            // Credits (currency): a separate reward track from XP.
+            int cr = 0;
+            if (m.completed) { cr += CR_MATCH; m.creditLines.Add(("Match", CR_MATCH)); }
+            if (m.won) { cr += CR_WIN; m.creditLines.Add(("Win", CR_WIN)); }
+            if (m.kills > 0) { int v = m.kills * CR_KILL; cr += v; m.creditLines.Add((m.kills + " kills", v)); }
+            if (m.enemyKills > 0) { int v = m.enemyKills * CR_ENEMY_KILL; cr += v; m.creditLines.Add((m.enemyKills + " enemies", v)); }
+            if (m.objPoints > 0) { int v = m.objPoints * CR_OBJECTIVE; cr += v; m.creditLines.Add((m.objPoints + " objectives", v)); }
+            if (bestStreak > 1) { int v = bestStreak * CR_STREAK; cr += v; m.creditLines.Add(("Best streak " + bestStreak, v)); }
+            m.creditsBefore = d.credits;
+            d.credits += cr;
+            m.creditsAfter = d.credits;
 
             if (m.completed) d.matchesPlayed++;
             if (m.won) d.wins++;
@@ -311,6 +407,8 @@ namespace AirsoftFPS
 
             // Medic: revives are the objective points (server-counted, synced with the objective state).
             if (ObjectiveMode.Active is Medic) match.revives = Mathf.Max(match.revives, ObjectiveMode.PointsOf(nm.LocalClientId));
+            // Any objective mode: objective points scored (caps, plants/defuses, extracts, revives) for credits.
+            if (ObjectiveMode.Active != null) match.objPoints = Mathf.Max(match.objPoints, ObjectiveMode.PointsOf(nm.LocalClientId));
 
             // Local player: confirmed hits (weapon) and hits taken (own health going down).
             var po = nm.LocalClient != null ? nm.LocalClient.PlayerObject : null;

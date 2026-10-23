@@ -39,6 +39,7 @@ namespace AirsoftFPS
 
         Health playerHealth;
         WeaponController weaponCtrl;
+        FPSController fpsCtrl;
         bool wired;
         bool isPaused;
         bool killFeedSub;
@@ -82,6 +83,10 @@ namespace AirsoftFPS
         Image vignette;
         TextMeshProUGUI hpValue, hpUnit;
         Image hpFill;
+        Image staminaFill;
+        CanvasGroup staminaGroup;
+        TextMeshProUGUI smokeLabel;
+        GameObject smokeChip;
         readonly List<SlotView> slotViews = new List<SlotView>();
         TextMeshProUGUI ammoWeapon, ammoMag, ammoReserve;
         GameObject reloadHint;
@@ -135,6 +140,7 @@ namespace AirsoftFPS
             if (wired) return;
             playerHealth = health;
             weaponCtrl = wc;
+            fpsCtrl = health != null ? health.GetComponent<FPSController>() : null;
 
             if (playerHealth != null)
             {
@@ -413,6 +419,23 @@ namespace AirsoftFPS
             vignette.gameObject.SetActive(low && !dead);
             if (low) vignette.color = A(Hex("#C8281E"), 0.4f + 0.12f * Mathf.Sin(Time.unscaledTime * 4f));
 
+            // stamina bar: visible while it is draining or not yet full
+            if (fpsCtrl != null && staminaFill != null)
+            {
+                float st = fpsCtrl.Stamina;
+                SetBar(staminaFill, st);
+                staminaFill.color = st < 0.25f ? Danger : Accent;
+                float targetA = !dead && (st < 0.999f || fpsCtrl.IsSprinting) ? 1f : 0f;
+                if (staminaGroup != null) staminaGroup.alpha = Mathf.MoveTowards(staminaGroup.alpha, targetA, Time.unscaledDeltaTime * 4f);
+            }
+
+            // smoke gadget count
+            if (smokeChip != null)
+            {
+                smokeChip.SetActive(!dead && weaponCtrl != null);
+                if (weaponCtrl != null && smokeLabel != null) smokeLabel.text = "SMOKE " + weaponCtrl.CurrentSmoke;
+            }
+
             // weapons + ammo
             if (weaponCtrl != null && weaponCtrl.AmmoReady)
             {
@@ -423,7 +446,7 @@ namespace AirsoftFPS
                 {
                     var sv = slotViews[i];
                     bool on = i == active;
-                    bool locked = gg && !on;
+                    bool locked = !on && (gg || !weaponCtrl.SlotOwned(i));   // Gun Game level-locked, or not bought yet
                     string shortName = ws != null && i < ws.Length ? (string.IsNullOrEmpty(ws[i].shortName) ? ws[i].weaponName : ws[i].shortName) : "";
                     sv.name.text = locked ? "—" : shortName;
                     sv.bg.color = on ? Accent : locked ? Scrim(0.35f) : Scrim(0.72f);
@@ -978,6 +1001,22 @@ namespace AirsoftFPS
             hpUnit.margin = new Vector4(0, 0, 0, 8);
             hpFill = Bar(hpBox.transform, "Bar", Line, Fg);
             hpFill.transform.parent.GetComponent<Image>().LE(-1, 8);
+            // thin stamina bar under the health bar; fades in while draining / sprinting
+            staminaFill = Bar(hpBox.transform, "Stamina", Line, Accent);
+            var sbBack = staminaFill.transform.parent.GetComponent<Image>();
+            sbBack.LE(-1, 4);
+            staminaGroup = sbBack.gameObject.AddComponent<CanvasGroup>();
+            staminaGroup.alpha = 0f;
+
+            // smoke gadget pip, above the health box
+            var smk = HRow(root, "Smoke", 7, TextAnchor.MiddleLeft);
+            smk.GetComponent<RectTransform>().At(0f, 0f, 24, 124, 170, 28);
+            smk.padding = new RectOffset(9, 11, 4, 4);
+            smk.gameObject.AddComponent<Image>().color = Scrim();
+            Box(smk.transform, "Cyl", Accent).LE(9, 15);
+            smokeLabel = Label(smk.transform, "SMOKE 2", F.BodyBold, 12, Fg, TextAlignmentOptions.MidlineLeft, 0.1f);
+            Label(smk.transform, "G", F.MonoBold, 11, Muted);
+            smokeChip = smk.gameObject;
 
             // bottom-center weapon slots
             var slotsRow = HRow(root, "Slots", 4, TextAnchor.LowerCenter);

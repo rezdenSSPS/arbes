@@ -142,12 +142,17 @@ namespace AirsoftFPS
             }
         }
 
-        // Server: is this player holding the interact key (E)?
+        // Server: is this player holding the interact key (E)? Bots don't press keys: a bot "holds E" when
+        // its role and position call for the action (each mode decides in BotWantsUse).
         protected bool UseHeld(ulong id)
         {
             if (testUse != null) return testUse(id);
+            if (MatchNet.IsBotId(id)) return BotWantsUse(id);
             return useUntil.TryGetValue(id, out float t) && Time.unscaledTime < t;
         }
+
+        // Server: should this bot be acting (planting / defusing / extracting) right now?
+        protected virtual bool BotWantsUse(ulong id) => false;
 
         // ───────────────────────── server: respawns ─────────────────────────
         // Default (Bomb): nobody respawns while a round runs; the next round brings everyone back.
@@ -196,7 +201,13 @@ namespace AirsoftFPS
         protected static Health HealthOf(ulong id)
         {
             var nm = NetworkManager.Singleton;
-            if (nm == null || !nm.IsServer || !nm.ConnectedClients.TryGetValue(id, out var cl) || cl.PlayerObject == null) return null;
+            if (nm == null || !nm.IsServer) return null;
+            if (MatchNet.IsBotId(id))   // bots are Enemy objects, not connected-client player objects
+            {
+                var no = MatchNet.Instance != null ? MatchNet.Instance.BotObject(id) : null;
+                return no != null ? no.GetComponent<Health>() : null;
+            }
+            if (!nm.ConnectedClients.TryGetValue(id, out var cl) || cl.PlayerObject == null) return null;
             return cl.PlayerObject.GetComponent<Health>();
         }
 

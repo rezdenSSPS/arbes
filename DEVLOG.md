@@ -177,3 +177,13 @@ AutoConnect.cs, NetDiag.cs.
   - Pódium a tabulka v objektivových režimech řadí hráče podle bodů za cíle, potom podle killů.
 - Menu ukazuje správnou verzi (dřív „v0.1.0“).
 - Vydání v0.2.1 na itch.io: buildy pro macOS (Universal, `x86_64 arm64`) a Windows (64-bit), lokálně v batch módu a nahrané nástrojem butler. Build v0.2.0 byl pro macOS ve skutečnosti jen pro Apple silicon: architekturu bere Unity z lokálního nastavení *Build Profiles → macOS → Architecture* (výchozí *Apple silicon*), ne z `-buildTarget OSXUniversal`. Postup je teď popsaný v `docs/BUILD.md`.
+
+## 2026-10-23 — Boti do objektivů, airsoft mechaniky, ekonomika a účty (v0.3.0)
+- **Boti do všech objektivových režimů** (CTF, Domination, Bomb, VIP Escort, Medic): využit existující hook `ObjectiveMode.CollectExtraParticipants`/`ResolveExtraTransform`; `BotBrain` dostal „objective layer" (nese/brání vlajku, drží body, pokládá/zneškodňuje bombu, eskortuje/honí VIP se sidearmem a pomaleji, oživuje jako medik), respektuje zmrazení v přípravě kola a role. `MatchNet.Bots` je spawnuje i v těchto režimech.
+- **Serverově autoritativní munice**: server si vede zásobník/zálohu, odečítá za výstřel, drží reload (`ReloadRpc`/`RefillAmmoRpc`) — modifikovaný klient nevystřílí donekonečna bez přebití.
+- **Oprava pádu pod mapu**: respawn na skutečném spawnu místo `(0,2,0)`.
+- **Airsoft mechaniky**: lean (Q/E, s kolizí o zeď), výdrž na sprint (lišta v HUDu), **bang rule** (V = eliminace na blízko bez výstřelu, serverově ověřená), **kouřové granáty** (G = hozený fyzický objekt letící obloukem, clona vzniká po dopadu; `SmokeField` blokuje výhled botům).
+- **Ekonomika**: Credits za zápas (`PlayerProfile`), výsledková obrazovka ukazuje zisk + zůstatek. **Armory shop** (ARMORY v menu) na nákup zbraní; vlastnictví v profilu, nekoupené zbraně zamčené. Startovní sada: 1911, revolver, Uzi, M870.
+- **Účty**: lokální jméno + heslo (`AccountStore`, hashované), přihlášení přepne profil na per-účet soubor; guest má sdílený profil.
+- **Testy**: kompilace čistá; editorové checky zelené (objektivy 89/0, medik 39/0, play CTF/DOM/BOMB/VIP/Medic 0 failů). Play checky nově vynucují 0 botů kvůli determinismu.
+- Zbývá: gunsmith tuning statů (potřebuje sync natuněných hodnot na server kvůli ověřování hit-reg) a web/UGS účty.

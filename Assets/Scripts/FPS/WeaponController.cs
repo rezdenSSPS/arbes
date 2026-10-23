@@ -99,6 +99,42 @@ namespace AirsoftFPS
         float svSwitchTime = -100f;
         Health ownHealth;
 
+        // ───── Server-authoritative ammo ─────
+        // The owner tracks ammo locally for responsiveness (magAmmos/reserveAmmos above); the server also
+        // keeps its own authoritative count so a modified client can't fire forever without reloading. Each
+        // trigger pull (ShootRpc) spends one round, reloads come over ReloadRpc, and the server mirrors the
+        // same WeaponData mag sizes and reload times.
+        int[] svMag;
+        int[] svReserve;
+        int svReloadWeapon = -1;    // weapon currently reloading on the server (-1 = none)
+        float svReloadEnd;
+        const float RELOAD_SERVER_FACTOR = 0.85f;   // finish a touch early so client/server RTT never false-rejects a shot
+        const int AMMO_SLACK = 1;                   // allow this many shots past empty (boundary jitter); a cheat gains at most 1 BB/mag
+
+        // ───── Bang rule (airsoft close-range elimination) ─────
+        // At point-blank an airsofter calls "bang" instead of firing. Press V near an enemy to eliminate
+        // them without a shot; the server checks range, line of sight and team like any other hit.
+        const float BANG_RANGE = 6f;
+        const float BANG_COOLDOWN = 1f;
+        float nextBang;      // owner
+        float svNextBang;    // server
+
+        // ───── Smoke grenade (gadget, key G) ─────
+        // No NetworkObject: the owner asks the server (ThrowSmokeRpc), the server works out where it lands,
+        // registers a SmokeField cloud (so bots can't see through it) and tells everyone (SmokePopRpc) to
+        // bloom a local smoke cloud there. Smoke is visual concealment for players and a real LOS block for bots.
+        const int SMOKE_MAX = 2;
+        const float SMOKE_COOLDOWN = 0.8f;
+        const float SMOKE_DURATION = 15f;
+        const float SMOKE_RADIUS = 4.5f;
+        const float SMOKE_THROW_SPEED = 18f;
+        int smokeCount = SMOKE_MAX;   // owner (HUD)
+        int svSmoke = SMOKE_MAX;      // server (authoritative)
+        float nextSmoke;
+        static Material s_smokeMat;
+
+        public int CurrentSmoke => smokeCount;
+
         static readonly RaycastHit[] s_losHits = new RaycastHit[16];
 
         static Material s_glowMat;
@@ -134,9 +170,21 @@ namespace AirsoftFPS
                 reserveAmmos[i] = weapons[i].maxReserve;
             }
 
+            if (IsServer)
+            {
+                svMag = new int[weapons.Length];
+                svReserve = new int[weapons.Length];
+                for (int i = 0; i < weapons.Length; i++)
+                {
+                    svMag[i] = weapons[i].magSize;
+                    svReserve[i] = weapons[i].maxReserve;
+                }
+            }
+
             fpsController = GetComponent<FPSController>();
             playerCam = GetComponentInChildren<Camera>();
             ownHealth = GetComponent<Health>();
+            if (ownHealth != null) ownHealth.OnRespawn += RefillSmokeOnRespawn;   // fresh smoke each life
 
             // Capture weapon rest pose for recoil animation
             if (weaponHolder)
@@ -283,6 +331,8 @@ namespace AirsoftFPS
             HandleReload();
             HandleAim();
             HandleFire();
+            HandleBang();
+            HandleSmoke();
         }
 
         // ───── Weapon view animation (owner only) ─────
@@ -346,8 +396,8 @@ namespace AirsoftFPS
                 return;
             }
 
-            // objective modes (VIP escort: sidearms only): off-limits weapons are skipped
-            if (!ObjectiveMode.WeaponAllowed(OwnerClientId, weapons[currentIndex]))
+            // off-limits weapons are skipped: VIP escort (sidearms only) and weapons you don't own yet
+            if (!WeaponUsable(currentIndex))
             {
                 int ok = NextAllowedWeapon(currentIndex, 1);
                 if (ok != currentIndex) SwitchWeaponRpc(ok);
@@ -362,7 +412,7 @@ namespace AirsoftFPS
                 int weaponIdx = i < 9 ? i : 9;
                 if (kb[digitKeys[i]].wasPressedThisFrame)
                 {
-                    if (weaponIdx != currentIndex && ObjectiveMode.WeaponAllowed(OwnerClientId, weapons[weaponIdx]))
+                    if (weaponIdx != currentIndex && WeaponUsable(weaponIdx))
                         SwitchWeaponRpc(weaponIdx);
                     return;
                 }
@@ -384,15 +434,35 @@ namespace AirsoftFPS
             }
         }
 
-        // First weapon from `from` (stepping by dir) this player may use right now (ObjectiveMode.WeaponAllowed).
+        // First weapon from `from` (stepping by dir) this player may use right now.
         int NextAllowedWeapon(int from, int dir)
         {
             for (int k = 0; k < weapons.Length; k++)
             {
                 int i = ((from + dir * k) % weapons.Length + weapons.Length) % weapons.Length;
-                if (ObjectiveMode.WeaponAllowed(OwnerClientId, weapons[i])) return i;
+                if (WeaponUsable(i)) return i;
             }
             return currentIndex;
+        }
+
+        // Owner (client-side): may this player switch to this weapon? Gun Game uses all ten by level;
+        // otherwise the weapon must be allowed by the mode (VIP: sidearms) and owned (starter or bought).
+        bool WeaponUsable(int idx)
+        {
+            if (idx < 0 || idx >= weapons.Length) return false;
+            var mn = MatchNet.Instance;
+            if (mn != null && mn.Mode == MatchNet.GameModeType.GunGame) return true;
+            if (!ObjectiveMode.WeaponAllowed(OwnerClientId, weapons[idx])) return false;
+            return ShopCatalog.OwnedWeapon(weapons[idx].weaponName);
+        }
+
+        // HUD: is a slot owned (for dimming locked weapons)? Gun Game shows all.
+        public bool SlotOwned(int idx)
+        {
+            if (idx < 0 || weapons == null || idx >= weapons.Length) return true;
+            var mn = MatchNet.Instance;
+            if (mn != null && mn.Mode == MatchNet.GameModeType.GunGame) return true;
+            return ShopCatalog.OwnedWeapon(weapons[idx].weaponName);
         }
 
         // Owner: full magazines and reserves again (round modes, when a new round starts).
@@ -408,7 +478,45 @@ namespace AirsoftFPS
             ammoReserve = reserveAmmos[currentIndex];
             isReloading = false;
             reloadCutWeapon = -1;
+            smokeCount = SMOKE_MAX;
             NotifyAmmo();
+            if (IsSpawned) RefillAmmoRpc();   // keep the server's authoritative ammo in sync (round start)
+        }
+
+        // ───── Server-authoritative ammo: reload / refill (owner -> server) ─────
+
+        // Server: complete a reload whose timer has elapsed (reserve -> mag). Called lazily before each shot.
+        void SvFinishReloadIfDue()
+        {
+            if (svReloadWeapon < 0 || Time.unscaledTime < svReloadEnd) return;
+            int i = svReloadWeapon;
+            int need = weapons[i].magSize - svMag[i];
+            int take = Mathf.Min(need, svReserve[i]);
+            svMag[i] += take;
+            svReserve[i] -= take;
+            svReloadWeapon = -1;
+        }
+
+        [Rpc(SendTo.Server)]
+        void ReloadRpc(int weaponIdx, RpcParams rpcParams = default)
+        {
+            if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
+            if (svMag == null || weaponIdx < 0 || weaponIdx >= weapons.Length) return;
+            SvFinishReloadIfDue();
+            if (svReloadWeapon == weaponIdx) return;                               // already reloading this one
+            if (svMag[weaponIdx] >= weapons[weaponIdx].magSize || svReserve[weaponIdx] <= 0) return;
+            svReloadWeapon = weaponIdx;
+            svReloadEnd = Time.unscaledTime + weapons[weaponIdx].reloadTime * RELOAD_SERVER_FACTOR;
+        }
+
+        [Rpc(SendTo.Server)]
+        void RefillAmmoRpc(RpcParams rpcParams = default)
+        {
+            if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
+            if (svMag == null) return;
+            for (int i = 0; i < weapons.Length; i++) { svMag[i] = weapons[i].magSize; svReserve[i] = weapons[i].maxReserve; }
+            svReloadWeapon = -1;
+            svSmoke = SMOKE_MAX;
         }
 
         [Rpc(SendTo.Server)]
@@ -428,6 +536,7 @@ namespace AirsoftFPS
                 {
                     svPrevWeapon = netWeaponIndex.Value;
                     svSwitchTime = Time.unscaledTime;
+                    svReloadWeapon = -1;   // switching cancels an in-progress reload (the owner does the same)
                 }
                 netWeaponIndex.Value = idx;
             }
@@ -469,6 +578,7 @@ namespace AirsoftFPS
             reloadEndTime = Time.time + weapons[currentIndex].reloadTime;
             reloadSfx = 0;
             AirsoftAudio.Play2D("reload_out", 0.55f, AirsoftAudio.Bus.Sfx, 0.04f);
+            if (IsSpawned) ReloadRpc(currentIndex);   // tell the server to run the same reload on its copy of the ammo
         }
 
         void HandleAim()
@@ -522,6 +632,209 @@ namespace AirsoftFPS
                 if (ammoInMag <= 0 && ammoReserve > 0)
                     StartReload();
             }
+        }
+
+        // Bang rule: press V to eliminate an enemy at point-blank without firing.
+        void HandleBang()
+        {
+            var kb = Keyboard.current;
+            if (kb == null || !kb.vKey.wasPressedThisFrame || Time.time < nextBang || !playerCam) return;
+            nextBang = Time.time + BANG_COOLDOWN;
+            Vector3 origin = playerCam.transform.position;
+            if (Physics.Raycast(origin, playerCam.transform.forward, out RaycastHit hit, BANG_RANGE, hitMask, QueryTriggerInteraction.Ignore))
+            {
+                var no = hit.collider.GetComponentInParent<NetworkObject>();
+                if (no != null && no != NetworkObject && no.GetComponent<Health>() != null)
+                    BangRpc(no.NetworkObjectId, origin, hit.point);
+            }
+        }
+
+        // Server: validate a bang (close range, line of sight, not a teammate) and take the target out.
+        [Rpc(SendTo.Server)]
+        void BangRpc(ulong targetNetId, Vector3 origin, Vector3 point, RpcParams rpcParams = default)
+        {
+            if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
+            if (ownHealth != null && (ownHealth.isDead.Value || ownHealth.IsOut)) return;
+            float now = Time.unscaledTime;
+            if (now < svNextBang) return;
+            svNextBang = now + BANG_COOLDOWN * 0.9f;
+
+            if (!NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(targetNetId, out var netObj)) return;
+            if (netObj == NetworkObject) return;
+            var health = netObj.GetComponent<Health>();
+            if (health == null || health.isDead.Value || health.IsOut || health.IsSpawnProtected) return;
+
+            Vector3 serverEye = transform.position + Vector3.up * 1.6f;
+            Vector3 targetC = netObj.transform.position + Vector3.up * 1.2f;
+            if (Vector3.Distance(serverEye, targetC) > BANG_RANGE + 1.5f) return;   // close range only
+            if (WorldBlocks(serverEye, targetC)) return;                            // must see them
+            if (MatchNet.Instance != null && MatchNet.Instance.BlocksDamage(OwnerClientId, health.MatchId)) return;
+
+            if (ownHealth != null) ownHealth.EndSpawnProtection();
+            health.TakeDamage(9999, OwnerClientId, "Bang!");   // lethal; hit-rule modes convert it to a HIT
+            HitConfirmRpc(point, RpcTarget.Single(OwnerClientId, RpcTargetUse.Temp));
+        }
+
+        // ───── Smoke grenade ─────
+        void HandleSmoke()
+        {
+            var kb = Keyboard.current;
+            if (kb == null || !kb.gKey.wasPressedThisFrame || Time.time < nextSmoke || smokeCount <= 0) return;
+            if (!playerCam || ObjectiveMode.IsDowned(OwnerClientId)) return;   // G = "give up" while downed
+            nextSmoke = Time.time + SMOKE_COOLDOWN;
+            smokeCount--;
+            NotifyAmmo();
+            ThrowSmokeRpc(playerCam.transform.position, playerCam.transform.forward);
+        }
+
+        [Rpc(SendTo.Server)]
+        void ThrowSmokeRpc(Vector3 origin, Vector3 dir, RpcParams rpcParams = default)
+        {
+            if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
+            if (svSmoke <= 0) return;
+            if (ownHealth != null && (ownHealth.isDead.Value || ownHealth.IsOut)) return;
+            svSmoke--;
+            SmokeArc(origin, dir, out Vector3 land, out float flight);
+            SmokeField.Add(land, SMOKE_RADIUS, SMOKE_DURATION + 1.5f, flight);   // blocks bot sight only once it lands
+            SmokeThrowRpc(origin, dir);
+        }
+
+        // Trace the thrown grenade's arc to where it settles (ignores players), with the flight time.
+        static void SmokeArc(Vector3 origin, Vector3 dir, out Vector3 landing, out float flightTime)
+        {
+            Vector3 pos = origin;
+            Vector3 vel = dir.normalized * SMOKE_THROW_SPEED;
+            const float dt = 0.04f;
+            for (int i = 0; i < 90; i++)
+            {
+                Vector3 next = pos + vel * dt;
+                if (Physics.Linecast(pos, next, out RaycastHit hit, ~0, QueryTriggerInteraction.Ignore)
+                    && hit.collider.GetComponentInParent<Health>() == null)
+                { landing = hit.point + hit.normal * 0.25f; flightTime = i * dt; return; }
+                vel += Vector3.up * (-9.8f * dt);
+                pos = next;
+            }
+            landing = pos; flightTime = 90 * dt;
+        }
+
+        // Everyone flies a visible grenade along the arc; the smoke blooms where (and when) it lands.
+        [Rpc(SendTo.Everyone)]
+        void SmokeThrowRpc(Vector3 origin, Vector3 dir) => StartCoroutine(FlySmokeGrenade(origin, dir));
+
+        IEnumerator FlySmokeGrenade(Vector3 origin, Vector3 dir)
+        {
+            var g = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            var col = g.GetComponent<Collider>(); if (col) Destroy(col);
+            g.name = "SmokeGrenade";
+            g.transform.localScale = new Vector3(0.08f, 0.09f, 0.08f);
+            var r = g.GetComponent<Renderer>();
+            r.sharedMaterial = GrenadeMat();
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+            Vector3 pos = origin;
+            Vector3 vel = dir.normalized * SMOKE_THROW_SPEED;
+            Vector3 spin = new Vector3(520f, 160f, 0f);
+            float t = 0f;
+            while (t < 4f && g != null)
+            {
+                float step = Time.deltaTime;
+                Vector3 next = pos + vel * step;
+                if (Physics.Linecast(pos, next, out RaycastHit hit, ~0, QueryTriggerInteraction.Ignore)
+                    && hit.collider.GetComponentInParent<Health>() == null)
+                { pos = hit.point + hit.normal * 0.12f; break; }
+                vel += Vector3.up * (-9.8f * step);
+                pos = next;
+                g.transform.position = pos;
+                g.transform.Rotate(spin * step, Space.Self);
+                t += step;
+                yield return null;
+            }
+            if (g != null) Destroy(g);
+            SpawnSmokeVisual(pos);
+        }
+
+        static Material s_grenadeMat;
+        static Material GrenadeMat()
+        {
+            if (s_grenadeMat == null)
+            {
+                var sh = Shader.Find("Universal Render Pipeline/Lit");
+                if (sh == null) sh = Shader.Find("Sprites/Default");
+                s_grenadeMat = new Material(sh);
+                var c = new Color(0.24f, 0.27f, 0.19f);
+                s_grenadeMat.color = c;
+                if (s_grenadeMat.HasProperty("_BaseColor")) s_grenadeMat.SetColor("_BaseColor", c);
+            }
+            return s_grenadeMat;
+        }
+
+        void SpawnSmokeVisual(Vector3 pos)
+        {
+            var root = new GameObject("Smoke");
+            root.transform.position = pos + Vector3.up * 1.0f;
+            const int puffs = 8;
+            var targets = new float[puffs];
+            var mat = SmokeMat();
+            for (int i = 0; i < puffs; i++)
+            {
+                var s = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                var col = s.GetComponent<Collider>(); if (col) Destroy(col);
+                s.name = "Puff";
+                s.transform.SetParent(root.transform, false);
+                Vector3 off = Random.insideUnitSphere * SMOKE_RADIUS * 0.55f;
+                off.y = Mathf.Abs(off.y) * 0.5f;
+                s.transform.localPosition = off;
+                targets[i] = SMOKE_RADIUS * Random.Range(1.4f, 2.2f);
+                s.transform.localScale = Vector3.zero;
+                var r = s.GetComponent<Renderer>();
+                r.sharedMaterial = mat;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+            StartCoroutine(AnimateSmoke(root, targets));
+        }
+
+        IEnumerator AnimateSmoke(GameObject root, float[] targets)
+        {
+            const float grow = 1.3f, fade = 3f;
+            float total = SMOKE_DURATION, t = 0f;
+            var tr = root.transform;
+            while (t < total && root != null)
+            {
+                t += Time.deltaTime;
+                float k = t < grow ? Mathf.SmoothStep(0f, 1f, t / grow)
+                        : t > total - fade ? Mathf.Clamp01((total - t) / fade) : 1f;
+                for (int i = 0; i < tr.childCount && i < targets.Length; i++)
+                    tr.GetChild(i).localScale = Vector3.one * (targets[i] * k);
+                tr.position += Vector3.up * (0.06f * Time.deltaTime);
+                yield return null;
+            }
+            if (root != null) Destroy(root);
+        }
+
+        static Material SmokeMat()
+        {
+            if (s_smokeMat == null)
+            {
+                var sh = Shader.Find("Sprites/Default");
+                if (sh == null) sh = Shader.Find("Universal Render Pipeline/Unlit");
+                s_smokeMat = new Material(sh);
+                var c = new Color(0.80f, 0.82f, 0.78f, 0.42f);
+                s_smokeMat.color = c;
+                if (s_smokeMat.HasProperty("_BaseColor")) s_smokeMat.SetColor("_BaseColor", c);
+            }
+            return s_smokeMat;
+        }
+
+        void RefillSmokeOnRespawn()
+        {
+            smokeCount = SMOKE_MAX;
+            if (IsServer) svSmoke = SMOKE_MAX;
+            NotifyAmmo();
+        }
+
+        public override void OnNetworkDespawn()
+        {
+            if (ownHealth != null) ownHealth.OnRespawn -= RefillSmokeOnRespawn;
         }
 
         void ApplyWeaponKick(WeaponData w)
@@ -652,6 +965,16 @@ namespace AirsoftFPS
             if (!IsFinite(origin) || !IsFinite(dir) || dir.sqrMagnitude < 0.25f || dir.sqrMagnitude > 4f)
             { RejectShot(shotSeq, "bad origin/direction"); return; }
             if (!OriginPlausible(origin)) { RejectShot(shotSeq, "origin too far from shooter"); return; }
+
+            // Server-authoritative ammo: a trigger pull costs one round and you can't fire mid-reload or empty.
+            if (svMag != null)
+            {
+                SvFinishReloadIfDue();
+                if (svReloadWeapon == weaponIdx && Time.unscaledTime < svReloadEnd)
+                { RejectShot(shotSeq, "reloading"); return; }
+                if (svMag[weaponIdx] <= -AMMO_SLACK) { RejectShot(shotSeq, "out of ammo"); return; }
+                svMag[weaponIdx]--;
+            }
 
             rec.valid = true;
             rec.weapon = weaponIdx;

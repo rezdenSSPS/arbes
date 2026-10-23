@@ -69,6 +69,45 @@ namespace AirsoftFPS
             return -1;
         }
 
+        // ───────────────────────── bots ─────────────────────────
+        protected override bool BotGoal(ulong botId, out Vector3 pos, out BotTask task)
+        {
+            pos = default; task = BotTask.GoTo;
+            var mn = MatchNet.Instance;
+            int team = mn != null ? mn.TeamOf(botId) : 0;
+            if ((team != 1 && team != 2) || sites.Count == 0) return false;
+            if (RoundStage != Stage.Live && RoundStage != Stage.Prep) return false;
+            bool attacker = team == AttackTeam;
+            Vector3 myPos = TryGetParticipant(botId, out var me) ? me.position : BombPos;
+
+            if (attacker)
+            {
+                if (State == BombState.Planted) { pos = BombPos; return true; }                       // guard the planted bomb
+                if (State == BombState.Dropped) { pos = BombPos; return true; }                        // pick it up
+                if (State == BombState.Carried && Carrier == botId)                                    // I carry it: plant at the nearest site
+                { pos = NearestSite(myPos); task = BotTask.Plant; return true; }
+                pos = sites[(int)(botId % (ulong)sites.Count)]; return true;                           // push a site
+            }
+            // defender
+            if (State == BombState.Planted) { pos = BombPos; task = BotTask.Defuse; return true; }     // defuse
+            pos = sites[(int)(botId % (ulong)sites.Count)]; return true;                               // spread across sites to guard
+        }
+
+        protected override bool BotWantsUse(ulong id)
+        {
+            if (!TryGetParticipant(id, out var p) || !p.active) return false;
+            if (State == BombState.Carried && id == Carrier && p.team == AttackTeam && SiteAt(p.position) >= 0) return true;
+            if (State == BombState.Planted && p.team == DefendTeam && Near(p.position, BombPos, DEFUSE_RADIUS)) return true;
+            return false;
+        }
+
+        Vector3 NearestSite(Vector3 from)
+        {
+            Vector3 best = sites[0]; float bd = float.MaxValue;
+            foreach (var s in sites) { float d = (s - from).sqrMagnitude; if (d < bd) { bd = d; best = s; } }
+            return best;
+        }
+
         // ───────────────────────── server rules ─────────────────────────
         protected override void OnRoundStart(double now)
         {

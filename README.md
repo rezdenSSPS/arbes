@@ -60,11 +60,14 @@ už používá jiná spuštěná hra na stejném počítači, hostování skonč
 | Akce | Klávesa |
 |---|---|
 | Pohyb | W A S D |
-| Sprint | Shift |
+| Sprint | Shift (omezený výdrží – ukazatel u zdraví) |
+| Náklon (lean) | Q / E (držet) |
 | Přikrčení | C / Ctrl (v nastavení přepnutí nebo držení) |
 | Skok | Space |
 | Střelba | levé tlačítko myši |
 | Míření / puškohled | pravé tlačítko myši |
+| Bang (eliminace na blízko bez výstřelu) | V |
+| Kouřový granát (gadget, vestoje) | G |
 | Přebití | R |
 | Zbraně | 1 – 0, kolečko myši |
 | Scoreboard | Tab (držet) |
@@ -214,9 +217,10 @@ Při vývoji byl použit AI asistent Claude Code (commity s `Co-Authored-By: Cla
 ## Známá omezení a co není otestované
 
 Omezení v kódu:
-- Server nepočítá munici a přebíjení vzdálených hráčů. Poškození za sekundu omezuje kadence zbraně.
+- Munici a přebíjení ověřuje server autoritativně (odečet za výstřel, serverový reload). Poškození za sekundu omezuje i kadence zbraně.
 - AI nepřátelé v Co-op střílejí okamžitým zásahem (raycast), ne kuličkami. Boti v PvP kuličky střílejí.
-- Boti jsou jen ve FFA, TDM, Gun Game a Milsim. Objektivové režimy a Medic potřebují dost skutečných hráčů.
+- Boti hrají ve všech PvP režimech včetně objektivových (CTF, Domination, Bomb, VIP Escort, Medic) — nesou/brání vlajku, drží body, pokládají/zneškodňují bombu, eskortují/honí VIP, oživují.
+- Ekonomika a účty jsou zatím lokální (uloženo na počítači): Credits za zápas, nákup zbraní v ARMORY, přihlášení přes jméno/heslo. Gunsmith tuning statů zatím není (chce serverový sync kvůli ověřování zásahů).
 - Hráč s ochranou po spawnu nedostane poškození, střelec ale i tak vidí hit marker.
 - Při pádu pod mapu se hráč vrátí na pevnou pozici (0, 2, 0), ne na spawn.
 - V Milsim se po návratu na základnu nedoplňuje munice.

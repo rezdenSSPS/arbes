@@ -47,6 +47,32 @@ namespace AirsoftFPS
 
         protected override bool BlocksSprint(ulong clientId) => IsCarrying(clientId, out _);
 
+        // Bots: carry the enemy flag home, return / defend our own, or go grab theirs. Everything scores by
+        // proximity in ServerTick, so a bot just has to walk to the right spot.
+        protected override bool BotGoal(ulong botId, out Vector3 pos, out BotTask task)
+        {
+            pos = default; task = BotTask.GoTo;
+            var mn = MatchNet.Instance;
+            int team = mn != null ? mn.TeamOf(botId) : 0;
+            if (team != 1 && team != 2) return false;
+            var own = flags[team];
+            var enemy = flags[3 - team];
+
+            if (enemy.state == FlagState.Carried && enemy.carrier == botId)   // I'm carrying: run it home
+            {
+                pos = own.home; task = BotTask.Deliver; return true;
+            }
+            if (own.state == FlagState.Dropped) { pos = own.pos; return true; }        // return our dropped flag
+            if (own.state == FlagState.Carried)                                        // chase the enemy carrier
+            {
+                var tr = FindPlayer(own.carrier);
+                pos = tr != null ? tr.position : own.pos; return true;
+            }
+            if (botId % 3 == 0) { pos = own.home; return true; }                        // ~1/3 guard home
+            pos = enemy.state == FlagState.Dropped ? enemy.pos : enemy.home;            // the rest grab their flag
+            return true;
+        }
+
         // ───────────────────────── setup ─────────────────────────
         protected override void OnBegin()
         {
