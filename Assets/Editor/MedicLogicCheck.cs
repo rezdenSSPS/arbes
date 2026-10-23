@@ -101,7 +101,7 @@ namespace AirsoftFPS.Editor
             Check(ObjectiveMode.UsesHitRule(MatchNet.GameModeType.Medic) && MatchNet.IsHitRuleMode(MatchNet.GameModeType.Medic), "Medic plays with the HIT rule");
             Check(!ObjectiveMode.UsesHitRule(MatchNet.GameModeType.Domination) && MatchNet.IsHitRuleMode(MatchNet.GameModeType.Milsim), "other modes unchanged");
             Check(MatchNet.IsTeamMode(MatchNet.GameModeType.Medic), "Medic is a team mode");
-            Check(!MatchNet.ModeHasBots(MatchNet.GameModeType.Medic), "no bots in Medic");
+            Check(MatchNet.ModeHasBots(MatchNet.GameModeType.Medic), "Medic now supports bots");
             Check(ObjectiveMode.TargetFor(MatchNet.GameModeType.Medic) == 0, "no score target (tickets run down)");
             Check(ObjectiveMode.IsAvailable(MatchNet.GameModeType.Medic, out _), "available without map points");
         }

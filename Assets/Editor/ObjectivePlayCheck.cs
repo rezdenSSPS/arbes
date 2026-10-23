@@ -22,6 +22,7 @@ namespace AirsoftFPS.Editor
         static double stageStart, runStart;
         static int fails, passes;
         static bool batch;
+        static int savedBotFill;
         static readonly System.Text.StringBuilder log = new System.Text.StringBuilder();
 
         public static void RunBatch()
@@ -50,6 +51,9 @@ namespace AirsoftFPS.Editor
         static void Run(MatchNet.GameModeType m)
         {
             mode = m; stage = 0; fails = passes = 0;
+            savedBotFill = UnityEngine.PlayerPrefs.GetInt("Airsoft.BotFill", 0);
+            UnityEngine.PlayerPrefs.SetInt("Airsoft.BotFill", 0);   // host-only check: no bots (they would interfere)
+            UnityEngine.PlayerPrefs.Save();
             log.Clear();
             log.AppendLine("[Airsoft] Play check " + m);
             EditorSceneManager.OpenScene("Assets/Scenes/AirsoftLobby.unity", OpenSceneMode.Single);
@@ -75,6 +79,8 @@ namespace AirsoftFPS.Editor
             log.AppendLine($"  => {passes} passed, {fails} failed");
             if (fails == 0) Debug.Log(log.ToString()); else Debug.LogError(log.ToString());
             EditorApplication.update -= Tick;
+            UnityEngine.PlayerPrefs.SetInt("Airsoft.BotFill", savedBotFill);   // restore the host's bot-fill
+            UnityEngine.PlayerPrefs.Save();
             int code = fails == 0 ? 0 : 1;
             if (batch) EditorApplication.Exit(code);
             else EditorApplication.isPlaying = false;
