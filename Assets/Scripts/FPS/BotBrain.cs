@@ -154,11 +154,12 @@ namespace AirsoftFPS
             UpdateWeapon(mn, false);
             if (!live) { Halt(); return; }
 
-            if (health.IsOut)   // Milsim HIT: hand up (EnemyAnimator), no shooting, walk back to base
+            if (health.IsOut)   // HIT (Milsim / objective HIT rule): hand up (EnemyAnimator), no shooting
             {
                 wasHit = true;
                 target = null;
-                WalkBack(mn);
+                if (ObjectiveMode.IsDowned(BotId)) Halt();   // Medic: kneel in place and wait for a revive
+                else WalkBack(mn);                           // Milsim: walk back to base
                 return;
             }
             if (wasHit) { wasHit = false; nextRoam = 0f; lastHp = -1; }
