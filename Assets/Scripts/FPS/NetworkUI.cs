@@ -987,7 +987,7 @@ namespace AirsoftFPS
             botSkillRow.SetActive(true);
             botNote.text = !modeHasBots ? "No bots in this mode."
                 : mnet.BotFill > 0 ? "Bots fill the empty slots and leave when players join."
-                : isHost ? "Bots can fill empty slots in Free-for-All, Team Deathmatch, Gun Game and Milsim." : "";
+                : isHost ? "Bots can fill the empty slots in this mode." : "";
         }
 
         void BuildCharacterColumn(RectTransform colRt)

@@ -163,11 +163,20 @@ namespace AirsoftFPS
             }
             if (wasHit) { wasHit = false; nextRoam = 0f; lastHp = -1; }
 
+            // Round modes (Bomb / VIP) freeze everyone during the prep countdown (MoveFactor 0): stand still.
+            if (ObjectiveMode.SpeedFactor(BotId) <= 0.01f) { Halt(); return; }
+
             if (Time.time >= nextScan) { nextScan = Time.time + 0.2f; Scan(mn); }
             TrackTargetVelocity();
 
-            if (target != null && targetVisible) Engage(mn);
-            else if (target != null && Time.time - lastSeenTime < 4f) Chase();
+            // Objective modes give the bot a goal (flag, control point, …). "Deliver" (carrying the flag home)
+            // overrides fighting; otherwise the bot fights when it sees someone and pursues the goal when it doesn't.
+            bool hasObj = ObjectiveMode.BotObjective(BotId, out Vector3 objPos, out var objTask);
+
+            if (hasObj && objTask == ObjectiveMode.BotTask.Deliver) PursueObjective(objPos, objTask);
+            else if (target != null && targetVisible) Engage(mn);
+            else if (target != null && Time.time - lastSeenTime < 4f && !hasObj) Chase();
+            else if (hasObj) PursueObjective(objPos, objTask);
             else { target = null; Roam(mn); }
 
             CheckStuck();
@@ -398,6 +407,17 @@ namespace AirsoftFPS
             }
             if (NavMesh.SamplePosition(zone, out NavMeshHit hit, 6f, NavMesh.AllAreas)) zone = hit.position;
             Go(zone, WALK_SPEED);
+        }
+
+        // Objective modes: walk to the goal the mode handed us. Deliver (carrying a flag home) runs; the rest
+        // walk. Plant / Defuse / Revive actions when close are added with their modes (later phases).
+        void PursueObjective(Vector3 pos, ObjectiveMode.BotTask task)
+        {
+            if (agent != null) agent.updateRotation = true;
+            var w = Weapon;
+            float mult = w != null ? w.moveSpeedMult : 1f;
+            float speed = (task == ObjectiveMode.BotTask.Deliver ? RUN_SPEED : WALK_SPEED) * mult;
+            Go(pos, speed);
         }
 
         void Go(Vector3 p, float speed)
