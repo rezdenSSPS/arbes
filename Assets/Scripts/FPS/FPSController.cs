@@ -107,9 +107,12 @@ namespace AirsoftFPS
 
             if (transform.position.y < -30f)
             {
-                // respawn
+                // Fell through the map: put the player back on a real spawn point for their team instead of
+                // the old fixed (0, 2, 0) (which could be off the map, in the open, or on top of enemies).
+                // GetSpawnFor is static and reads only the scene + MatchNet, so it's safe to call on the owner.
+                var pose = PlayerSpawner.GetSpawnFor(OwnerClientId);
                 cc.enabled = false;
-                transform.position = new Vector3(0, 2, 0);
+                transform.SetPositionAndRotation(pose.position, pose.rotation);
                 velocity = Vector3.zero;
                 cc.enabled = true;
             }

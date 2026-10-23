@@ -99,6 +99,18 @@ namespace AirsoftFPS
         float svSwitchTime = -100f;
         Health ownHealth;
 
+        // ───── Server-authoritative ammo ─────
+        // The owner tracks ammo locally for responsiveness (magAmmos/reserveAmmos above); the server also
+        // keeps its own authoritative count so a modified client can't fire forever without reloading. Each
+        // trigger pull (ShootRpc) spends one round, reloads come over ReloadRpc, and the server mirrors the
+        // same WeaponData mag sizes and reload times.
+        int[] svMag;
+        int[] svReserve;
+        int svReloadWeapon = -1;    // weapon currently reloading on the server (-1 = none)
+        float svReloadEnd;
+        const float RELOAD_SERVER_FACTOR = 0.85f;   // finish a touch early so client/server RTT never false-rejects a shot
+        const int AMMO_SLACK = 1;                   // allow this many shots past empty (boundary jitter); a cheat gains at most 1 BB/mag
+
         static readonly RaycastHit[] s_losHits = new RaycastHit[16];
 
         static Material s_glowMat;
@@ -132,6 +144,17 @@ namespace AirsoftFPS
             {
                 magAmmos[i] = weapons[i].magSize;
                 reserveAmmos[i] = weapons[i].maxReserve;
+            }
+
+            if (IsServer)
+            {
+                svMag = new int[weapons.Length];
+                svReserve = new int[weapons.Length];
+                for (int i = 0; i < weapons.Length; i++)
+                {
+                    svMag[i] = weapons[i].magSize;
+                    svReserve[i] = weapons[i].maxReserve;
+                }
             }
 
             fpsController = GetComponent<FPSController>();
@@ -409,6 +432,42 @@ namespace AirsoftFPS
             isReloading = false;
             reloadCutWeapon = -1;
             NotifyAmmo();
+            if (IsSpawned) RefillAmmoRpc();   // keep the server's authoritative ammo in sync (round start)
+        }
+
+        // ───── Server-authoritative ammo: reload / refill (owner -> server) ─────
+
+        // Server: complete a reload whose timer has elapsed (reserve -> mag). Called lazily before each shot.
+        void SvFinishReloadIfDue()
+        {
+            if (svReloadWeapon < 0 || Time.unscaledTime < svReloadEnd) return;
+            int i = svReloadWeapon;
+            int need = weapons[i].magSize - svMag[i];
+            int take = Mathf.Min(need, svReserve[i]);
+            svMag[i] += take;
+            svReserve[i] -= take;
+            svReloadWeapon = -1;
+        }
+
+        [Rpc(SendTo.Server)]
+        void ReloadRpc(int weaponIdx, RpcParams rpcParams = default)
+        {
+            if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
+            if (svMag == null || weaponIdx < 0 || weaponIdx >= weapons.Length) return;
+            SvFinishReloadIfDue();
+            if (svReloadWeapon == weaponIdx) return;                               // already reloading this one
+            if (svMag[weaponIdx] >= weapons[weaponIdx].magSize || svReserve[weaponIdx] <= 0) return;
+            svReloadWeapon = weaponIdx;
+            svReloadEnd = Time.unscaledTime + weapons[weaponIdx].reloadTime * RELOAD_SERVER_FACTOR;
+        }
+
+        [Rpc(SendTo.Server)]
+        void RefillAmmoRpc(RpcParams rpcParams = default)
+        {
+            if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
+            if (svMag == null) return;
+            for (int i = 0; i < weapons.Length; i++) { svMag[i] = weapons[i].magSize; svReserve[i] = weapons[i].maxReserve; }
+            svReloadWeapon = -1;
         }
 
         [Rpc(SendTo.Server)]
@@ -428,6 +487,7 @@ namespace AirsoftFPS
                 {
                     svPrevWeapon = netWeaponIndex.Value;
                     svSwitchTime = Time.unscaledTime;
+                    svReloadWeapon = -1;   // switching cancels an in-progress reload (the owner does the same)
                 }
                 netWeaponIndex.Value = idx;
             }
@@ -469,6 +529,7 @@ namespace AirsoftFPS
             reloadEndTime = Time.time + weapons[currentIndex].reloadTime;
             reloadSfx = 0;
             AirsoftAudio.Play2D("reload_out", 0.55f, AirsoftAudio.Bus.Sfx, 0.04f);
+            if (IsSpawned) ReloadRpc(currentIndex);   // tell the server to run the same reload on its copy of the ammo
         }
 
         void HandleAim()
@@ -652,6 +713,16 @@ namespace AirsoftFPS
             if (!IsFinite(origin) || !IsFinite(dir) || dir.sqrMagnitude < 0.25f || dir.sqrMagnitude > 4f)
             { RejectShot(shotSeq, "bad origin/direction"); return; }
             if (!OriginPlausible(origin)) { RejectShot(shotSeq, "origin too far from shooter"); return; }
+
+            // Server-authoritative ammo: a trigger pull costs one round and you can't fire mid-reload or empty.
+            if (svMag != null)
+            {
+                SvFinishReloadIfDue();
+                if (svReloadWeapon == weaponIdx && Time.unscaledTime < svReloadEnd)
+                { RejectShot(shotSeq, "reloading"); return; }
+                if (svMag[weaponIdx] <= -AMMO_SLACK) { RejectShot(shotSeq, "out of ammo"); return; }
+                svMag[weaponIdx]--;
+            }
 
             rec.valid = true;
             rec.weapon = weaponIdx;
