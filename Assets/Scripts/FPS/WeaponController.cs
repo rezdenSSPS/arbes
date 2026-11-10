@@ -302,9 +302,9 @@ namespace AirsoftFPS
             if (!IsOwner) return;
             if (Time.timeScale == 0) return;
             bool dead = ownHealth != null && ownHealth.IsSpawned && ownHealth.isDead.Value;
-            if (HUDManager.InputBlocked || dead || (ownHealth != null && ownHealth.IsOut))
+            if (HUDManager.InputBlocked || dead || (ownHealth != null && ownHealth.IsOut) || GoggleFog.Wiping)
             {
-                // a menu is open, Milsim HIT, or dead (death screen / spectating): no shooting/switching,
+                // a menu is open, Milsim HIT, dead (death screen / spectating) or wiping the goggles: no shooting/switching,
                 // drop out of the scope
                 isAiming = false;
                 if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, GameSettings.FieldOfView, Time.deltaTime * 10f);
@@ -772,6 +772,8 @@ namespace AirsoftFPS
             }
             if (g != null) Destroy(g);
             SpawnSmokeVisual(pos);
+            // clients: remember the cloud too (GoggleFog fogs the lens inside it; the server registered it on throw)
+            if (!IsServer) SmokeField.Add(pos, SMOKE_RADIUS, SMOKE_DURATION + 1.5f);
         }
 
         static Material s_grenadeMat;

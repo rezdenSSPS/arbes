@@ -68,6 +68,7 @@ už používá jiná spuštěná hra na stejném počítači, hostování skonč
 | Míření / puškohled | pravé tlačítko myši |
 | Bang (eliminace na blízko bez výstřelu) | V |
 | Kouřový granát (gadget, vestoje) | G |
+| Otřít zamlžené brýle | F |
 | Přebití | R |
 | Zbraně | 1 – 0, kolečko myši |
 | Scoreboard | Tab (držet) |
@@ -78,7 +79,7 @@ už používá jiná spuštěná hra na stejném počítači, hostování skonč
 | Lobby: ready / změna režimu (host) | R / M |
 
 Nastavení (*Settings*): citlivost myši a v puškohledu, invertovaná osa Y, FOV, rozlišení, celá obrazovka, V-Sync,
-kvalita, post-processing, barva a velikost zaměřovače, ukazatele zdraví nad hlavami, killcam, minimapa. Ukládá se do PlayerPrefs.
+kvalita, post-processing, barva a velikost zaměřovače, ukazatele zdraví nad hlavami, killcam, minimapa, zamlžování brýlí. Ukládá se do PlayerPrefs.
 
 ## Herní režimy
 

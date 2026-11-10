@@ -35,6 +35,7 @@ namespace AirsoftFPS
         public static bool Killcam;           // look at your killer for ~2 s before the death screen
         public static bool ShowMinimap;
         public static bool MinimapRotate;     // true = map turns with you (you face up), false = north up
+        public static bool GoggleFog;         // eye protection fogs up (sprint / smoke), F wipes it
 
         public static readonly string[] CrosshairColorNames = { "White", "Blaze", "Green", "Cyan", "Yellow" };
         public static readonly Color[] CrosshairColors =
@@ -96,6 +97,7 @@ namespace AirsoftFPS
             Killcam        = PlayerPrefs.GetInt(P + "Killcam", 1) == 1;
             ShowMinimap    = PlayerPrefs.GetInt(P + "Minimap", 1) == 1;
             MinimapRotate  = PlayerPrefs.GetInt(P + "MinimapRotate", 1) == 1;
+            GoggleFog      = PlayerPrefs.GetInt(P + "GoggleFog", 1) == 1;
             Clamp();
         }
 
@@ -138,6 +140,7 @@ namespace AirsoftFPS
             PlayerPrefs.SetInt(P + "Killcam", Killcam ? 1 : 0);
             PlayerPrefs.SetInt(P + "Minimap", ShowMinimap ? 1 : 0);
             PlayerPrefs.SetInt(P + "MinimapRotate", MinimapRotate ? 1 : 0);
+            PlayerPrefs.SetInt(P + "GoggleFog", GoggleFog ? 1 : 0);
             PlayerPrefs.Save();
             Apply();
         }
@@ -146,7 +149,7 @@ namespace AirsoftFPS
         {
             foreach (var k in new[] { "Sens", "ScopedSens", "InvertY", "ToggleCrouch", "Fov", "ResW", "ResH", "Fullscreen",
                          "VSync", "Quality", "PostFx", "ShowFps", "VolMaster", "VolSfx", "VolMusic", "VolVoice", "Ambience",
-                         "XColor", "XSize", "HitMarker", "HealthBars", "Killcam", "Minimap", "MinimapRotate" })
+                         "XColor", "XSize", "HitMarker", "HealthBars", "Killcam", "Minimap", "MinimapRotate", "GoggleFog" })
                 PlayerPrefs.DeleteKey(P + k);
             Load();
         }

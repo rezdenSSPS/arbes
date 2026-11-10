@@ -671,7 +671,7 @@ namespace AirsoftFPS
         {
             ("Move", "W A S D"), ("Sprint", "SHIFT"), ("Crouch", "C / CTRL"), ("Jump", "SPACE"),
             ("Fire", "LMB"), ("Aim / scope", "RMB"), ("Reload", "R"), ("Weapons", "1 – 0"),
-            ("Scoreboard", "TAB"), ("Interact", "E"), ("Pause", "ESC")
+            ("Scoreboard", "TAB"), ("Interact", "E"), ("Wipe goggles", "F"), ("Pause", "ESC")
         };
     }
 

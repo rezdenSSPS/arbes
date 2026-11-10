@@ -68,6 +68,7 @@ namespace AirsoftFPS
 
             if (IsOwner)
             {
+                if (GetComponent<GoggleFog>() == null) gameObject.AddComponent<GoggleFog>();   // local lens fog (F wipes)
                 Cursor.lockState = CursorLockMode.Locked;
                 Cursor.visible = false;
                 if (playerCamera)

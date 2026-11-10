@@ -34,6 +34,18 @@ namespace AirsoftFPS
             return false;
         }
 
+        // True if p is inside an active smoke cloud (GoggleFog: smoke fogs the lens). Clients register the
+        // clouds they see land (WeaponController.FlySmokeGrenade), so this works on every peer.
+        public static bool Contains(Vector3 p)
+        {
+            if (clouds.Count == 0) return false;
+            Prune();
+            float now = Time.time;
+            for (int i = 0; i < clouds.Count; i++)
+                if (now >= clouds[i].from && (clouds[i].pos - p).sqrMagnitude <= clouds[i].radius * clouds[i].radius) return true;
+            return false;
+        }
+
         static void Prune()
         {
             float now = Time.time;

@@ -198,3 +198,12 @@ AutoConnect.cs, NetDiag.cs.
 - Boti: infikovaný bot běží za nejbližším přeživším a označí ho na 3,5 m; přeživší boti bojují jako v TDM.
 - Nové hooky v `ObjectiveMode`: `MeleeOnly` (jen bang, bez zbraně – `WeaponController`, `PlayerAvatar`, `BotBrain`) a `TeamLabel` (vlastní názvy týmů v HUDu).
 - Testy: kompilace čistá (Unity 6000.6.8f1, batch), editorové checky beze změny zelené (objektivy 89/0, medik 39/0). Režim zatím **nebyl odehrán** v play módu ani s druhým klientem.
+
+## 2026-11-10 — Zamlžování brýlí
+- Nová komponenta `GoggleFog` (jen u vlastního hráče, čistě vizuální): brýle se mlží při sprintu, při zadýchání po běhu (podle chybějící výdrže) a v kouři; při chůzi se pomalu odmlží (vzduch přes větrání).
+- Rychlost podle ochrany očí z editoru postavy: Full Face Mask 1,4×, Goggles 1×, Shooting Glasses 0,6×, Mesh Mask 0,3×, bez brýlí se nic nemlží.
+- **F** = otřít: setření přes čočku 0,7 s (během něj nejde mířit ani střílet), zůstanou drobné šmouhy; od 30 % zamlžení se ukáže výzva „F WIPE GOGGLES / MASK“. Po respawnu je čočka čistá.
+- Mlha je procedurální textura (hustší u okrajů, při silném zamlžení i uprostřed) na vlastním canvasu pod HUDem, takže HUD zůstává čitelný.
+- Kouř: klienti si teď pamatují dopadlé mraky i lokálně (`SmokeField.Contains`), server je registroval už dřív kvůli botům.
+- Nastavení *Gameplay → Goggle fog* (výchozí zapnuto), klávesa F v seznamu ovládání.
+- Testy: kompilace čistá, editorové checky beze změny (89/0, 39/0). Vzhled mlhy a rychlosti zamlžení zatím **nebyly vyzkoušené ve hře**.
