@@ -45,7 +45,7 @@ namespace AirsoftFPS
             m == GameModeType.GunGame || m == GameModeType.Milsim ||
             m == GameModeType.CaptureTheFlag || m == GameModeType.Domination ||
             m == GameModeType.Bomb || m == GameModeType.VipEscort ||
-            m == GameModeType.Medic;
+            m == GameModeType.Medic || m == GameModeType.Infection;
 
         public bool BotsActive => ModeHasBots(Mode) && BotFill > 0;
 
@@ -239,13 +239,7 @@ namespace AirsoftFPS
             }
             if (name == null) name = "BOT " + nextBotSerial;
 
-            int team = 0;
-            if (CurrentPhase == Phase.InMatch && TeamMode)
-            {
-                int red = 0, blue = 0;
-                foreach (var e in roster) { if (e.team == 1) red++; else if (e.team == 2) blue++; }
-                team = red <= blue ? 1 : 2;
-            }
+            int team = CurrentPhase == Phase.InMatch && TeamMode ? LateJoinTeam() : 0;
             return new Entry { clientId = id, name = name, ready = true, kills = 0, deaths = 0, team = team,
                                look = AirsoftLook.Random(rng) };
         }

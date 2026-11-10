@@ -61,6 +61,11 @@ namespace AirsoftFPS
                 type = typeof(VipEscort), target = VipEscort.ROUNDS_TO_WIN, unit = "rounds",
                 pointsLabel = "OBJ", missing = VipEscort.MissingOnMap, ownClock = true
             },
+            [MatchNet.GameModeType.Infection] = new Def
+            {
+                type = typeof(Infection), target = 0, unit = "survivors",   // no score race: survive the clock
+                pointsLabel = "INFECT", missing = null, ownClock = true
+            },
         };
 
         public static bool HasObjective(MatchNet.GameModeType m) => defs.ContainsKey(m);
@@ -194,6 +199,15 @@ namespace AirsoftFPS
             return Active != null && Active.RespawnRule(out delay, out heldText);
         }
 
+        // Owner + server (WeaponController, PlayerAvatar, BotBrain): no replica, close-range tags only
+        // (LMB or V, the bang rule). Infection: the infected.
+        public static bool MeleeOnly(ulong clientId) => Active != null && Active.MeleeOnlyRole(clientId);
+
+        // HUD: the mode's own name for a team ("INFECTED" / "SURVIVORS"), or null for the usual RED / BLUE.
+        public static string TeamLabel(int team) => Active != null ? Active.TeamDisplayName(team) : null;
+
+        protected virtual bool MeleeOnlyRole(ulong clientId) => false;
+        protected virtual string TeamDisplayName(int team) => null;
         protected virtual bool HoldRespawn(ulong clientId) => false;
         protected virtual bool SpawnOverride(ulong clientId, out Pose pose) { pose = default; return false; }
         protected virtual float MoveFactor(ulong clientId) => 1f;

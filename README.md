@@ -13,7 +13,7 @@ Unity 6.6 (URP), Netcode for GameObjects, Unity Relay.
 
 Hráči se utkají na dvou low-poly mapách s replikami airsoftových zbraní (GBB pistole, AEG, pružinové pušky).
 Místo okamžitého zásahu (hitscan) létají skutečné kuličky (BB) s úsťovou rychlostí, gravitací, hop-upem a odporem
-vzduchu. Zásahy ověřuje server. Hra má 10 režimů: kooperaci proti AI, klasický deathmatch, airsoftový Milsim
+vzduchu. Zásahy ověřuje server. Hra má 11 režimů: kooperaci proti AI, klasický deathmatch, airsoftový Milsim
 („jeden zásah = HIT“, dojdi zpět na základnu) i objektivové režimy (vlajky, body, bomba, VIP, medik).
 
 V lobby je editor postavy (tělo, čepice, brýle/maska, barvy), hlasování o mapě, boti do volných míst a lokální
@@ -94,8 +94,9 @@ kvalita, post-processing, barva a velikost zaměřovače, ukazatele zdraví nad 
 | Medic | Red vs Blue | HIT = hráč padne, medik ho oživí; 25 tiketů pro tým 4 hráčů | ne |
 | Bomb | Red vs Blue, kola | položit bombu na A/B nebo ji zneškodnit, v kole bez respawnu; 4 kola | ne |
 | VIP Escort | Red vs Blue, kola | dovést VIP k evakuaci, nebo ho vyřadit; 3 kola | ne |
+| Infection | Survivors vs Infected | infikovaní (bez zbraně) označují přeživší na blízko (LMB / V), označený přeživší se mění v infikovaného; přeživší musí vydržet 4 min | ano |
 
-Časový limit z lobby platí ve všech režimech kromě Co-op, Bomb a VIP Escort (ty mají časovaná kola). Po vypršení
+Časový limit z lobby platí ve všech režimech kromě Co-op, Bomb, VIP Escort a Infection (ty mají vlastní časování). Po vypršení
 vyhrává lepší skóre, při přesné shodě je remíza. V týmových režimech je vypnutý friendly fire. Po spawnu mají
 hráči 3 s ochranu, která skončí prvním výstřelem.
 

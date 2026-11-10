@@ -187,3 +187,14 @@ AutoConnect.cs, NetDiag.cs.
 - **Účty**: lokální jméno + heslo (`AccountStore`, hashované), přihlášení přepne profil na per-účet soubor; guest má sdílený profil.
 - **Testy**: kompilace čistá; editorové checky zelené (objektivy 89/0, medik 39/0, play CTF/DOM/BOMB/VIP/Medic 0 failů). Play checky nově vynucují 0 botů kvůli determinismu.
 - Zbývá: gunsmith tuning statů (potřebuje sync natuněných hodnot na server kvůli ověřování hit-reg) a web/UGS účty.
+
+## 2026-11-10 — Režim Infection (zombie airsoft)
+- Nový režim `Infection` (`Objectives/Infection.cs`, 11. karta v lobby): **Survivors** (tým 2, jih) proti **Infected** (tým 1, sever).
+- Start: všichni jsou přeživší, náhodně se vybere 1 infikovaný na každých započatých 5 hráčů („ALPHA“). Prvních 8 s jsou infikovaní zmrazení na spawnu, přeživší se mezitím rozběhnou.
+- Infikovaní nemají repliku: přeživší označují na blízko bang rule (LMB nebo V), jsou o 15 % rychlejší a po zásahu kuličkami se normálně respawnují.
+- Přeživší, který padne (označení, pád, cokoli), přejde k infikovaným (`MatchNet.ServerSetTeam`) a respawnuje se na jejich straně. Kdo se připojí do běžícího zápasu (i bot), je infikovaný.
+- Výhra: přeživší, když po 4 min stojí aspoň jeden; infikovaní, jakmile nezbude nikdo k nakažení. Režim má vlastní hodiny (časový limit z lobby neplatí).
+- HUD: počet infikovaných : přeživších, odpočet „OUTBREAK IN“ / „SURVIVE“, čip s rolí, zelená vinětka pro infikované; poslední přeživší (u 8 hráčů poslední dva) jsou vidět všem jako značka. Ve výsledcích „SURVIVORS WIN“ / „INFECTED WIN“.
+- Boti: infikovaný bot běží za nejbližším přeživším a označí ho na 3,5 m; přeživší boti bojují jako v TDM.
+- Nové hooky v `ObjectiveMode`: `MeleeOnly` (jen bang, bez zbraně – `WeaponController`, `PlayerAvatar`, `BotBrain`) a `TeamLabel` (vlastní názvy týmů v HUDu).
+- Testy: kompilace čistá (Unity 6000.6.8f1, batch), editorové checky beze změny zelené (objektivy 89/0, medik 39/0). Režim zatím **nebyl odehrán** v play módu ani s druhým klientem.

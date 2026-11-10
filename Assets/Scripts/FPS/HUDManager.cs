@@ -336,7 +336,10 @@ namespace AirsoftFPS
                     tdmTargetCaption.text = cap ? capText : "FIRST TO";
                     tdmTarget.text = cap ? capValue : mnet.TeamTarget.ToString();
                     int team = mnet.TeamOf(me);
-                    tdmYou.text = team == 0 ? "" : $"YOU ARE <color={Html(TeamColor(team))}>{(team == 1 ? "RED" : "BLUE")}</color>";
+                    string teamLabel = ObjectiveMode.TeamLabel(team);   // Infection: INFECTED / SURVIVORS
+                    tdmYou.text = team == 0 ? "" : teamLabel != null
+                        ? $"TEAM <color={Html(TeamColor(team))}>{teamLabel}</color>"
+                        : $"YOU ARE <color={Html(TeamColor(team))}>{(team == 1 ? "RED" : "BLUE")}</color>";
                     tdmYou.transform.parent.gameObject.SetActive(team != 0);
                 }
                 else if (mode == MatchNet.GameModeType.FreeForAll)
@@ -602,6 +605,7 @@ namespace AirsoftFPS
             MatchNet.GameModeType.FreeForAll => "first to " + MatchNet.FFA_KILL_TARGET + " kills",
             MatchNet.GameModeType.GunGame => "finish all " + MatchNet.GUNGAME_WEAPONS + " weapons",
             MatchNet.GameModeType.Milsim => "first team to " + MatchNet.MILSIM_HIT_TARGET + " hits",
+            MatchNet.GameModeType.Infection => "survivors hold out · infected tag everyone",
             _ when ObjectiveMode.HasObjective(m)   // CTF, Domination, Bomb, VIP escort
                 => "first team to " + ObjectiveMode.TargetFor(m) + ObjectiveMode.UnitFor(m),
             MatchNet.GameModeType.Medic => "medics revive · out of tickets and players = lose",
@@ -671,6 +675,7 @@ namespace AirsoftFPS
                 case MatchNet.GameModeType.Medic:
                 case MatchNet.GameModeType.Bomb:
                 case MatchNet.GameModeType.VipEscort:
+                case MatchNet.GameModeType.Infection:
                     pauseScore.text = $"<color={Html(Red)}>{mnet.TeamScore(1)}</color> <color={Html(Faint)}>:</color> <color={Html(Blue)}>{mnet.TeamScore(2)}</color>";
                     break;
                 case MatchNet.GameModeType.GunGame:
@@ -710,7 +715,8 @@ namespace AirsoftFPS
             }
             else if (tdm && mnet.WinnerTeam != 0)
             {
-                resWinner.text = mnet.WinnerTeam == 1 ? "RED TEAM WINS" : "BLUE TEAM WINS";
+                string winLabel = ObjectiveMode.TeamLabel(mnet.WinnerTeam);   // Infection: "SURVIVORS WIN"
+                resWinner.text = winLabel != null ? winLabel + " WIN" : mnet.WinnerTeam == 1 ? "RED TEAM WINS" : "BLUE TEAM WINS";
                 resBanner.color = TeamColor(mnet.WinnerTeam);
                 resSub.text = objLine ?? ($"{mnet.TeamScore(1)} : {mnet.TeamScore(2)} · " +
                               (onTime ? "higher score when time ran out" : $"first team to {mnet.TeamTarget}" + (milsim ? " hits" : ObjectiveMode.UnitFor(mode))));

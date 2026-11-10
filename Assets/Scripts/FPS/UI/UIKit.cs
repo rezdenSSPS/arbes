@@ -648,6 +648,7 @@ namespace AirsoftFPS
             MatchNet.GameModeType.Medic => "Medic",
             MatchNet.GameModeType.Bomb => "Bomb",
             MatchNet.GameModeType.VipEscort => "VIP Escort",
+            MatchNet.GameModeType.Infection => "Infection",
             _ => "Co-op Survival"
         };
 
@@ -662,6 +663,7 @@ namespace AirsoftFPS
             MatchNet.GameModeType.Medic => $"One BB = down. Medics revive (hold E). {Medic.BASE_TICKETS} tickets.",
             MatchNet.GameModeType.Bomb => $"Plant at A or B, or defuse it. No respawns. First to {BombMode.ROUNDS_TO_WIN} rounds.",
             MatchNet.GameModeType.VipEscort => $"Escort your VIP to the extraction, or take them down. First to {VipEscort.ROUNDS_TO_WIN}.",
+            MatchNet.GameModeType.Infection => $"Infected tag survivors up close; tagged = infected. Survive {Mathf.RoundToInt(Infection.SURVIVE_SECONDS / 60f)} min.",
             _ => "Team up against waves of AI enemies."
         };
 

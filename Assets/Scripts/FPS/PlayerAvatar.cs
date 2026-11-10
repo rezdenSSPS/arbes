@@ -87,7 +87,7 @@ namespace AirsoftFPS
                     deadTilt = Mathf.MoveTowards(deadTilt, dead ? 90f : 0f, dt * 300f);
                     avatar.root.transform.localRotation = Quaternion.Euler(-deadTilt, 0, 0);
                 }
-                if (handGun) handGun.SetActive(!dead);
+                if (handGun) handGun.SetActive(!dead && !ObjectiveMode.MeleeOnly(Owner));   // Infection: the infected are unarmed
             }
 
             int gun = weapons != null && weapons.AmmoReady ? weapons.CurrentSlot - 1 : -1;

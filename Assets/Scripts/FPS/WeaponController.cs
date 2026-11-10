@@ -319,6 +319,18 @@ namespace AirsoftFPS
                 return;
             }
 
+            // Infection: the infected carry no replica, they tag survivors up close (LMB or V = bang rule)
+            if (ObjectiveMode.MeleeOnly(OwnerClientId))
+            {
+                isAiming = false;
+                isReloading = false;
+                if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, GameSettings.FieldOfView, Time.deltaTime * 10f);
+                SetHeldWeaponVisible(false);
+                HandleBang(true);
+                return;
+            }
+            SetHeldWeaponVisible(true);
+
             HandleWeaponSwitch();
             // A moment after respawning (forced weapon changes and the round-start refill come first), finish the
             // reload that dying cut short, if that weapon is still in hand.
@@ -331,8 +343,14 @@ namespace AirsoftFPS
             HandleReload();
             HandleAim();
             HandleFire();
-            HandleBang();
+            HandleBang(false);
             HandleSmoke();
+        }
+
+        // Owner: show / hide the first-person weapon (hidden while melee-only).
+        void SetHeldWeaponVisible(bool on)
+        {
+            if (weaponHolder != null && weaponHolder.gameObject.activeSelf != on) weaponHolder.gameObject.SetActive(on);
         }
 
         // ───── Weapon view animation (owner only) ─────
@@ -634,11 +652,14 @@ namespace AirsoftFPS
             }
         }
 
-        // Bang rule: press V to eliminate an enemy at point-blank without firing.
-        void HandleBang()
+        // Bang rule: press V to eliminate an enemy at point-blank without firing (melee-only roles: LMB too).
+        void HandleBang(bool meleeOnly)
         {
             var kb = Keyboard.current;
-            if (kb == null || !kb.vKey.wasPressedThisFrame || Time.time < nextBang || !playerCam) return;
+            var mouse = Mouse.current;
+            bool pressed = (kb != null && kb.vKey.wasPressedThisFrame)
+                           || (meleeOnly && mouse != null && mouse.leftButton.wasPressedThisFrame);
+            if (!pressed || Time.time < nextBang || !playerCam) return;
             nextBang = Time.time + BANG_COOLDOWN;
             Vector3 origin = playerCam.transform.position;
             if (Physics.Raycast(origin, playerCam.transform.forward, out RaycastHit hit, BANG_RANGE, hitMask, QueryTriggerInteraction.Ignore))

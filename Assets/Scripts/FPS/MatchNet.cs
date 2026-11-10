@@ -15,8 +15,8 @@ namespace AirsoftFPS
     // the whole state to clients whenever it changes.
     public partial class MatchNet : MonoBehaviour   // bots: MatchNet.Bots.cs, map vote: MatchNetMapVote.cs
     {
-        public enum GameModeType { Coop = 0, FreeForAll = 1, TeamDeathmatch = 2, GunGame = 3, Milsim = 4, CaptureTheFlag = 5, Domination = 6, Medic = 7, Bomb = 8, VipEscort = 9 }
-        public const int MODE_COUNT = 10;
+        public enum GameModeType { Coop = 0, FreeForAll = 1, TeamDeathmatch = 2, GunGame = 3, Milsim = 4, CaptureTheFlag = 5, Domination = 6, Medic = 7, Bomb = 8, VipEscort = 9, Infection = 10 }
+        public const int MODE_COUNT = 11;
         public enum Phase { Lobby = 0, InMatch = 1, Results = 2 }
 
         public struct Entry
@@ -312,6 +312,7 @@ namespace AirsoftFPS
                 if (TeamMode) t = (t == 1) ? 2 : 1;
                 roster[i] = e;
             }
+            if (Mode == GameModeType.Infection) AssignInfectionTeams();
             BroadcastState();
             nm.SceneManager.LoadScene(MatchScene, LoadSceneMode.Single);
         }
@@ -353,6 +354,48 @@ namespace AirsoftFPS
             else if (TeamMode) CheckTeamTarget();
 
             if (changed || CurrentPhase == Phase.Results) BroadcastState();
+        }
+
+        // Infection: everyone starts as a survivor, a few random players (bots included) start infected.
+        void AssignInfectionTeams()
+        {
+            var order = new List<int>();
+            for (int i = 0; i < roster.Count; i++)
+            {
+                var e = roster[i]; e.team = Infection.TEAM_SURVIVORS; roster[i] = e;
+                order.Add(i);
+            }
+            var rng = new System.Random();
+            int alphas = Infection.AlphasFor(roster.Count);
+            for (int k = 0; k < alphas && order.Count > 0; k++)
+            {
+                int j = rng.Next(order.Count);
+                var e = roster[order[j]]; e.team = Infection.TEAM_INFECTED; roster[order[j]] = e;
+                order.RemoveAt(j);
+            }
+        }
+
+        // Server: move a player (or bot) to another team mid-match (Infection: a survivor turns).
+        public void ServerSetTeam(ulong clientId, int team)
+        {
+            if (nm == null || !nm.IsServer) return;
+            for (int i = 0; i < roster.Count; i++)
+            {
+                if (roster[i].clientId != clientId || roster[i].team == team) continue;
+                var e = roster[i]; e.team = team; roster[i] = e;
+                BroadcastState();
+                return;
+            }
+        }
+
+        // Team for someone joining a running team match: the smaller team (Red on a tie);
+        // Infection: always the infected.
+        int LateJoinTeam()
+        {
+            if (Mode == GameModeType.Infection) return Infection.TEAM_INFECTED;
+            int red = 0, blue = 0;
+            foreach (var e in roster) { if (e.team == 1) red++; else if (e.team == 2) blue++; }
+            return red <= blue ? 1 : 2;
         }
 
         void CheckTeamTarget()
@@ -592,13 +635,7 @@ namespace AirsoftFPS
         {
             foreach (var e in roster) if (e.clientId == clientId) return;
             // A late joiner in a running team match goes to the smaller team (Red on a tie).
-            int team = 0;
-            if (CurrentPhase == Phase.InMatch && TeamMode)
-            {
-                int red = 0, blue = 0;
-                foreach (var e in roster) { if (e.team == 1) red++; else if (e.team == 2) blue++; }
-                team = red <= blue ? 1 : 2;
-            }
+            int team = CurrentPhase == Phase.InMatch && TeamMode ? LateJoinTeam() : 0;
             roster.Add(new Entry { clientId = clientId, name = DefaultName(clientId), ready = false, kills = 0, deaths = 0, team = team, look = (nm != null && clientId == nm.LocalClientId) ? localLook : -1 });
         }
 
@@ -784,7 +821,8 @@ namespace AirsoftFPS
         public static bool IsTeamMode(GameModeType m) => m == GameModeType.TeamDeathmatch || m == GameModeType.Milsim
                                                          || m == GameModeType.CaptureTheFlag || m == GameModeType.Domination
                                                          || m == GameModeType.Medic
-                                                         || m == GameModeType.Bomb || m == GameModeType.VipEscort;
+                                                         || m == GameModeType.Bomb || m == GameModeType.VipEscort
+                                                         || m == GameModeType.Infection;
         public bool TeamMode => IsTeamMode(Mode);
         public bool IsMilsim => Mode == GameModeType.Milsim;
         // One BB = out with a raised hand (Milsim, and objective modes built on it such as Medic).

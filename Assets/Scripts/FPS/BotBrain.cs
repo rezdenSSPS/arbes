@@ -341,6 +341,7 @@ namespace AirsoftFPS
 
         void Engage(MatchNet mn)
         {
+            if (ObjectiveMode.MeleeOnly(BotId)) { MeleeEngage(mn); return; }   // Infection: run them down and tag
             var w = Weapon;
             if (w == null) return;
             Vector3 to = target.transform.position - transform.position;
@@ -367,6 +368,23 @@ namespace AirsoftFPS
 
             if (Time.time - acquiredAt >= skill.reaction && Vector3.Angle(transform.forward, flat) < 25f)
                 TryFire(w, d);
+        }
+
+        // Melee-only bot (Infection: infected): sprint at the target, tag it with the bang rule once in reach.
+        const float MELEE_RANGE = 3.5f, MELEE_COOLDOWN = 1f;
+
+        void MeleeEngage(MatchNet mn)
+        {
+            if (agent != null) agent.updateRotation = true;
+            Vector3 to = target.transform.position - transform.position;
+            float d = new Vector3(to.x, 0, to.z).magnitude;
+            Go(target.transform.position, RUN_SPEED);
+            if (d > MELEE_RANGE || Time.time < nextShot || Time.time - acquiredAt < skill.reaction) return;
+            if (target.IsSpawnProtected || !LineOfSight(target)) return;
+            if (mn != null && mn.BlocksDamage(BotId, target.MatchId)) return;
+            nextShot = Time.time + MELEE_COOLDOWN;
+            health.EndSpawnProtection();
+            target.TakeDamage(9999, BotId, "Bang!", netObj);
         }
 
         void Chase()
@@ -431,7 +449,8 @@ namespace AirsoftFPS
             if (agent != null) agent.updateRotation = true;
             var w = Weapon;
             float mult = w != null ? w.moveSpeedMult : 1f;
-            float speed = (task == ObjectiveMode.BotTask.Deliver ? RUN_SPEED : WALK_SPEED) * mult;
+            bool run = task == ObjectiveMode.BotTask.Deliver || ObjectiveMode.MeleeOnly(BotId);   // infected hunt at a run
+            float speed = (run ? RUN_SPEED : WALK_SPEED) * mult;
             Go(pos, speed);
         }
 
