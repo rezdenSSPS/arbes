@@ -65,6 +65,16 @@ už používá jiná spuštěná hra na stejném počítači, hostování skonč
   Hlasovat jde i pro **RANDOM MAP**: mapa se vylosuje při startu z map, které zvolený režim umí, a pokud to jde,
   jiná než naposledy hraná. Host může zamknout i náhodnou mapu.
 - Hostitel spustí zápas tlačítkem **START MATCH**. Karta režimu, pro který mapa nemá potřebné body, je zašedlá.
+- **Random mode** – místo režimu může host zvolit kartu **RANDOM MODE** (první v seznamu, nebo klávesou **M**). Režim se
+  vylosuje až po stisku START MATCH z režimů, které mapa umí, a nezopakuje se ten minulý (pokud je z čeho vybírat).
+  S RANDOM MAP se vylosuje platná dvojice mapa + režim. Časový limit a boty jde nastavit dál, platí, pokud je režim používá.
+- V režimech bez botů (Co-op) se řádky FILL WITH BOTS / BOT DIFFICULTY skryjí.
+- Host může v hlasování o mapě tlačítkem **LOCK** vybrat mapu sám (hlasy se pak nepočítají, ostatní vidí „LOCKED BY HOST“);
+  **UNLOCK** vrací rozhodnutí hlasování.
+- **Chat:** ikona bubliny vlevo dole (vedle LEAVE) otevře chat lobby, oranžové číslo ukazuje nepřečtené zprávy. Enter zprávu
+  odešle (a chat otevře), Esc nebo ikona ho zavře. Max. 120 znaků, nejvýš 3 zprávy za 2 s. Historie vydrží i po návratu
+  ze zápasu, po odpojení se smaže. Když je chat otevřený, klávesy R a M nic nedělají.
+- Okna Armory, Profil a Účet se zavírají tlačítkem CLOSE nebo klávesou Esc.
 
 ## Ovládání
 
@@ -80,7 +90,8 @@ už používá jiná spuštěná hra na stejném počítači, hostování skonč
 | Bang (eliminace na blízko bez výstřelu) | V |
 | Kouřový granát (gadget, vestoje) | G |
 | Otřít zamlžené brýle | F |
-| Přebití | R |
+| Přebití | R (ruka v rukavici vymění zásobník, u brokovnice zasouvá náboje, u revolveru rychlonabíječ) |
+| Prohlídka zbraně | T (zruší ji střelba, míření, přebíjení, sprint nebo přepnutí) |
 | Zbraně | 1 – 0, kolečko myši |
 | Scoreboard | Tab (držet) |
 | Interakce | E (držet): položit / zneškodnit bombu, evakuace VIP, oživení medikem |
