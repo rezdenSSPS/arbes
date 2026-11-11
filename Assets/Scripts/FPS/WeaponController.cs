@@ -647,7 +647,7 @@ namespace AirsoftFPS
             int need = weapons[i].magSize - svMag[i];
             int take = Mathf.Min(need, svReserve[i]);
             svMag[i] += take;
-            svReserve[i] -= take;
+            if (!MatchNet.InfiniteAmmoRule) svReserve[i] -= take;   // lobby AMMO rule: the reserve never runs out
             svReloadWeapon = -1;
         }
 
@@ -712,7 +712,7 @@ namespace AirsoftFPS
                     int need = weapons[currentIndex].magSize - ammoInMag;
                     int take = Mathf.Min(need, ammoReserve);
                     ammoInMag += take;
-                    ammoReserve -= take;
+                    if (!MatchNet.InfiniteAmmoRule) ammoReserve -= take;
                     magAmmos[currentIndex] = ammoInMag;
                     reserveAmmos[currentIndex] = ammoReserve;
                     isReloading = false;

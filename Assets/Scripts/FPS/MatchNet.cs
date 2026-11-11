@@ -174,6 +174,7 @@ namespace AirsoftFPS
             TimeLimitMinutes = Array.IndexOf(TIME_LIMIT_OPTIONS, saved) >= 0 ? saved : DEFAULT_TIME_LIMIT;
             WindSetting = Mathf.Clamp(PlayerPrefs.GetInt(WIND_PREF, WindSystem.DEFAULT_SETTING), 0, WindSystem.SETTING_NAMES.Length - 1);
             FogEnabled = PlayerPrefs.GetInt(FOG_PREF, 1) == 1;
+            LoadRules();
         }
 
         void Update()
@@ -444,6 +445,7 @@ namespace AirsoftFPS
                 foreach (var e in roster) if (e.kills >= GUNGAME_WEAPONS) { EndMatch(e.clientId, 0); break; }
             }
             else if (TeamMode) CheckTeamTarget();
+            CheckLivesWin();   // custom rules: limited lives, last player / team standing
 
             if (changed || CurrentPhase == Phase.Results) BroadcastState();
         }
@@ -794,6 +796,7 @@ namespace AirsoftFPS
             w.WriteValueSafe((byte)WindSetting);
             w.WriteValueSafe(FogEnabled);
             w.WriteValueSafe(RandomMode);
+            WriteRules(w);
             w.WriteValueSafe(WindDir);
             w.WriteValueSafe(WindSpeed);
             w.WriteValueSafe((byte)awards.Count);
@@ -836,6 +839,7 @@ namespace AirsoftFPS
             reader.ReadValueSafe(out byte windSetting);
             reader.ReadValueSafe(out bool fog);
             reader.ReadValueSafe(out bool randomMode);
+            ReadRules(reader);
             reader.ReadValueSafe(out float windDir);
             reader.ReadValueSafe(out float windSpeed);
             reader.ReadValueSafe(out byte awardCount);

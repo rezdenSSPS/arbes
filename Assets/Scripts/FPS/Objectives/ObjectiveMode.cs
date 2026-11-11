@@ -199,7 +199,8 @@ namespace AirsoftFPS
         // ── round modes (Bomb, VIP escort): respawn, spawn, movement and weapon rules ──
 
         // Server (Health.Respawn): keep this dead player down for now (e.g. no respawn during a bomb round).
-        public static bool HoldsRespawn(ulong clientId) => Active != null && Active.HoldRespawn(clientId);
+        public static bool HoldsRespawn(ulong clientId) => (Active != null && Active.HoldRespawn(clientId))
+            || (MatchNet.Instance != null && MatchNet.Instance.OutOfLives(clientId));   // custom rules: no lives left
 
         // Server (PlayerSpawner): where this player spawns instead of the usual team side. false = no override.
         public static bool TrySpawnFor(ulong clientId, out Pose pose)
@@ -223,6 +224,9 @@ namespace AirsoftFPS
         public static bool LocalRespawnRule(out float delay, out string heldText)
         {
             delay = 0f; heldText = null;
+            var mn = MatchNet.Instance;
+            var nm = Unity.Netcode.NetworkManager.Singleton;
+            if (mn != null && nm != null && mn.OutOfLives(nm.LocalClientId)) { delay = -1f; heldText = "Out of lives"; return true; }
             return Active != null && Active.RespawnRule(out delay, out heldText);
         }
 

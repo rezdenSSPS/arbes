@@ -75,6 +75,13 @@ namespace AirsoftFPS
         public override void OnNetworkSpawn()
         {
             if (IsBot) maxHealth = BOT_MAX_HEALTH;
+            var rules = MatchNet.Instance;
+            if (IsCombatant && rules != null)
+            {
+                // custom match rules: more / less health, respawn time (the HUD counts down the same value)
+                if (IsServer) maxHealth = Mathf.Max(1, Mathf.RoundToInt(maxHealth * rules.HealthFactor));
+                respawnDelay = rules.RespawnSeconds;
+            }
             if (IsServer)
             {
                 netMaxHealth.Value = maxHealth;

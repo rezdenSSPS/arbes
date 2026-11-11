@@ -322,7 +322,7 @@ namespace AirsoftFPS
 
             h.botId.Reset(e.clientId);   // before Spawn (no dirty-marking warning): clients get it with the spawn
             h.maxHealth = Health.BOT_MAX_HEALTH;
-            h.respawnDelay = 3f;
+            h.respawnDelay = RespawnSeconds;   // (Health applies the custom health factor on spawn)
             var brain = go.AddComponent<BotBrain>();
             brain.Setup(e.clientId, BotSkill);
 

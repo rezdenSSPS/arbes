@@ -491,7 +491,7 @@ namespace AirsoftFPS
         void Go(Vector3 p, float speed)
         {
             if (agent == null || !agent.enabled || !agent.isOnNavMesh) return;
-            agent.speed = speed * Mathf.Clamp(ObjectiveMode.SpeedFactor(BotId), 0.1f, 1f);   // VIP walks slower
+            agent.speed = speed * Mathf.Clamp(ObjectiveMode.SpeedFactor(BotId), 0.1f, 1f) * MatchNet.SpeedRule;   // VIP walks slower; lobby MOVE SPEED rule
             agent.isStopped = false;
             agent.SetDestination(p);
         }

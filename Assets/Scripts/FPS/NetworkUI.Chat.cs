@@ -32,7 +32,7 @@ namespace AirsoftFPS
 
         public bool ChatOpen => chatPanel != null && chatPanel.activeSelf;
         // R (ready) / M (mode) must not fire while typing anywhere (chat, callsign) or while the chat is open.
-        public bool LobbyHotkeysBlocked => ChatOpen || TypingInField();
+        public bool LobbyHotkeysBlocked => ChatOpen || RulesOpen || TypingInField();
 
         // Bottom bar, right after LEAVE.
         void BuildChatButton(Transform bar)

@@ -110,6 +110,7 @@ namespace AirsoftFPS
 
         // death
         Image deathSwatch;
+        GameObject livesChip; TextMeshProUGUI livesLabel;
         RawImage deathHead, kcHead;
         TextMeshProUGUI deathBy, deathHp, deathSeconds;
         Image deathFill;
@@ -460,6 +461,15 @@ namespace AirsoftFPS
                 if (weaponCtrl != null && smokeLabel != null) smokeLabel.text = "SMOKE " + weaponCtrl.CurrentSmoke;
             }
 
+            // lives left (custom rules)
+            if (livesChip != null)
+            {
+                var mnL = MatchNet.Instance;
+                int left = mnL != null && NetworkManager.Singleton != null ? mnL.LivesLeft(NetworkManager.Singleton.LocalClientId) : -1;
+                livesChip.SetActive(left >= 0);
+                if (left >= 0) { livesLabel.text = left.ToString(); livesLabel.color = left <= 1 ? Danger : Accent; }
+            }
+
             // weapons + ammo
             if (weaponCtrl != null && weaponCtrl.AmmoReady)
             {
@@ -694,7 +704,8 @@ namespace AirsoftFPS
             {
                 if (objDelay < 0f) held = true; else delay = objDelay;
                 deathRespawnIn.text = held ? heldText : "Respawning in";
-                deathRespawnNote.text = held ? (ObjectiveMode.Active is OneInTheChamber ? "Watch the last ones standing." : "No respawns during the round.")
+                deathRespawnNote.text = held ? (heldText == "Out of lives" ? "No lives left: watch until the match ends."
+                                             : ObjectiveMode.Active is OneInTheChamber ? "Watch the last ones standing." : "No respawns during the round.")
                                              : "Full health on respawn.";
             }
             else { deathRespawnIn.text = "Respawning in"; deathRespawnNote.text = "Full health on respawn."; }
@@ -1154,6 +1165,16 @@ namespace AirsoftFPS
             smokeLabel = Label(smk.transform, "SMOKE 2", F.BodyBold, 12, Fg, TextAlignmentOptions.MidlineLeft, 0.1f);
             Label(smk.transform, "G", F.MonoBold, 11, Muted);
             smokeChip = smk.gameObject;
+
+            // lives left (lobby rule LIVES), next to the smoke pip
+            var lv = HRow(root, "Lives", 7, TextAnchor.MiddleLeft);
+            lv.GetComponent<RectTransform>().At(0f, 0f, 202, 124, 102, 28);
+            lv.padding = new RectOffset(10, 10, 4, 4);
+            lv.gameObject.AddComponent<Image>().color = Scrim();
+            Label(lv.transform, "LIVES", F.BodyBold, 11, Muted, TextAlignmentOptions.MidlineLeft, 0.14f);
+            livesLabel = Label(lv.transform, "3", F.MonoBold, 14, Accent, TextAlignmentOptions.MidlineLeft);
+            livesChip = lv.gameObject;
+            livesChip.SetActive(false);
 
             // bottom-center weapon slots
             var slotsRow = HRow(root, "Slots", 4, TextAnchor.LowerCenter);

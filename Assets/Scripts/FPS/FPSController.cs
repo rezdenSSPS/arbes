@@ -248,7 +248,7 @@ namespace AirsoftFPS
             }
 
             float speed = isCrouching ? crouchSpeed : (IsSprinting ? sprintSpeed : walkSpeed);
-            speed *= speedMultiplier * ObjectiveMode.SpeedFactor(OwnerClientId) * landSlow;   // e.g. frozen before a round, slower VIP
+            speed *= speedMultiplier * ObjectiveMode.SpeedFactor(OwnerClientId) * landSlow * MatchNet.SpeedRule;   // + lobby MOVE SPEED rule   // e.g. frozen before a round, slower VIP
             if (MatchNet.IntroFrozen) speed = 0f;
 
             Vector3 wish = transform.right * h + transform.forward * v;
@@ -271,9 +271,9 @@ namespace AirsoftFPS
 
             // Jump
             if (input && kb.spaceKey.wasPressedThisFrame && grounded && !isCrouching)
-                velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+                velocity.y = Mathf.Sqrt(jumpHeight * MatchNet.JumpRule * -2f * gravity * MatchNet.GravityRule);   // lobby JUMP rule
 
-            velocity.y += gravity * dt;
+            velocity.y += gravity * MatchNet.GravityRule * dt;
             Vector3 before = transform.position;
             cc.Move((horiz + Vector3.up * velocity.y) * dt);
 

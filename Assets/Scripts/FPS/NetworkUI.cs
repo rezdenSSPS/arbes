@@ -159,6 +159,7 @@ namespace AirsoftFPS
             bool overlay = (settings != null && settings.IsOpen)
                            || (CharacterCustomizerUI.Instance != null && CharacterCustomizerUI.Instance.IsOpen);
             ChatUpdate(kb, overlay);   // lobby chat (NetworkUI.Chat.cs)
+            RulesUpdate(kb);           // match rules window (NetworkUI.Rules.cs)
             if (kb != null && mnet != null && !overlay && !LobbyHotkeysBlocked)
             {
                 if (kb.rKey.wasPressedThisFrame) mnet.ToggleReady();
@@ -208,6 +209,7 @@ namespace AirsoftFPS
             hostModeKey.SetActive(host);
             clientModeNote.SetActive(!host);
             CloseChat();
+            CloseRules();
             ShowScreen(lobbyScreen);
             RefreshLobby();
         }
@@ -835,6 +837,7 @@ namespace AirsoftFPS
             barRt.sizeDelta = new Vector2(1200, 88);
             Button(bar.transform, "LEAVE", Btn.Danger, 18, OnLeave).LE(100, 48);
             BuildChatButton(bar.transform);   // NetworkUI.Chat.cs
+            BuildRulesButton(bar.transform);  // NetworkUI.Rules.cs
             hintText = Label(bar.transform, "", F.Body, 15, Muted, TextAlignmentOptions.MidlineRight);
             hintText.LE(-1, 48, 1);
             readyButton = Button(bar.transform, "READY UP", Btn.Secondary, 21, () => MatchNet.Instance?.ToggleReady(), F.CondBlack);
@@ -848,6 +851,7 @@ namespace AirsoftFPS
             startMatchButton.LE(196, 56);
 
             BuildChatPanel(stage);   // last: drawn over the columns while open
+            BuildRulesPanel(stage);  // match rules window, over everything
 
             return screen.gameObject;
         }
@@ -1200,6 +1204,7 @@ namespace AirsoftFPS
             var net = NetworkManager.Singleton;
             if (mnet == null || net == null) return;
             AttachPreview();
+            RefreshRules(mnet);
 
             // header
             bool online = !string.IsNullOrEmpty(JoinCode);
