@@ -110,6 +110,7 @@ namespace AirsoftFPS
 
         // death
         Image deathSwatch;
+        RawImage deathHead, kcHead;
         TextMeshProUGUI deathBy, deathHp, deathSeconds;
         Image deathFill;
         TextMeshProUGUI deathRespawnIn, deathRespawnNote;   // round modes rewrite these ("Out until the next round")
@@ -141,8 +142,8 @@ namespace AirsoftFPS
         readonly List<LeaderRow> leaderRows = new List<LeaderRow>();
         float leaderTimer;
         class SlotView { public Image bg, frame; public TextMeshProUGUI key, name; }
-        class TeamView { public Image header; public TextMeshProUGUI name, score, headK, headD, headO; public readonly List<(GameObject go, Image bg, TextMeshProUGUI n, TextMeshProUGUI k, TextMeshProUGUI d)> rows = new(); public readonly List<TextMeshProUGUI> obj = new(); }
-        class ListRow { public GameObject go; public Image bg, bar; public TextMeshProUGUI rank, name, progress, a, b; public GameObject barBack; }
+        class TeamView { public Image header; public TextMeshProUGUI name, score, headK, headD, headO; public readonly List<(GameObject go, Image bg, TextMeshProUGUI n, TextMeshProUGUI k, TextMeshProUGUI d)> rows = new(); public readonly List<TextMeshProUGUI> obj = new(); public readonly List<(RawImage head, Image tile)> heads = new(); }
+        class ListRow { public GameObject go; public Image bg, bar, tile; public RawImage head; public TextMeshProUGUI rank, name, progress, a, b; public GameObject barBack; }
         class PodiumView { public RectTransform rt; public Image bg, frame; public TextMeshProUGUI rank, name, stat; }
         class AwardView { public GameObject go; public Image bg, frame; public TextMeshProUGUI glyph, title, name, detail, reward; }
         readonly List<AwardView> awardViews = new List<AwardView>();
@@ -595,6 +596,8 @@ namespace AirsoftFPS
                         row.k.text = e.kills.ToString();
                         row.d.text = e.deaths.ToString();
                         row.bg.color = e.clientId == me ? A(Accent, 0.16f) : Color.clear;
+                        var hd = tv.heads[r - 1];
+                        HeadPortrait.Show(hd.head, hd.tile, e.look >= 0 ? e.look : mnet.LookOf(e.clientId), t == 0 ? Red : Blue);
                         tv.obj[r - 1].text = objSb ? ObjectiveMode.PointsOf(e.clientId).ToString() : "";
                         row.n.rectTransform.offsetMax = new Vector2(objSb ? -194 : -134, 0);
                     }
@@ -619,6 +622,7 @@ namespace AirsoftFPS
                 row.rank.text = (i + 1).ToString();
                 row.rank.color = i == 0 ? Accent : Muted;
                 row.name.text = (you ? e.name + " (you)" : e.name) + ObjectiveMode.TagFor(e.clientId);   // JUGGERNAUT / OUT
+                HeadPortrait.Show(row.head, row.tile, e.look >= 0 ? e.look : mnet.LookOf(e.clientId), you ? Accent : LineStrong);
                 row.bg.color = you ? A(Accent, 0.16f) : Color.clear;
                 row.barBack.SetActive(!coop);
                 row.progress.gameObject.SetActive(!coop);
@@ -716,13 +720,14 @@ namespace AirsoftFPS
             bool hasHp = fresh && info.killerHp >= 0 && info.killerMaxHp > 0;
             string hp = hasHp ? $"<color={Html(Fg)}>{info.killerHp}</color> / {info.killerMaxHp} HP left" : "";
 
-            deathSwatch.color = known ? c : DangerLine;
+            int killerLook = fresh && info.kind == MatchNet.KillerKind.Player && mnet != null ? mnet.LookOf(info.killerClientId) : -1;
+            HeadPortrait.Show(deathHead, deathSwatch, killerLook, known ? c : DangerLine);
             deathBy.text = by;
             deathHp.text = hp;
             deathHp.gameObject.SetActive(hasHp);
 
             if (!killcam) return;
-            kcSwatch.color = known ? c : DangerLine;
+            HeadPortrait.Show(kcHead, kcSwatch, killerLook, known ? c : DangerLine);
             kcBy.text = by;
             kcHpBlock.SetActive(hasHp);
             if (hasHp) kcHp.text = $"{info.killerHp}<size=16><color={Html(Muted)}> / {info.killerMaxHp}</color></size>";
@@ -1206,8 +1211,7 @@ namespace AirsoftFPS
             card.padding = new RectOffset(22, 22, 14, 14);
             card.gameObject.AddComponent<Image>().color = Scrim(0.82f);
             Frame(card.transform, Line, 1f).gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
-            deathSwatch = Box(card.transform, "Swatch", Red);
-            deathSwatch.LE(44, 44);
+            deathHead = HeadPortrait.Create(card.transform, "Swatch", 52, out deathSwatch);
             var byCol = VCol(card.transform, "Text", 2, TextAnchor.MiddleLeft, false);
             Label(byCol.transform, "ELIMINATED BY", F.BodyBold, 11, Muted, TextAlignmentOptions.MidlineLeft, 0.14f);
             deathBy = Label(byCol.transform, "", F.CondBold, 28, Fg);
@@ -1333,8 +1337,7 @@ namespace AirsoftFPS
             var bottom = Band(screen, "Bottom", false, 96);
             var card = HRow(bottom, "By", 18, TextAnchor.MiddleCenter);
             card.GetComponent<RectTransform>().Fill();
-            kcSwatch = Box(card.transform, "Swatch", Red);
-            kcSwatch.LE(36, 36);
+            kcHead = HeadPortrait.Create(card.transform, "Swatch", 44, out kcSwatch);
             var byCol = VCol(card.transform, "Text", 2, TextAnchor.MiddleLeft, false);
             Label(byCol.transform, "ELIMINATED BY", F.BodyBold, 11, Muted, TextAlignmentOptions.MidlineLeft, 0.14f);
             kcBy = Label(byCol.transform, "", F.CondBold, 28, Fg);
@@ -1401,7 +1404,12 @@ namespace AirsoftFPS
                     var row = Box(tc.transform, "Row", Color.clear);
                     row.LE(-1, 44);
                     Box(row.transform, "Sep", Raised).rectTransform.At(0.5f, 0f, 0, 0, 2000, 1);
-                    var n = Label(row.transform, "", F.BodySemi, 15, Fg); n.rectTransform.Fill(14, 0, 134, 0);
+                    var hd = HeadPortrait.Create(row.transform, "Head", 32, out var hdTile);
+                    hdTile.rectTransform.anchorMin = hdTile.rectTransform.anchorMax = hdTile.rectTransform.pivot = new Vector2(0f, 0.5f);
+                    hdTile.rectTransform.anchoredPosition = new Vector2(14, 0);
+                    hdTile.rectTransform.sizeDelta = new Vector2(32, 32);
+                    tv.heads.Add((hd, hdTile));
+                    var n = Label(row.transform, "", F.BodySemi, 15, Fg); n.rectTransform.Fill(56, 0, 134, 0);
                     var k = Label(row.transform, "", F.CondBold, 20, Fg, TextAlignmentOptions.MidlineRight); k.rectTransform.Fill(0, 0, 74, 0);
                     var d = Label(row.transform, "", F.CondSemi, 20, Muted, TextAlignmentOptions.MidlineRight); d.rectTransform.Fill(0, 0, 14, 0);
                     var o = Label(row.transform, "", F.CondBold, 20, Accent, TextAlignmentOptions.MidlineRight); o.rectTransform.Fill(0, 0, 134, 0);
@@ -1427,6 +1435,8 @@ namespace AirsoftFPS
                 row.padding = new RectOffset(14, 14, 0, 0);
                 row.GetComponent<RectTransform>().Fill();
                 lr.rank = Label(row.transform, "", F.CondBold, 20, Muted); lr.rank.LE(48, 48);
+                lr.head = HeadPortrait.Create(row.transform, "Head", 36, out lr.tile);
+                Rect(row.transform, "Gap").LE(10, 48);
                 lr.name = Label(row.transform, "", F.BodySemi, 15, Fg); lr.name.LE(-1, 48, 1);
                 var prog = HRow(row.transform, "Progress", 10); prog.padding = new RectOffset(0, 24, 0, 0); prog.LE(280, 48);
                 lr.bar = Bar(prog.transform, "Bar", Line, Fg);

@@ -270,3 +270,8 @@ Vyvíjeno paralelně ve čtyřech větvích (`feat/ui-fixes`, `feat/random-mode`
 ## 2026-11-11 — Vlna v co-opu pod minimapou
 - Ukazatel vlny v režimu Co-op („WAVE N“ a počet zbývajících nepřátel) se přesunul ze středu nahoře pod minimapu vlevo nahoře. Je to jen text bez podkladu a rámečku, vycentrovaný pod mapou.
 - Testy: kompilace čistá, objektivy 104/0, zvuk 34/0; HUD v co-opu vykreslený a zkontrolovaný očima.
+
+## 2026-11-11 — Hlavy hráčů místo čtverečků, ztlumené automatické testy
+- **Portréty hlav** (`HeadPortrait`): u jmen v lobby, ve scoreboardu (týmový i seznam) a na kartě „ELIMINATED BY“ (i v killcamu) je místo barevného čtverečku malá hlava postavy toho hráče nebo bota – tělo, pleť, vlasy, čepice/klobouk a brýle/maska podle jeho vzhledu. Každý vzhled se jednou postaví na skryté scéně hluboko pod mapou, vyfotí vlastní kamerou (pohled ze tří čtvrtin) do textury s průhledným pozadím a zůstane v paměti. Podklad dlaždice je dál barva týmu / trička (ztmavená, aby obličej vynikl); hráč bez zvoleného vzhledu a AI nepřátelé mají jen barvu.
+- **Ticho při testech** (`BatchAudioMute`): play kontroly spouštěné z příkazové řádky už nehrají zvuk do reproduktorů (ztlumí se zvuk editoru jako tlačítkem „Mute Audio“, při ukončení se vrátí původní stav). Zvukové zdroje dál hrají, takže zvuková kontrola funguje. Normální editor se nemění.
+- Testy: kompilace čistá, objektivy 104/0, zvuk 34/0 (i ztlumený), medik 27/0, Random mode 23/0, chat 35/0, CTF 19/0. Lobby, scoreboard a karta zabití vykreslené a zkontrolované očima (8 hráčů s boty).

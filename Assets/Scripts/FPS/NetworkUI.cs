@@ -106,6 +106,7 @@ namespace AirsoftFPS
         class Slot
         {
             public Image bg, frame, swatch, swatchFrame;
+            public RawImage head;   // the player's character head on the swatch tile
             public TextMeshProUGUI name;
             public GameObject host, you, ready, notReady;
         }
@@ -1002,8 +1003,7 @@ namespace AirsoftFPS
                 var row = HRow(s.bg.transform, "Row", 10);
                 row.padding = new RectOffset(12, 12, 0, 0);
                 row.GetComponent<RectTransform>().Fill();
-                s.swatch = Box(row.transform, "Swatch", Fg);
-                s.swatch.LE(28, 28);
+                s.head = HeadPortrait.Create(row.transform, "Swatch", 38, out s.swatch);
                 s.swatchFrame = Frame(s.swatch.transform, LineStrong, 1f);
                 s.name = Label(row.transform, "", F.BodySemi, 15, Fg);
                 s.name.overflowMode = TextOverflowModes.Ellipsis;
@@ -1274,6 +1274,7 @@ namespace AirsoftFPS
                     s.frame.pixelsPerUnitMultiplier = 4f;
                     s.swatch.color = Color.clear;
                     s.swatchFrame.color = LineStrong;
+                    s.head.enabled = false;
                     s.name.text = "Waiting for player…";
                     s.name.color = Faint;
                     ApplyFont(s.name, F.Body);
@@ -1287,7 +1288,7 @@ namespace AirsoftFPS
                 s.frame.pixelsPerUnitMultiplier = 4f / (you ? 1.5f : 1f);
                 int look = e.look >= 0 ? e.look : (you ? mnet.LocalLook : -1);
                 Color shirt = look >= 0 ? AirsoftLook.Palette[AirsoftLook.Unpack(look).shirt] : Faint;
-                s.swatch.color = tdm ? (i % 2 == 0 ? Red : Blue) : shirt;
+                HeadPortrait.Show(s.head, s.swatch, look, tdm ? (i % 2 == 0 ? Red : Blue) : shirt);
                 s.swatchFrame.color = Color.clear;
                 s.name.text = e.name;
                 s.name.color = Fg;
