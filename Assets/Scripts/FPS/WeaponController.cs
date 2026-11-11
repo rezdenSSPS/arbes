@@ -924,7 +924,7 @@ namespace AirsoftFPS
                         : t > total - fade ? Mathf.Clamp01((total - t) / fade) : 1f;
                 for (int i = 0; i < tr.childCount && i < targets.Length; i++)
                     tr.GetChild(i).localScale = Vector3.one * (targets[i] * k);
-                tr.position += Vector3.up * (0.06f * Time.deltaTime);
+                tr.position += (Vector3.up * 0.06f + SmokeField.Drift) * Time.deltaTime;   // rises a little, drifts with the wind
                 yield return null;
             }
             if (root != null) Destroy(root);

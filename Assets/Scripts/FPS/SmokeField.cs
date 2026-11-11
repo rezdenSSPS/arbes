@@ -9,6 +9,13 @@ namespace AirsoftFPS
     public static class SmokeField
     {
         struct Cloud { public Vector3 pos; public float radius; public float from; public float until; }
+
+        // Clouds drift with the match wind at this share of its speed (5 m/s wind: ~11 m over a 15 s cloud).
+        // Every peer moves them the same way (the wind is in the match state), visuals included.
+        public const float WIND_DRIFT = 0.15f;
+        public static Vector3 Drift => BBBallistics.Wind * WIND_DRIFT;
+
+        static Vector3 Centre(in Cloud c, float now) => c.pos + Drift * Mathf.Max(0f, now - c.from);
         static readonly List<Cloud> clouds = new List<Cloud>();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -30,7 +37,7 @@ namespace AirsoftFPS
             Prune();
             float now = Time.time;
             for (int i = 0; i < clouds.Count; i++)
-                if (now >= clouds[i].from && SegmentHitsSphere(a, b, clouds[i].pos, clouds[i].radius)) return true;
+                if (now >= clouds[i].from && SegmentHitsSphere(a, b, Centre(clouds[i], now), clouds[i].radius)) return true;
             return false;
         }
 
@@ -42,7 +49,7 @@ namespace AirsoftFPS
             Prune();
             float now = Time.time;
             for (int i = 0; i < clouds.Count; i++)
-                if (now >= clouds[i].from && (clouds[i].pos - p).sqrMagnitude <= clouds[i].radius * clouds[i].radius) return true;
+                if (now >= clouds[i].from && (Centre(clouds[i], now) - p).sqrMagnitude <= clouds[i].radius * clouds[i].radius) return true;
             return false;
         }
 

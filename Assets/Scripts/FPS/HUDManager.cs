@@ -89,6 +89,7 @@ namespace AirsoftFPS
         GameObject smokeChip;
         readonly List<SlotView> slotViews = new List<SlotView>();
         TextMeshProUGUI ammoWeapon, ammoMag, ammoReserve;
+        TextMeshProUGUI ffaTitle;   // FREE-FOR-ALL / JUGGERNAUT / ONE IN THE CHAMBER
         GameObject reloadHint;
         TextMeshProUGUI reloadText;
 
@@ -353,6 +354,7 @@ namespace AirsoftFPS
                         if (e.clientId == me) myKills = e.kills;
                         if (e.kills > best) { best = e.kills; leader = e.name; }
                     }
+                    ffaTitle.text = ModeName(mode).ToUpperInvariant();
                     ffaYou.text = myKills.ToString();
                     ffaLeader.text = "LEADER  " + leader;
                     ffaLeaderScore.text = Mathf.Max(0, best).ToString();
@@ -462,7 +464,8 @@ namespace AirsoftFPS
                 }
                 var w = weaponCtrl.CurrentWeapon;
                 int mag = weaponCtrl.CurrentMag;
-                ammoWeapon.text = $"[{(active == 9 ? 0 : active + 1)}] {weaponCtrl.CurrentWeaponName}";
+                ammoWeapon.text = $"[{(active == 9 ? 0 : active + 1)}] {weaponCtrl.CurrentWeaponName}" +
+                                  $"  <size=75%><color={Html(Faint)}>{BBBallistics.WeightLabel(PlayerProfile.BbIndex)} BB</color></size>";
                 ammoMag.text = mag.ToString();
                 ammoReserve.text = "/ " + weaponCtrl.CurrentReserve;
                 bool lowAmmo = w != null && mag <= Mathf.Max(1, w.magSize / 4);
@@ -957,7 +960,7 @@ namespace AirsoftFPS
 
             var ffa = ScrimRow(top.transform, "FFA", 18, new RectOffset(18, 18, 8, 8), 0.78f);
             ffaWidget = ffa.gameObject;
-            Label(ffa, "FREE-FOR-ALL", F.CondBold, 18, Fg, TextAlignmentOptions.MidlineLeft, 0.08f);
+            ffaTitle = Label(ffa, "FREE-FOR-ALL", F.CondBold, 18, Fg, TextAlignmentOptions.MidlineLeft, 0.08f);
             Box(ffa, "Sep", LineStrong).LE(1, 26);
             var youGrp = HRow(ffa, "You", 8);
             Label(youGrp.transform, "YOU", F.Body, 13, Muted);

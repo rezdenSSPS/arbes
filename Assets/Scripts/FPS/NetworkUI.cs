@@ -830,7 +830,7 @@ namespace AirsoftFPS
         {
             var col = colRt.gameObject.AddComponent<VerticalLayoutGroup>();
             bool dense = MatchNet.MODE_COUNT > 7;   // many modes: tighter cards and gaps so they all fit
-            col.spacing = dense ? 4 : 8; col.childControlWidth = col.childControlHeight = true;
+            col.spacing = MatchNet.MODE_COUNT > 12 ? 2 : dense ? 4 : 8; col.childControlWidth = col.childControlHeight = true;
             col.childForceExpandWidth = true; col.childForceExpandHeight = false;
 
             var head = Rect(colRt, "Head").LE(-1, 18);
@@ -854,15 +854,19 @@ namespace AirsoftFPS
                 b.LE(-1, cardH);
                 var group = b.gameObject.AddComponent<CanvasGroup>();
                 var frame = Frame(b.transform, Line, 1f);
-                var txt = VCol(b.transform, "Text", dense ? 0 : compact ? 1 : 2);
-                txt.padding = dense ? new RectOffset(14, 14, densePad, densePad)
+                // title + description, centred vertically in the card
+                var txt = VCol(b.transform, "Text", dense ? 0 : compact ? 1 : 2, TextAnchor.MiddleLeft);
+                bool tiny = cardH < 32f;   // 13 modes: 30 px cards
+                txt.padding = tiny ? new RectOffset(14, 14, 0, 0)
+                            : dense ? new RectOffset(14, 14, densePad, densePad)
                             : compact ? new RectOffset(16, 16, 6, 6) : new RectOffset(16, 16, 9, 9);
                 txt.GetComponent<RectTransform>().Fill();
-                bool tiny = cardH < 31f;   // 13 modes: 28 px cards
-                Label(txt.transform, ModeName(mode).ToUpperInvariant(), F.CondBold, dense ? (tiny ? 15 : 16) : compact ? 18 : 20, Fg, TextAlignmentOptions.MidlineLeft, 0.02f)
-                    .LE(-1, dense ? (tiny ? 15 : cardH < 34f ? 17 : 18) : compact ? 20 : 22);   // 11+ modes: title + desc must fit
+                var title = Label(txt.transform, ModeName(mode).ToUpperInvariant(), F.CondBold, dense ? (tiny ? 15 : 16) : compact ? 18 : 20, Fg, TextAlignmentOptions.MidlineLeft, 0.02f);
+                title.LE(-1, dense ? (tiny ? 14 : cardH < 34f ? 17 : 18) : compact ? 20 : 22);   // 11+ modes: title + desc must fit
+                title.overflowMode = TextOverflowModes.Overflow;   // a one-line title may poke past its slot, never vanish
                 var desc = Label(txt.transform, ModeDesc(mode), F.Body, dense ? (tiny ? 10 : 11) : 12, Muted);
-                if (compact) { desc.overflowMode = TextOverflowModes.Ellipsis; desc.LE(-1, dense ? (tiny ? 11 : 14) : 16); }
+                // TMP drops a line taller than its rect, so the slot is at least ~1.3 × the font size
+                if (compact) { desc.overflowMode = TextOverflowModes.Ellipsis; desc.LE(-1, dense ? 14 : 16); }
                 else desc.Wrap().LE(-1, 30);
                 b.label.gameObject.SetActive(false);
                 modeCards.Add((b, frame, group));
