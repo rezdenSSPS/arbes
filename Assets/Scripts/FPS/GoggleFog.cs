@@ -115,6 +115,7 @@ namespace AirsoftFPS
                 if (wipeT >= WIPE_SECONDS)
                 {
                     fog *= WIPE_LEFT;
+                    MatchNet.Instance?.SendGoggleWipe();   // the Clear Eyes award goes to players who never wipe
                     StopWipe();
                     nextWipe = Time.time + WIPE_COOLDOWN;
                 }

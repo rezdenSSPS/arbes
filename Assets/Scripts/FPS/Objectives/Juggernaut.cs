@@ -68,6 +68,7 @@ namespace AirsoftFPS
             if (mn == null || HasDeclared || victim != jugg) return;
             if (killer != victim && InRoster(mn, killer))
             {
+                MatchAwards.RecordTakedown(killer);   // Giant Slayer
                 MakeJuggernaut(killer);
                 Announce($"{NameOf(killer)} took down {NameOf(victim)} · new JUGGERNAUT", 0);
                 return;

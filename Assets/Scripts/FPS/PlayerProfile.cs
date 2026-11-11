@@ -37,6 +37,7 @@ namespace AirsoftFPS
         public int revives;   // Medic mode
         public int objPoints; // objective points scored (caps, plants/defuses, extracts, revives)
         public bool won, completed;
+        public readonly List<string> awards = new List<string>();   // post-match award titles (MatchAwards)
         public readonly List<(string what, int xp)> lines = new List<(string, int)>();
         public readonly List<string> unlocked = new List<string>();
         public int Gained => xpAfter - xpBefore;
@@ -262,6 +263,7 @@ namespace AirsoftFPS
             if (m.enemyKills > 0) { xp += m.enemyKills * XP_ENEMY_KILL; m.lines.Add((m.enemyKills + " enemies", m.enemyKills * XP_ENEMY_KILL)); }
             if (m.hits > 0) { xp += m.hits * XP_HIT; m.lines.Add((m.hits == 1 ? "1 hit" : m.hits + " hits", m.hits * XP_HIT)); }
             if (m.revives > 0) { xp += m.revives * XP_REVIVE; m.lines.Add((m.revives == 1 ? "1 revive" : m.revives + " revives", m.revives * XP_REVIVE)); }
+            foreach (var a in m.awards) { xp += MatchAwards.XP; m.lines.Add((a, MatchAwards.XP)); }
 
             // Credits (currency): a separate reward track from XP.
             int cr = 0;
@@ -271,6 +273,7 @@ namespace AirsoftFPS
             if (m.enemyKills > 0) { int v = m.enemyKills * CR_ENEMY_KILL; cr += v; m.creditLines.Add((m.enemyKills + " enemies", v)); }
             if (m.objPoints > 0) { int v = m.objPoints * CR_OBJECTIVE; cr += v; m.creditLines.Add((m.objPoints + " objectives", v)); }
             if (bestStreak > 1) { int v = bestStreak * CR_STREAK; cr += v; m.creditLines.Add(("Best streak " + bestStreak, v)); }
+            foreach (var a in m.awards) { cr += MatchAwards.CREDITS; m.creditLines.Add((a, MatchAwards.CREDITS)); }
             m.creditsBefore = d.credits;
             d.credits += cr;
             m.creditsAfter = d.credits;
@@ -382,6 +385,8 @@ namespace AirsoftFPS
                     else if (mnet.Mode != MatchNet.GameModeType.Coop)
                         match.won = mnet.WinnerClientId == me;
                 }
+                foreach (var a in mnet.Awards)   // post-match awards: a small XP + Credits bonus each
+                    if (a.clientId == me) match.awards.Add(MatchAwards.Title(a.id));
             }
             else
             {

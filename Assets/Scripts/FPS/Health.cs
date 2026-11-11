@@ -129,6 +129,7 @@ namespace AirsoftFPS
             if (!IsServer) return;
             if (isDead.Value || isHit.Value) return;
             if (IsSpawnProtected) return;
+            if (IsCombatant) MatchAwards.RecordHit(MatchId, attackerClientId, weapon, transform.position);   // Ghost, Sharpshooter
 
             if (IsCombatant && MatchNet.Instance != null && MatchNet.Instance.UsesHitRule)   // Milsim, Medic
             {

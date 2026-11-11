@@ -133,6 +133,9 @@ namespace AirsoftFPS
         class TeamView { public Image header; public TextMeshProUGUI name, score, headK, headD, headO; public readonly List<(GameObject go, Image bg, TextMeshProUGUI n, TextMeshProUGUI k, TextMeshProUGUI d)> rows = new(); public readonly List<TextMeshProUGUI> obj = new(); }
         class ListRow { public GameObject go; public Image bg, bar; public TextMeshProUGUI rank, name, progress, a, b; public GameObject barBack; }
         class PodiumView { public RectTransform rt; public Image bg, frame; public TextMeshProUGUI rank, name, stat; }
+        class AwardView { public GameObject go; public Image bg, frame; public TextMeshProUGUI glyph, title, name, detail, reward; }
+        readonly List<AwardView> awardViews = new List<AwardView>();
+        GameObject awardsCaption;
 
         // ════════════════════════ wiring ════════════════════════
         public void Setup(Health health, WeaponController wc)
@@ -783,6 +786,27 @@ namespace AirsoftFPS
                 else SetStat(0, kills.ToString(), "KILLS");
                 SetStat(1, deaths.ToString(), "DEATHS");
                 SetStat(2, Ordinal(place), "PLACE");
+            }
+
+            // match awards
+            var awards = mnet.Awards;
+            awardsCaption.SetActive(awards.Count > 0);
+            for (int i = 0; i < awardViews.Count; i++)
+            {
+                var v = awardViews[i];
+                v.go.SetActive(i < awards.Count);
+                if (i >= awards.Count) continue;
+                var a = awards[i];
+                bool mine = a.clientId == me;
+                v.glyph.text = MatchAwards.Glyph(a.id);
+                v.title.text = MatchAwards.Title(a.id);
+                v.name.text = mine ? "YOU" : mnet.NameFor(a.clientId);
+                v.detail.text = MatchAwards.Detail(a);
+                v.reward.text = $"+{MatchAwards.XP} XP  ·  +{MatchAwards.CREDITS} CR";
+                v.reward.color = mine ? Accent : TextSoft;
+                v.bg.color = mine ? Raised : Surface;
+                v.frame.color = mine ? Accent : Line;
+                v.frame.pixelsPerUnitMultiplier = 4f / (mine ? 1.5f : 1f);
             }
 
             float left = Mathf.Max(0f, MatchNet.RESULTS_SECONDS - (Time.unscaledTime - resultsStart));
@@ -1463,6 +1487,41 @@ namespace AirsoftFPS
                 p.name.overflowMode = TextOverflowModes.Ellipsis;
                 p.stat = Label(pc.transform, "", F.Body, 14, Muted);
                 podium.Add(p);
+            }
+
+            // match awards (MatchAwards): up to four cards under the podium
+            awardsCaption = Caption(stage, "MATCH AWARDS", 12, Muted, 0.16f).gameObject;
+            awardsCaption.GetComponent<RectTransform>().TL(64, 530, 400, 16);
+            float aw = (796 - 3 * 12) / 4f;
+            for (int i = 0; i < MatchAwards.MAX_AWARDS; i++)
+            {
+                var a = new AwardView();
+                a.bg = Box(stage, "Award" + (i + 1), Surface);
+                a.bg.rectTransform.TL(64 + i * (aw + 12), 554, aw, 124);
+                a.go = a.bg.gameObject;
+                a.frame = Frame(a.bg.transform, Line, 1f);
+                var col = VCol(a.bg.transform, "Text", 3, TextAnchor.UpperLeft);
+                col.padding = new RectOffset(14, 14, 12, 12);
+                col.GetComponent<RectTransform>().Fill();
+                var head = HRow(col.transform, "Head", 8, TextAnchor.MiddleLeft);
+                head.LE(-1, 26);
+                var disc = Box(head.transform, "Glyph", Accent);
+                disc.sprite = DiscSprite;
+                disc.LE(24, 24);
+                a.glyph = Label(disc.transform, "", F.CondBlack, 14, Ground, TextAlignmentOptions.Center);
+                a.glyph.rectTransform.Fill();
+                a.title = Label(head.transform, "", F.CondBlack, 18, Accent, TextAlignmentOptions.MidlineLeft, 0.02f);
+                a.title.LE(-1, 24);
+                a.name = Label(col.transform, "", F.CondBold, 18, Fg);
+                a.name.overflowMode = TextOverflowModes.Ellipsis;
+                a.name.LE(-1, 22);
+                a.detail = Label(col.transform, "", F.Body, 12, Muted);
+                a.detail.overflowMode = TextOverflowModes.Ellipsis;
+                a.detail.LE(-1, 16);
+                a.reward = Label(col.transform, "", F.BodyBold, 11, TextSoft, TextAlignmentOptions.MidlineLeft, 0.08f);
+                a.reward.LE(-1, 16);
+                a.go.SetActive(false);
+                awardViews.Add(a);
             }
 
             // your match

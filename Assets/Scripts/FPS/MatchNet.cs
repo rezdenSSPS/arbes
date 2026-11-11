@@ -42,7 +42,7 @@ namespace AirsoftFPS
         public const int TDM_KILL_TARGET = 40;
         public const int GUNGAME_WEAPONS = 10;
         public const int MILSIM_HIT_TARGET = 30;   // Milsim: each BB hit scores a point for the shooter's team
-        public const float RESULTS_SECONDS = 6f;   // results screen, then everyone returns to the lobby
+        public const float RESULTS_SECONDS = 8f;   // results screen (podium + awards), then everyone returns to the lobby
         // Match time limit (minutes) the host can pick in the lobby; 0 = off. Co-op never has one.
         public static readonly int[] TIME_LIMIT_OPTIONS = { 0, 5, 10, 15 };
         public const int DEFAULT_TIME_LIMIT = 10;
@@ -61,6 +61,7 @@ namespace AirsoftFPS
         const string MSG_KILL  = "mn_kill";   // server -> clients (kill feed)
         const string MSG_LOOK  = "mn_look";   // client -> server (character look)
         const string MSG_DEATH = "mn_death";  // server -> the victim only (killcam + death screen)
+        const string MSG_WIPE  = "mn_wipe";   // client -> server (wiped the goggles: awards)
 
         // Shared view (valid on everyone; authoritative copy lives on the server)
         public GameModeType Mode { get; private set; } = GameModeType.Coop;
@@ -88,6 +89,9 @@ namespace AirsoftFPS
             BroadcastState();
         }
         public IReadOnlyList<Entry> Roster => roster;
+        // Post-match awards (MatchAwards), filled when the match ends; empty otherwise.
+        public IReadOnlyList<MatchAwards.Award> Awards => awards;
+        readonly List<MatchAwards.Award> awards = new List<MatchAwards.Award>();
 
         // Raised on everyone whenever the roster/mode/phase changes, so UI can refresh.
         public event Action OnStateChanged;
@@ -339,6 +343,8 @@ namespace AirsoftFPS
             IsDraw = false;
             EndedOnTime = false;
             MatchEndTime = 0;   // the clock starts once the arena has loaded (TickMatchClock)
+            awards.Clear();
+            MatchAwards.Reset();
             // reset scores (and split into two teams for Team Deathmatch)
             int t = 1;
             for (int i = 0; i < roster.Count; i++)
@@ -369,6 +375,7 @@ namespace AirsoftFPS
             string killerName = scored ? NameFor(killerClientId) : "";
             RaiseKill(killerName, NameFor(victimClientId), weapon ?? "");
             SendDeathInfo(victimClientId, killerClientId, weapon, killerObject);
+            MatchAwards.RecordKill(victimClientId, killerClientId, weapon, scored);
             ObjectiveMode.NotifyKill(victimClientId, killerClientId);   // e.g. a flag carrier drops the flag
 
             bool changed = false;
@@ -459,6 +466,7 @@ namespace AirsoftFPS
             bool scored = shooterClientId != victimClientId && HasEntry(shooterClientId)
                           && TeamOf(shooterClientId) != TeamOf(victimClientId);
             RaiseKill(scored ? NameFor(shooterClientId) : "", NameFor(victimClientId), weapon ?? "");
+            MatchAwards.RecordKill(victimClientId, shooterClientId, weapon, scored);
             ObjectiveMode.NotifyHit(victimClientId, shooterClientId);
 
             for (int i = 0; i < roster.Count; i++)
@@ -480,6 +488,8 @@ namespace AirsoftFPS
             WinnerTeam = draw ? 0 : winnerTeam;
             IsDraw = draw;
             EndedOnTime = onTime;
+            awards.Clear();
+            awards.AddRange(MatchAwards.Decide(this));   // sent with the results state
             Invoke(nameof(ReturnToLobby), RESULTS_SECONDS);
         }
 
@@ -560,6 +570,7 @@ namespace AirsoftFPS
             EndedOnTime = false;
             MatchEndTime = 0;
             EnemiesEnabled = true;
+            awards.Clear();
             for (int i = 0; i < roster.Count; i++)
             {
                 var e = roster[i]; e.ready = false; e.kills = 0; e.deaths = 0; e.team = 0; roster[i] = e;
@@ -587,6 +598,7 @@ namespace AirsoftFPS
             cm.RegisterNamedMessageHandler(MSG_NAME,  OnServerRecvName);
             cm.RegisterNamedMessageHandler(MSG_READY, OnServerRecvReady);
             cm.RegisterNamedMessageHandler(MSG_LOOK,  OnServerRecvLook);
+            cm.RegisterNamedMessageHandler(MSG_WIPE,  (sender, _) => MatchAwards.RecordWipe(sender));
             RegisterMapVoteServerHandlers(cm);
             serverHandlersUp = true;
 
@@ -645,6 +657,7 @@ namespace AirsoftFPS
             CoopWave = 1;
             WindSpeed = 0f;
             WindSystem.Apply(false, 0f, 0f);
+            awards.Clear();
             ClearMapVoteState();
             serverHandlersUp = false;
             clientHandlersUp = false;
@@ -668,6 +681,14 @@ namespace AirsoftFPS
             for (int i = 0; i < roster.Count; i++)
                 if (roster[i].clientId == sender) { var e = roster[i]; e.name = n; roster[i] = e; }
             BroadcastState();
+        }
+
+        // Owner (GoggleFog): a lens wipe, for the Clear Eyes award.
+        public void SendGoggleWipe()
+        {
+            if (nm == null || !nm.IsConnectedClient || CurrentPhase != Phase.InMatch) return;
+            using var w = new FastBufferWriter(1, Allocator.Temp);
+            nm.CustomMessagingManager.SendNamedMessage(MSG_WIPE, NetworkManager.ServerClientId, w, NetworkDelivery.Reliable);
         }
 
         void OnServerRecvReady(ulong sender, FastBufferReader reader)
@@ -706,6 +727,13 @@ namespace AirsoftFPS
             w.WriteValueSafe(FogEnabled);
             w.WriteValueSafe(WindDir);
             w.WriteValueSafe(WindSpeed);
+            w.WriteValueSafe((byte)awards.Count);
+            foreach (var a in awards)
+            {
+                w.WriteValueSafe((byte)a.id);
+                w.WriteValueSafe(a.clientId);
+                w.WriteValueSafe(a.value);
+            }
             w.WriteValueSafe(roster.Count);
             foreach (var e in roster)
             {
@@ -738,6 +766,15 @@ namespace AirsoftFPS
             reader.ReadValueSafe(out bool fog);
             reader.ReadValueSafe(out float windDir);
             reader.ReadValueSafe(out float windSpeed);
+            reader.ReadValueSafe(out byte awardCount);
+            awards.Clear();
+            for (int i = 0; i < awardCount; i++)
+            {
+                reader.ReadValueSafe(out byte aid);
+                reader.ReadValueSafe(out ulong acid);
+                reader.ReadValueSafe(out int aval);
+                awards.Add(new MatchAwards.Award { id = (MatchAwards.Id)aid, clientId = acid, value = aval });
+            }
             reader.ReadValueSafe(out int count);
 
             roster.Clear();
