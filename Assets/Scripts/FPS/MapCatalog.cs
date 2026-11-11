@@ -19,6 +19,8 @@ namespace AirsoftFPS
         {
             new MapInfo { scene = "AirsoftArena", name = "Town", wind = 1f },            // 80 x 80 m: streets, houses, park, container yard
             new MapInfo { scene = "AirsoftWarehouse", name = "Warehouse", wind = 0f },   // 60 x 60 m CQB: hall, office block, loading yards
+            new MapInfo { scene = "AirsoftOutpost", name = "Outpost", wind = 0.8f },     // 68 x 47 m walled compound: two spawn rooms, open MID, six corridors
+            new MapInfo { scene = "AirsoftForest", name = "Forest", wind = 0.6f },       // 80 x 80 m woodland: camps, dry creek, two cabins (trees shelter)
         };
 
         public static int Count => Maps.Length;

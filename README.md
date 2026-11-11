@@ -27,8 +27,15 @@ profil se statistikami, XP a odemykáním vzhledu. **Texty ve hře jsou anglicky
 | ![Mapa Town shora](Assets/Resources/MapPreviews/AirsoftArena.png) | ![Mapa Warehouse shora](Assets/Resources/MapPreviews/AirsoftWarehouse.png) |
 | 80 × 80 m: křižovatka, domy, park, kontejnerový sklad. Scéna `AirsoftArena`. | 60 × 60 m, boj na krátkou vzdálenost: hala s regály, kanceláře, nakládací dvory. Scéna `AirsoftWarehouse`. |
 
+| Outpost | Forest |
+|---|---|
+| ![Mapa Outpost shora](Assets/Resources/MapPreviews/AirsoftOutpost.png) | ![Mapa Forest shora](Assets/Resources/MapPreviews/AirsoftForest.png) |
+| 68 × 47 m, obezděný areál podle návrhu MAP 01: dvě spawnové místnosti, otevřený střed (MID), šest chodeb (LINK, SHORT, LONG), 17 krytů. Scéna `AirsoftOutpost`. | 80 × 80 m les: tábory týmů, vyschlý potok s lávkou uprostřed, dva sruby, ~130 stromů, keře, balvany a padlé kmeny. Scéna `AirsoftForest`. |
+
 Obrázky jsou náhledy map shora, které editor vykresluje pro hlasování v lobby (`Assets/Resources/MapPreviews`).
-Obě mapy mají body pro všechny režimy. Červení začínají na severu, Modří na jihu.
+Všechny mapy mají body pro všechny režimy. Na Town, Warehouse a Forest začínají Červení na severu a Modří na jihu,
+na Outpostu Červení na západě (Room 1) a Modří na východě (Room 2). Outpost a Forest jsou středově souměrné,
+takže oba týmy mají stejné cesty. Obě jsou vymodelované v Blenderu (viz [Mapy z Blenderu](#mapy-z-blenderu)).
 
 ## Jak hrát
 
@@ -84,7 +91,9 @@ kvalita, post-processing, barva a velikost zaměřovače, ukazatele zdraví nad 
 
 Pravidla zápasu volí host v lobby (platí pro všechny):
 - **Vítr** OFF / LIGHT / STRONG: na začátku zápasu se losuje směr a síla (u LIGHT asi 2,5 m/s, u STRONG asi 5 m/s ± 20 %).
-  Na Town fouká naplno, ve Warehouse (uvnitř) vůbec. Vítr ukazují rukávy u spawnů obou týmů a čip se šipkou pod minimapou.
+  Na Town fouká naplno, na Outpostu 0,8×, v lese 0,6× (stromy), ve Warehouse (uvnitř) vůbec. Vítr ukazují rukávy
+  u spawnů obou týmů a čip se šipkou pod minimapou. Vítr je i slyšet (`WindAmbience`): hlasitost podle síly, s nárazy,
+  pod střechou tlumeně; vypíná se spolu s ambiencí v nastavení zvuku.
 - **Zamlžování brýlí** ON / OFF: buď se mlží všem stejně rychle (bez ohledu na typ brýlí), nebo nikomu. Otírá se klávesou F.
 
 ## Herní režimy
@@ -153,7 +162,9 @@ dotčené scény, takže ruční úpravy v nich se ztratí.
 | Check Spawn Points | report: umístění spawnů, silnice, z jak velké části mapy je bod vidět |
 | Update Arena Map Layout (objective points) | `ObjectiveMapSetup`: body režimů na Town (základny, A/B/C, místa bomby, VIP) |
 | Build Warehouse Map | `AirsoftWarehouseBuilder`: celá scéna `AirsoftWarehouse` včetně NavMeshe, přidá ji do build settings |
+| Build Outpost Map / Build Forest Map | `AirsoftBlenderMapBuilder`: scéna z FBX z Blenderu (kolize, materiály, světlo, NavMesh, spawny, body režimů), přidá ji do build settings |
 | Render Map Previews | náhledy map pro lobby do `Assets/Resources/MapPreviews` |
+| Check Map NavMesh | `MapNavCheck`: všechny spawny a body režimů na všech mapách leží na NavMeshi a dá se k nim dojít |
 | Fix Network Prefab IDs | zapíše síťová ID prefabů `FPSPlayer` a `Enemy` (potom restartuj virtuální hráče MPPM) |
 | Reimport Quaternius Assets | znovu importuje modely Quaternius |
 | Check Objective Rules / Check Medic Rules | kontrola pravidel režimů bez sítě |
@@ -173,6 +184,23 @@ a `AirsoftFPS.Editor.ObjectiveMapSetup.UpdateArenaLayout`.
 
 Nová mapa potřebuje: scénu v build settings, záznam v `MapCatalog.Maps`, komponentu `MapLayout` s body režimů,
 `SpawnPoint`y a náhled v `Resources/MapPreviews`.
+
+### Mapy z Blenderu
+Outpost a Forest jsou skripty pro Blender (`tools/Blender/build_outpost.py`, `build_forest.py`, společné pomůcky
+v `airsoft_bpy.py`), žádné ruční modelování. Skript postaví mapu, uloží `.blend` vedle sebe a vyexportuje
+`Assets/Models/Maps/<Mapa>.fbx`; Unity z FBX postaví scénu (`Tools/Airsoft/Build Outpost Map` / `Build Forest Map`).
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender -b --python tools/Blender/build_outpost.py -- "$PWD/Assets/Models/Maps/Outpost.fbx" "$PWD/tools/Blender/outpost.blend"
+```
+```bash
+/Applications/Unity/Hub/Editor/6000.6.8f1/Unity.app/Contents/MacOS/Unity -batchmode -quit -projectPath "$PWD" -executeMethod AirsoftFPS.Editor.AirsoftBlenderMapBuilder.BuildAll
+```
+Potom náhledy jako samostatný krok (`AirsoftWarehouseBuilder.RenderMapPreviews`). Co s objektem udělá Unity, říká jeho
+jméno v Blenderu: `VIS_…` jen vizuál bez kolize, `MMH_…` navíc schované na minimapě (střechy, koruny stromů),
+`GP_…` prázdné objekty pro herní body (`GP_Spawn_R_n` / `GP_Spawn_B_n` / `GP_Spawn_F_n`, `GP_Enemy_n`,
+`GP_RedBase`, `GP_BlueBase`, `GP_CP_A..C`, `GP_Bomb_A..B`, `GP_VipStart`, `GP_VipExtract`), `Probe_*` kontrola os,
+vše ostatní dostane MeshCollider. Jméno materiálu v Blenderu určuje zvuk kroků a dopadů (`Surfaces.cs`: „Wood“,
+„Sand“, „Ground“, „Metal“…).
 
 ### Build a vydání
 Podrobně v [docs/BUILD.md](docs/BUILD.md). Jsou dvě cesty:
@@ -200,13 +228,16 @@ Assets/
     UI/                      UIKit (barvy, písma, prvky), UIPoly, GameSettings, SettingsScreen, Minimap, ProfileUI
     Objectives/              ObjectiveMode, RoundMode, CaptureTheFlag, Domination, Medic, BombMode, VipEscort,
                              ObjectiveHUD, MapManifest
-  Editor/                    AirsoftSceneBuilder, AirsoftMapBuilder, AirsoftWarehouseBuilder, ObjectiveMapSetup,
-                             AirsoftAssetSetup, kontroly *LogicCheck / *PlayCheck
-  Scenes/                    AirsoftLobby, AirsoftArena (Town), AirsoftWarehouse (+ složka s NavMeshem)
+  Editor/                    AirsoftSceneBuilder, AirsoftMapBuilder, AirsoftWarehouseBuilder, AirsoftBlenderMapBuilder,
+                             ObjectiveMapSetup, AirsoftAssetSetup, kontroly *LogicCheck / *PlayCheck, MapNavCheck
+  Scenes/                    AirsoftLobby, AirsoftArena (Town), AirsoftWarehouse, AirsoftOutpost, AirsoftForest
+                             (+ složky s NavMeshem)
+  Models/Maps/               Outpost.fbx, Forest.fbx (export z Blenderu)
   Prefabs/                   FPSPlayer, Enemy
   Resources/                 AirsoftUI/Fonts, MapPreviews, MapManifest.asset
   ThirdParty/Quaternius/     low-poly modely (postavy, zbraně, budovy, ulice, příroda, rekvizity)
   DefaultNetworkPrefabs.asset   seznam síťových prefabů
+tools/Blender/                skripty map pro Blender (+ .blend)
 .github/workflows/build.yml  CI build
 docs/BUILD.md                návod na build a itch.io
 DEVLOG.md                    vývojový deník

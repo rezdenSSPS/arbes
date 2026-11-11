@@ -103,7 +103,12 @@ namespace AirsoftFPS.Editor
         static string ArenaPathFor(string sceneName) => "Assets/Scenes/" + sceneName + ".unity";
 
         // Half the side of the square the preview shows (play area plus the boundary walls).
-        static float PreviewHalf(string sceneName) => sceneName == "AirsoftWarehouse" ? Half + 1.5f : 42f;
+        static float PreviewHalf(string sceneName)
+        {
+            if (sceneName == "AirsoftWarehouse") return Half + 1.5f;
+            float h = AirsoftBlenderMapBuilder.PreviewHalfFor(sceneName);   // Outpost, Forest
+            return h > 0f ? h : 42f;
+        }
 
         static void AddToBuildSettings(string path)
         {

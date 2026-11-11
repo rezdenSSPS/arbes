@@ -213,6 +213,8 @@ namespace AirsoftFPS.Editor
                         Check(N("match_start") >= 1 && N("whistle") >= 1, "match start sting + whistle");
                         string amb = MatchNet.CurrentMapScene.Contains("Warehouse") ? "amb_indoor" : "amb_outdoor";
                         Check(!GameSettings.Ambience || AirsoftAudio.CurrentMusic == amb, "ambience in the match (" + AirsoftAudio.CurrentMusic + ")");
+                        bool windy = BBBallistics.Wind.sqrMagnitude > 0.01f && GameSettings.Ambience;
+                        Check(!windy || WindAmbience.Playing, $"wind audible ({BBBallistics.Wind.magnitude:0.0} m/s, volume {WindAmbience.Volume:0.00})");
                         Check(Me().GetComponent<FootstepAudio>() != null, "player has footsteps");
                         CheckVolumes("match");
                         Mark();

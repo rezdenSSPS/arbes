@@ -14,5 +14,11 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/AirsoftWarehouse.unity
     guid: c8cbca7d225e0412bb9b0ea7f9b7e7ad
+  - enabled: 1
+    path: Assets/Scenes/AirsoftOutpost.unity
+    guid: cb886a8c09cf44b3c961c7b6097926e1
+  - enabled: 1
+    path: Assets/Scenes/AirsoftForest.unity
+    guid: 9a49d560044af4c8f9d4140dc9f834b0
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}

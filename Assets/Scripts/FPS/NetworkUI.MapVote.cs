@@ -27,23 +27,27 @@ namespace AirsoftFPS
 
         void BuildMapVote(RectTransform col)
         {
-            const float W = 280f, HeadH = 16f, CardH = 112f, ThumbH = 64f, Gap = 8f;
+            // up to two cards side by side; more maps wrap into rows of two with shorter preview strips
+            const float W = 280f, HeadH = 16f, Gap = 8f;
+            int n = Mathf.Max(1, MapCatalog.Count);
+            int cols = Mathf.Min(n, 2), rows = (n + cols - 1) / cols;
+            float ThumbH = rows > 1 ? 40f : 64f;
+            float CardH = ThumbH + 48f;
             var block = Rect(col, "MapVote");
-            block.LE(-1, HeadH + 6f + CardH);
+            block.LE(-1, HeadH + 6f + rows * CardH + (rows - 1) * Gap);
 
             var head = Rect(block, "Head").TL(0, 0, W, HeadH);
             Caption(head, "MAP VOTE", 12, Muted, 0.16f).rectTransform.Fill();
             mapHint = Label(head, "", F.Body, 11, Muted, TextAlignmentOptions.MidlineRight);
             mapHint.rectTransform.Fill();
 
-            int n = Mathf.Max(1, MapCatalog.Count);
-            float w = (W - Gap * (n - 1)) / n;
+            float w = (W - Gap * (cols - 1)) / cols;
             for (int i = 0; i < MapCatalog.Count; i++)
             {
                 int map = i;
                 var c = new MapCard();
                 c.btn = Button(block, "", Btn.Ghost, 10, () => { if (MatchNet.Instance != null) MatchNet.Instance.VoteMap(map); });
-                c.btn.GetComponent<RectTransform>().TL(i * (w + Gap), HeadH + 6f, w, CardH);
+                c.btn.GetComponent<RectTransform>().TL((i % cols) * (w + Gap), HeadH + 6f + (i / cols) * (CardH + Gap), w, CardH);
                 c.btn.label.gameObject.SetActive(false);
                 c.group = c.btn.gameObject.AddComponent<CanvasGroup>();
 

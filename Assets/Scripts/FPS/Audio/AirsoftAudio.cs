@@ -350,6 +350,7 @@ namespace AirsoftFPS
             musicB = MakeMusic("musicB");
             fallback = gameObject.AddComponent<AudioListener>();
             fallback.enabled = false;
+            gameObject.AddComponent<WindAmbience>().Init(this, sfx);   // wind you can hear (WindAmbience.cs)
             SceneManager.sceneLoaded += OnSceneLoaded;
             SceneManager.sceneUnloaded += OnSceneUnloaded;
         }
@@ -487,6 +488,8 @@ namespace AirsoftFPS
             var l = Listener();
             return l != null ? Vector3.Distance(l.transform.position, pos) : 0f;
         }
+
+        internal AudioListener ActiveListener() => Listener();
 
         AudioListener Listener()
         {

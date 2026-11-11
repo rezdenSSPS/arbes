@@ -31,3 +31,21 @@ MonoBehaviour:
     vipStart: 1
     vipExtract: 1
     known: 1
+  - scene: AirsoftOutpost
+    displayName: Outpost
+    redBase: 1
+    blueBase: 1
+    controlPoints: 3
+    bombSites: 2
+    vipStart: 1
+    vipExtract: 1
+    known: 1
+  - scene: AirsoftForest
+    displayName: Forest
+    redBase: 1
+    blueBase: 1
+    controlPoints: 3
+    bombSites: 2
+    vipStart: 1
+    vipExtract: 1
+    known: 1
