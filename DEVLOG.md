@@ -236,3 +236,10 @@ AutoConnect.cs, NetDiag.cs.
 - **Zvuk větru** (`WindAmbience`, procedurální, bez assetu): smyčka šumu, hlasitost podle síly větru zápasu, pomalé nárazy (otevírají filtr, takže vítr „zahučí“), pod střechou ztlumený. Vypíná se s ambiencí. Kroky (běh / chůze / plížení podle povrchu) už hra měla.
 - Nová kontrola `MapNavCheck` (Tools/Airsoft/Check Map NavMesh): všechny spawny a body režimů na všech mapách leží na NavMeshi a jde se k nim dostat od prvního spawnu.
 - Testy: kompilace čistá (Unity 6000.6.8f1, batch), objektivy 89/0, medik 39/0, `MapNavCheck` 254/0 (všechny 4 mapy), zvuková play kontrola 34/0 (vítr hraje), play kontroly režimů na Outpostu i v lese: CTF 16/0, Domination 15/0, Bomb 27/0, VIP 21/0. Mapy zatím **nikdo neodehrál** vlastníma rukama (vzhled, krytí, pocit z pohybu) a zvuk větru nikdo neslyšel.
+
+## 2026-11-11 — Tabulka lídrů, náhodná mapa, lišta zbraní, větší karty režimů
+- **Tabulka lídrů** vpravo nahoře v HUDu (`HUDManager.UpdateLeaders`): prvních 5 hráčů v pořadí scoreboardu s počtem killů (Milsim / Medic: zásahy), v týmových režimech barvy týmů, vlastní řádek zvýrazněný a mimo první pětku přidaný dole s pořadím. Kill feed se posouvá pod ni.
+- **RANDOM MAP** v hlasování o mapě (`MapCatalog.RANDOM`): dá se pro ni hlasovat i ji zamknout; server při startu vylosuje mapu, která umí zvolený režim, a pokud je víc možností, ne tu naposledy hranou. Režim je v lobby dostupný, když ho umí aspoň jedna mapa (`ObjectiveMode.IsAvailableOn`).
+- **Lišta zbraní** ukazuje jen sloty, které hráč může použít (koupené a povolené režimem, např. v One in the Chamber jen 1911), zbytek se skryje a lišta se vycentruje. `WeaponController.SlotOwned` teď zohledňuje i pravidla režimu.
+- **Karty režimů** v lobby jsou zase čitelné: 48 px s písmem 18 / 12 v posuvném seznamu (kolečko myši, tenký posuvník), vybraný režim se sám odroluje do zorného pole.
+- Testy: kompilace čistá, objektivy 89/0, medik 39/0, zvuková play kontrola 34/0, CTF s náhodnou mapou dvakrát 16/0 (padl Warehouse a Forest). Nový HUD a lobby **nebyly zkontrolované očima** (batch bez grafiky).

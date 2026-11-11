@@ -130,6 +130,15 @@ namespace AirsoftFPS
         readonly List<(TextMeshProUGUI v, TextMeshProUGUI k)> resStats = new();
 
         class FeedRow { public GameObject go; public Image bg, frame; public TextMeshProUGUI killer, weapon, victim; }
+        class LeaderRow { public GameObject go; public Image bg, swatch; public TextMeshProUGUI rank, name, value; }
+
+        // top-right live leaderboard (kill feed sits under it)
+        const int LEADER_ROWS = 5;           // top five, plus your own row when you're further down
+        const float LEADER_W = 250f, LEADER_HEAD = 24f, LEADER_ROW = 23f, HUD_TOP = 20f;
+        RectTransform leaderBox, feedRt;
+        TextMeshProUGUI leaderHeadValue;
+        readonly List<LeaderRow> leaderRows = new List<LeaderRow>();
+        float leaderTimer;
         class SlotView { public Image bg, frame; public TextMeshProUGUI key, name; }
         class TeamView { public Image header; public TextMeshProUGUI name, score, headK, headD, headO; public readonly List<(GameObject go, Image bg, TextMeshProUGUI n, TextMeshProUGUI k, TextMeshProUGUI d)> rows = new(); public readonly List<TextMeshProUGUI> obj = new(); }
         class ListRow { public GameObject go; public Image bg, bar; public TextMeshProUGUI rank, name, progress, a, b; public GameObject barBack; }
@@ -389,6 +398,10 @@ namespace AirsoftFPS
                 }
             }
 
+            // leaderboard (a few times a second)
+            leaderTimer -= Time.unscaledDeltaTime;
+            if (leaderTimer <= 0f && mnet != null) { leaderTimer = 0.25f; UpdateLeaders(mnet, me); }
+
             // kill feed
             for (int i = killLines.Count - 1; i >= 0; i--)
                 if (Time.unscaledTime >= killLines[i].expire) { killLines.RemoveAt(i); killFeedDirty = true; }
@@ -455,7 +468,9 @@ namespace AirsoftFPS
                 {
                     var sv = slotViews[i];
                     bool on = i == active;
-                    bool locked = !on && (gg || !weaponCtrl.SlotOwned(i));   // Gun Game level-locked, or not bought yet
+                    bool locked = !on && (gg || !weaponCtrl.SlotOwned(i));   // Gun Game level-locked, not bought, or not in this mode
+                    sv.bg.gameObject.SetActive(!locked);   // only weapons you can pick are shown (the row re-centres)
+                    if (locked) continue;
                     string shortName = ws != null && i < ws.Length ? (string.IsNullOrEmpty(ws[i].shortName) ? ws[i].weaponName : ws[i].shortName) : "";
                     sv.name.text = locked ? "—" : shortName;
                     sv.bg.color = on ? Accent : locked ? Scrim(0.35f) : Scrim(0.72f);
@@ -474,6 +489,44 @@ namespace AirsoftFPS
                 reloadHint.SetActive(lowAmmo || reloading);
                 reloadText.text = reloading ? "RELOADING…" : "RELOAD";
             }
+        }
+
+        // Top-right leaderboard: the scoreboard's order (objective points, then kills, then fewer deaths),
+        // showing kills (hits in Milsim / Medic). Team modes colour the names; your row is highlighted and
+        // added at the bottom with your real rank when you're not in the top five.
+        void UpdateLeaders(MatchNet mnet, ulong me)
+        {
+            var mode = mnet.Mode;
+            var list = new List<MatchNet.Entry>(mnet.Roster);
+            list.Sort((a, b) => CompareForRanking(a, b, mode));
+            bool team = MatchNet.IsTeamMode(mode);
+            leaderHeadValue.text = MatchNet.IsHitRuleMode(mode) ? "HITS" : "KILLS";
+
+            int myRank = list.FindIndex(e => e.clientId == me);
+            int shown = 0;
+            void Show(int rank)
+            {
+                var e = list[rank];
+                var r = leaderRows[shown++];
+                bool you = e.clientId == me;
+                r.go.SetActive(true);
+                r.bg.color = you ? A(Accent, 0.2f) : Color.clear;
+                r.rank.text = (rank + 1).ToString();
+                r.rank.color = rank == 0 ? Accent : Muted;
+                r.swatch.gameObject.SetActive(team);
+                r.swatch.color = TeamColor(e.team);
+                r.name.text = you ? e.name + " <color=" + Html(Muted) + ">(you)</color>" : e.name;
+                r.name.color = team ? TeamColor(e.team) : Fg;
+                r.value.text = e.kills.ToString();
+                r.value.color = rank == 0 && e.kills > 0 ? Accent : Fg;
+            }
+            for (int i = 0; i < list.Count && i < LEADER_ROWS; i++) Show(i);
+            if (myRank >= LEADER_ROWS) Show(myRank);
+            for (int i = shown; i < leaderRows.Count; i++) leaderRows[i].go.SetActive(false);
+
+            float h = LEADER_HEAD + shown * LEADER_ROW + (shown > 0 ? 4f : 0f);
+            leaderBox.sizeDelta = new Vector2(LEADER_W, h);
+            feedRt.anchoredPosition = new Vector2(feedRt.anchoredPosition.x, -HUD_TOP - h - 8f);
         }
 
         void RefreshKillFeed(MatchNet.GameModeType mode)
@@ -1003,9 +1056,36 @@ namespace AirsoftFPS
             clockFrame.enabled = false;
             clockChip.SetActive(false);
 
-            // top-right kill feed
+            // top-right leaderboard: rank, name, kills of the top five (and you)
+            leaderBox = Box(root, "Leaders", Scrim(0.72f)).rectTransform;
+            leaderBox.At(1f, 1f, -24, -HUD_TOP, LEADER_W, LEADER_HEAD);
+            Label(leaderBox, "LEADERS", F.BodyBold, 11, Muted, TextAlignmentOptions.MidlineLeft, 0.14f)
+                .rectTransform.TL(10, 0, 120, LEADER_HEAD);
+            leaderHeadValue = Label(leaderBox, "KILLS", F.BodyBold, 11, Muted, TextAlignmentOptions.MidlineRight, 0.14f);
+            leaderHeadValue.rectTransform.TL(LEADER_W - 90, 0, 80, LEADER_HEAD);
+            for (int i = 0; i < LEADER_ROWS + 1; i++)
+            {
+                var r = new LeaderRow();
+                r.bg = Box(leaderBox, "Row" + i, Color.clear);
+                r.bg.rectTransform.TL(0, LEADER_HEAD + i * LEADER_ROW, LEADER_W, LEADER_ROW);
+                r.go = r.bg.gameObject;
+                r.rank = Label(r.bg.transform, "", F.MonoBold, 12, Muted, TextAlignmentOptions.MidlineLeft);
+                r.rank.rectTransform.TL(10, 0, 22, LEADER_ROW);
+                r.swatch = Box(r.bg.transform, "Team", Fg);
+                r.swatch.rectTransform.TL(32, 7, 3, LEADER_ROW - 14);
+                r.name = Label(r.bg.transform, "", F.BodySemi, 13, Fg, TextAlignmentOptions.MidlineLeft);
+                r.name.rectTransform.TL(40, 0, LEADER_W - 40 - 48, LEADER_ROW);
+                r.name.overflowMode = TextOverflowModes.Ellipsis;
+                r.value = Label(r.bg.transform, "", F.MonoBold, 14, Fg, TextAlignmentOptions.MidlineRight);
+                r.value.rectTransform.TL(LEADER_W - 50, 0, 40, LEADER_ROW);
+                r.go.SetActive(false);
+                leaderRows.Add(r);
+            }
+
+            // top-right kill feed, under the leaderboard
             var feed = VCol(root, "KillFeed", 4, TextAnchor.UpperRight, false);
-            feed.GetComponent<RectTransform>().At(1f, 1f, -24, -20, 520, 200);
+            feedRt = feed.GetComponent<RectTransform>();
+            feedRt.At(1f, 1f, -24, -HUD_TOP - LEADER_HEAD - 8, 520, 200);
             for (int i = 0; i < 5; i++)
             {
                 var r = new FeedRow();

@@ -477,14 +477,11 @@ namespace AirsoftFPS
             return ShopCatalog.OwnedWeapon(weapons[idx].weaponName);
         }
 
-        // HUD: is a slot owned (for dimming locked weapons)? Gun Game shows all.
+        // HUD: can this player use the slot right now (owned and allowed by the mode)? Gun Game: all.
         public bool SlotOwned(int idx)
         {
             if (idx < 0 || weapons == null || idx >= weapons.Length) return true;
-            var mn = MatchNet.Instance;
-            if (mn != null && mn.Mode == MatchNet.GameModeType.GunGame) return true;
-            if (ObjectiveMode.WeaponGranted(OwnerClientId, weapons[idx])) return true;
-            return ShopCatalog.OwnedWeapon(weapons[idx].weaponName);
+            return WeaponUsable(idx);
         }
 
         // Owner: full magazines and reserves again (round modes, when a new round starts).

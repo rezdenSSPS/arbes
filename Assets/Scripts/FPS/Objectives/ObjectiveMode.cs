@@ -97,11 +97,25 @@ namespace AirsoftFPS
         public static bool HasOwnClock(MatchNet.GameModeType m) => defs.TryGetValue(m, out var d) && d.ownClock;
 
         // Can the current match map play this mode? reason = short text for the lobby card when not.
+        // (Lobby with RANDOM MAP picked: on at least one map; the draw then only picks maps that can play it.)
         public static bool IsAvailable(MatchNet.GameModeType m, out string reason)
+        {
+            var mn = MatchNet.Instance;
+            if (mn != null && mn.RandomMapPending)
+            {
+                reason = null;
+                for (int i = 0; i < MapCatalog.Count; i++) if (IsAvailableOn(m, MapCatalog.SceneOf(i), out _)) return true;
+                reason = "Not available on any map";
+                return false;
+            }
+            return IsAvailableOn(m, MatchNet.CurrentMapScene, out reason);
+        }
+
+        public static bool IsAvailableOn(MatchNet.GameModeType m, string scene, out string reason)
         {
             reason = null;
             if (!defs.TryGetValue(m, out var d) || d.missing == null) return true;
-            var caps = MapManifest.For(MatchNet.CurrentMapScene);
+            var caps = MapManifest.For(scene);
             if (!caps.known) { reason = "Not available: this map has no layout data"; return false; }
             reason = d.missing(caps);
             return reason == null;

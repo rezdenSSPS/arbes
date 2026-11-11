@@ -59,8 +59,11 @@ Pokud se nikdo nepřipojí, může hostitele blokovat firewall (povol hru, pří
 už používá jiná spuštěná hra na stejném počítači, hostování skončí chybou s možností to zkusit znovu.
 
 ### Lobby
-- Hostitel vybírá režim (karty, nebo klávesa **M**), časový limit (Off / 5 / 10 / 15 min), boty a obtížnost botů.
+- Hostitel vybírá režim (karty, nebo klávesa **M**; seznam režimů se posouvá kolečkem myši), časový limit
+  (Off / 5 / 10 / 15 min), boty a obtížnost botů.
 - Každý hráč si nastaví jméno (callsign), postavu (**CUSTOMIZE**), hlasuje o mapě a dá **READY UP** (klávesa **R**).
+  Hlasovat jde i pro **RANDOM MAP**: mapa se vylosuje při startu z map, které zvolený režim umí, a pokud to jde,
+  jiná než naposledy hraná. Host může zamknout i náhodnou mapu.
 - Hostitel spustí zápas tlačítkem **START MATCH**. Karta režimu, pro který mapa nemá potřebné body, je zašedlá.
 
 ## Ovládání
@@ -118,6 +121,11 @@ Pravidla zápasu volí host v lobby (platí pro všechny):
 vyhrává lepší skóre (Juggernaut a One in the Chamber: nejvíc killů, v One in the Chamber při shodě víc zbylých životů),
 při přesné shodě je remíza. V týmových režimech je vypnutý friendly fire. Po spawnu mají hráči 3 s ochranu, která
 skončí prvním výstřelem.
+
+V zápase je vpravo nahoře **tabulka lídrů**: pořadí jako na scoreboardu (Tab), prvních pět hráčů s počtem killů
+(v Milsimu a Medicu zásahů), v týmových režimech v barvách týmů; vlastní řádek je zvýrazněný a když nejsi v první
+pětce, přidá se dole s tvým pořadím. Kill feed je pod ní. Lišta zbraní dole ukazuje jen zbraně, které v tomto
+režimu můžeš použít (koupené a povolené, v Gun Game jen aktuální).
 
 Po zápase výsledková obrazovka ukáže až 4 **ocenění** (Ghost, Rambo, Bang Master, Sharpshooter, Patient Zero,
 Last Survivor, Giant Slayer, Clear Eyes). Každé dá držiteli +25 XP a +40 Credits.

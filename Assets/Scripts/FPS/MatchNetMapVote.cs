@@ -4,8 +4,10 @@ using Unity.Netcode;
 
 namespace AirsoftFPS
 {
-    // Lobby map vote (part of MatchNet). Every player votes for one map of MapCatalog; the map with
-    // the most votes is played. A tie goes to the host's vote, and the host may lock a map outright.
+    // Lobby map vote (part of MatchNet). Every player votes for one map of MapCatalog or for RANDOM MAP
+    // (MapCatalog.RANDOM); the choice with the most votes is played. A tie goes to the host's vote, and the
+    // host may lock a choice outright. RANDOM is drawn when the match starts, among the maps that can play
+    // the mode, avoiding the map played last when there is another.
     // Votes travel in their own messages next to the roster state, so the rest of MatchNet is unchanged:
     // the server re-sends them with every BroadcastState and whenever a vote changes.
     public partial class MatchNet
@@ -16,7 +18,7 @@ namespace AirsoftFPS
         // clientId -> voted map index (server-authoritative; mirrored on clients)
         readonly Dictionary<ulong, int> mapVotes = new Dictionary<ulong, int>();
 
-        // Map the host locked in the lobby (-1 = the vote decides).
+        // Choice the host locked in the lobby (-1 = the vote decides; MapCatalog.RANDOM = random map).
         public int HostMapLock { get; private set; } = -1;
 
         // Map of the current (or last played) match; index into MapCatalog.Maps.
@@ -28,11 +30,14 @@ namespace AirsoftFPS
         // Lobby: the map START MATCH would load; match / results: the map being played (CurrentMapScene).
         string VotedOrMatchScene => CurrentPhase == Phase.Lobby ? MapCatalog.SceneOf(WinningMap) : MatchScene;
 
+        // Lobby: RANDOM MAP is winning, so the map is not known until START.
+        public bool RandomMapPending => CurrentPhase == Phase.Lobby && WinningMap == MapCatalog.RANDOM;
+
         public int MapVoteOf(ulong clientId) => mapVotes.TryGetValue(clientId, out int v) ? v : -1;
 
         public int LocalMapVote => nm != null ? MapVoteOf(nm.LocalClientId) : -1;
 
-        // Votes for a map, counting only players still in the room.
+        // Votes for a map (or MapCatalog.RANDOM), counting only players still in the room.
         public int MapVotes(int map)
         {
             int n = 0;
@@ -40,21 +45,22 @@ namespace AirsoftFPS
             return n;
         }
 
-        // The map START MATCH would load right now: the host lock, else the most votes. Ties go to the
-        // host's vote, then to the map played last, then to the first one in the catalog.
+        // The choice START MATCH would use right now (a map index or MapCatalog.RANDOM): the host lock, else
+        // the most votes. Ties go to the host's vote, then to the map played last, then to the catalog order
+        // (RANDOM last).
         public int WinningMap
         {
             get
             {
-                if (MapCatalog.Valid(HostMapLock)) return HostMapLock;
-                int best = -1;
+                if (MapCatalog.ValidChoice(HostMapLock)) return HostMapLock;
+                int best = MapVotes(MapCatalog.RANDOM);
                 for (int i = 0; i < MapCatalog.Count; i++) best = System.Math.Max(best, MapVotes(i));
                 if (best <= 0) return MapCatalog.Valid(MatchMapIndex) ? MatchMapIndex : 0;
                 int hostVote = MapVoteOf(NetworkManager.ServerClientId);
-                if (MapCatalog.Valid(hostVote) && MapVotes(hostVote) == best) return hostVote;
+                if (MapCatalog.ValidChoice(hostVote) && MapVotes(hostVote) == best) return hostVote;
                 if (MapCatalog.Valid(MatchMapIndex) && MapVotes(MatchMapIndex) == best) return MatchMapIndex;
                 for (int i = 0; i < MapCatalog.Count; i++) if (MapVotes(i) == best) return i;
-                return 0;
+                return MapCatalog.RANDOM;
             }
         }
 
@@ -63,7 +69,7 @@ namespace AirsoftFPS
         {
             if (nm == null || !nm.IsConnectedClient || CurrentPhase != Phase.Lobby) return;
             if (map == LocalMapVote) map = -1;
-            if (!MapCatalog.Valid(map)) map = -1;
+            if (!MapCatalog.ValidChoice(map)) map = -1;
             if (nm.IsServer) { SetVote(nm.LocalClientId, map); BroadcastMapVote(); return; }
             SetVote(nm.LocalClientId, map);   // show it right away; the server's state follows
             OnStateChanged?.Invoke();
@@ -76,7 +82,7 @@ namespace AirsoftFPS
         public void HostLockMap(int map)
         {
             if (!IsHost || CurrentPhase != Phase.Lobby) return;
-            if (!MapCatalog.Valid(map)) map = -1;
+            if (!MapCatalog.ValidChoice(map)) map = -1;
             if (map == HostMapLock) return;
             HostMapLock = map;
             BroadcastMapVote();
@@ -84,12 +90,22 @@ namespace AirsoftFPS
 
         void SetVote(ulong clientId, int map)
         {
-            if (MapCatalog.Valid(map)) mapVotes[clientId] = map;
+            if (MapCatalog.ValidChoice(map)) mapVotes[clientId] = map;
             else mapVotes.Remove(clientId);
         }
 
-        // Server: pick the map when the match starts (HostStartMatch).
-        void ChooseMatchMap() => MatchMapIndex = WinningMap;
+        // Server: pick the map when the match starts (HostStartMatch). RANDOM: any map that can play the
+        // mode, not the one played last if there is another.
+        void ChooseMatchMap()
+        {
+            int choice = WinningMap;
+            if (choice != MapCatalog.RANDOM) { MatchMapIndex = choice; return; }
+            var pool = new List<int>();
+            for (int i = 0; i < MapCatalog.Count; i++)
+                if (ObjectiveMode.IsAvailableOn(Mode, MapCatalog.SceneOf(i), out _)) pool.Add(i);
+            if (pool.Count > 1) pool.Remove(MatchMapIndex);
+            MatchMapIndex = pool.Count > 0 ? pool[UnityEngine.Random.Range(0, pool.Count)] : 0;
+        }
 
         // Server: a fresh vote for the next match (ReturnToLobby).
         void ResetMapVote()
@@ -134,12 +150,12 @@ namespace AirsoftFPS
             w.WriteValueSafe(HostMapLock);
             w.WriteValueSafe(MatchMapIndex);
             int n = 0;
-            foreach (var e in roster) if (MapCatalog.Valid(MapVoteOf(e.clientId))) n++;
+            foreach (var e in roster) if (MapCatalog.ValidChoice(MapVoteOf(e.clientId))) n++;
             w.WriteValueSafe(n);
             foreach (var e in roster)
             {
                 int v = MapVoteOf(e.clientId);
-                if (!MapCatalog.Valid(v)) continue;
+                if (!MapCatalog.ValidChoice(v)) continue;
                 w.WriteValueSafe(e.clientId);
                 w.WriteValueSafe(v);
             }
@@ -159,7 +175,7 @@ namespace AirsoftFPS
                 reader.ReadValueSafe(out int v);
                 SetVote(cid, v);
             }
-            HostMapLock = MapCatalog.Valid(hostLock) ? hostLock : -1;
+            HostMapLock = MapCatalog.ValidChoice(hostLock) ? hostLock : -1;
             MatchMapIndex = MapCatalog.Valid(matchMap) ? matchMap : 0;
             OnStateChanged?.Invoke();
         }

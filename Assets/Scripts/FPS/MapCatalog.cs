@@ -25,6 +25,12 @@ namespace AirsoftFPS
 
         public static int Count => Maps.Length;
 
+        // Map vote choice "RANDOM MAP": the server draws a map when the match starts (MatchNet.ChooseMatchMap).
+        public const int RANDOM = -2;
+
+        // A real map or RANDOM (what a vote or the host lock may hold).
+        public static bool ValidChoice(int i) => Valid(i) || i == RANDOM;
+
         public static bool Valid(int i) => i >= 0 && i < Maps.Length;
 
         public static string SceneOf(int i) => Maps[Valid(i) ? i : 0].scene;

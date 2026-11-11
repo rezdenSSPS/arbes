@@ -17,7 +17,7 @@ namespace AirsoftFPS.Editor
     public static class ObjectivePlayCheck
     {
         static MatchNet.GameModeType mode;
-        static int mapIndex = -1;   // -objMap <MapCatalog index>: the host locks that map (-1 = the default / vote)
+        static int mapIndex = -1;   // -objMap <MapCatalog index>: the host locks that map (-1 = the default / vote, -2 = random)
         static int stage;
         static double stageStart, runStart;
         static int fails, passes;
@@ -122,7 +122,7 @@ namespace AirsoftFPS.Editor
                         Next(); break;
                     case 1:   // mode + ready + start
                         if (mn == null || mn.Roster.Count == 0 || InStage < 1) return;
-                        if (mapIndex >= 0) mn.HostLockMap(mapIndex);
+                        if (MapCatalog.ValidChoice(mapIndex)) mn.HostLockMap(mapIndex);   // -2 = RANDOM MAP
                         Check(ObjectiveMode.IsAvailable(mode, out string why), "mode available on " + MatchNet.CurrentMapScene + " (" + (why ?? "ok") + ")");
                         mn.HostSetMode(mode);
                         Check(mn.Mode == mode, "host picked " + mode);

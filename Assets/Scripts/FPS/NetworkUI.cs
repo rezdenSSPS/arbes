@@ -86,6 +86,8 @@ namespace AirsoftFPS
         TMP_InputField lobbyName;
         GameObject hostModeKey, clientModeNote, tdmNote;
         readonly List<(KitButton btn, Image frame, CanvasGroup group)> modeCards = new();
+        ScrollRect modeScroll;     // the mode list scrolls when there are more modes than fit
+        int scrolledToMode = -1;
         readonly List<TextMeshProUGUI> modeCardDescs = new();   // one-line description, or why the map can't play it
         Segmented timeSeg;
         CanvasGroup timeGroup;
@@ -829,8 +831,7 @@ namespace AirsoftFPS
         void BuildModeColumn(RectTransform colRt)
         {
             var col = colRt.gameObject.AddComponent<VerticalLayoutGroup>();
-            bool dense = MatchNet.MODE_COUNT > 7;   // many modes: tighter cards and gaps so they all fit
-            col.spacing = MatchNet.MODE_COUNT > 12 ? 2 : dense ? 4 : 8; col.childControlWidth = col.childControlHeight = true;
+            col.spacing = 8; col.childControlWidth = col.childControlHeight = true;
             col.childForceExpandWidth = true; col.childForceExpandHeight = false;
 
             var head = Rect(colRt, "Head").LE(-1, 18);
@@ -840,14 +841,51 @@ namespace AirsoftFPS
             key.anchoredPosition = Vector2.zero;
             hostModeKey = key.gameObject;
 
-            // five cards fit the 492 px column at 72 px; more modes get compact one-line cards
+            // Up to five modes: 72 px cards with a wrapped description. More: 48 px cards in a scrolling list
+            // (mouse wheel / drag, thin bar on the right), so the text stays readable however many modes there are.
             bool compact = MatchNet.MODE_COUNT > 5;
-            float cardH = compact ? Mathf.Floor((492f - 18f - 32f - 18f - col.spacing * (MatchNet.MODE_COUNT + 2)) / MatchNet.MODE_COUNT) : 72f;
-            int densePad = Mathf.Clamp(Mathf.FloorToInt((cardH - 32f) / 2f), 1, 6);
+            float cardH = compact ? 48f : 72f;
+            Transform cardParent = colRt;
+            if (compact)
+            {
+                var view = Rect(colRt, "ModeList");
+                view.LE(-1, -1, -1, 1);
+                view.gameObject.AddComponent<Image>().color = Color.clear;   // catches wheel / drag over the gaps
+                view.gameObject.AddComponent<RectMask2D>();
+                var content = VCol(view, "Content", 4, TextAnchor.UpperLeft);
+                content.padding = new RectOffset(0, 10, 0, 0);   // room for the scroll bar
+                var crt = content.GetComponent<RectTransform>();
+                crt.anchorMin = new Vector2(0f, 1f); crt.anchorMax = Vector2.one; crt.pivot = new Vector2(0.5f, 1f);
+                crt.offsetMin = crt.offsetMax = Vector2.zero;
+                content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+                var barRt = Rect(view, "Scrollbar");
+                barRt.anchorMin = new Vector2(1f, 0f); barRt.anchorMax = Vector2.one; barRt.pivot = new Vector2(1f, 0.5f);
+                barRt.offsetMin = new Vector2(-4f, 0f); barRt.offsetMax = Vector2.zero;
+                barRt.gameObject.AddComponent<Image>().color = A(Line, 0.5f);
+                var area = Rect(barRt, "Area").Fill();
+                var handle = Box(area, "Handle", Muted).rectTransform.Fill();
+                var bar = barRt.gameObject.AddComponent<Scrollbar>();
+                bar.direction = Scrollbar.Direction.BottomToTop;
+                bar.handleRect = handle;
+                bar.targetGraphic = handle.GetComponent<Image>();
+
+                modeScroll = view.gameObject.AddComponent<ScrollRect>();
+                modeScroll.horizontal = false;
+                modeScroll.vertical = true;
+                modeScroll.movementType = ScrollRect.MovementType.Clamped;
+                modeScroll.scrollSensitivity = 30f;
+                modeScroll.inertia = false;
+                modeScroll.viewport = view;
+                modeScroll.content = crt;
+                modeScroll.verticalScrollbar = bar;
+                modeScroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
+                cardParent = content.transform;
+            }
             for (int i = 0; i < MatchNet.MODE_COUNT; i++)
             {
                 var mode = (MatchNet.GameModeType)i;
-                var b = Button(colRt, "", Btn.Ghost, 10, () =>
+                var b = Button(cardParent, "", Btn.Ghost, 10, () =>
                 {
                     if (isHost && MatchNet.Instance != null) MatchNet.Instance.HostSetMode(mode);
                 });
@@ -855,18 +893,15 @@ namespace AirsoftFPS
                 var group = b.gameObject.AddComponent<CanvasGroup>();
                 var frame = Frame(b.transform, Line, 1f);
                 // title + description, centred vertically in the card
-                var txt = VCol(b.transform, "Text", dense ? 0 : compact ? 1 : 2, TextAnchor.MiddleLeft);
-                bool tiny = cardH < 32f;   // 13 modes: 30 px cards
-                txt.padding = tiny ? new RectOffset(14, 14, 0, 0)
-                            : dense ? new RectOffset(14, 14, densePad, densePad)
-                            : compact ? new RectOffset(16, 16, 6, 6) : new RectOffset(16, 16, 9, 9);
+                var txt = VCol(b.transform, "Text", compact ? 1 : 2, TextAnchor.MiddleLeft);
+                txt.padding = compact ? new RectOffset(14, 14, 5, 5) : new RectOffset(16, 16, 9, 9);
                 txt.GetComponent<RectTransform>().Fill();
-                var title = Label(txt.transform, ModeName(mode).ToUpperInvariant(), F.CondBold, dense ? (tiny ? 15 : 16) : compact ? 18 : 20, Fg, TextAlignmentOptions.MidlineLeft, 0.02f);
-                title.LE(-1, dense ? (tiny ? 14 : cardH < 34f ? 17 : 18) : compact ? 20 : 22);   // 11+ modes: title + desc must fit
+                var title = Label(txt.transform, ModeName(mode).ToUpperInvariant(), F.CondBold, compact ? 18 : 20, Fg, TextAlignmentOptions.MidlineLeft, 0.02f);
+                title.LE(-1, compact ? 20 : 22);
                 title.overflowMode = TextOverflowModes.Overflow;   // a one-line title may poke past its slot, never vanish
-                var desc = Label(txt.transform, ModeDesc(mode), F.Body, dense ? (tiny ? 10 : 11) : 12, Muted);
+                var desc = Label(txt.transform, ModeDesc(mode), F.Body, 12, Muted);
                 // TMP drops a line taller than its rect, so the slot is at least ~1.3 × the font size
-                if (compact) { desc.overflowMode = TextOverflowModes.Ellipsis; desc.LE(-1, dense ? 14 : 16); }
+                if (compact) { desc.overflowMode = TextOverflowModes.Ellipsis; desc.LE(-1, 16); }
                 else desc.Wrap().LE(-1, 30);
                 b.label.gameObject.SetActive(false);
                 modeCards.Add((b, frame, group));
@@ -904,6 +939,25 @@ namespace AirsoftFPS
             Frame(shackle, Muted, 2f);
             Label(note.transform, "The host picks the mode and time limit", F.Body, 13, Muted).LE(-1, 18);
             clientModeNote = note.gameObject;
+        }
+
+        // Keep the picked mode visible in the scrolling list (the host cycles with M; clients follow the host).
+        void ScrollModeIntoView(int mode)
+        {
+            if (modeScroll == null || mode == scrolledToMode || mode < 0 || mode >= modeCards.Count) return;
+            var content = modeScroll.content;
+            var view = modeScroll.viewport;
+            float viewH = view.rect.height, contentH = content.rect.height;
+            if (viewH <= 0f || contentH <= 0f) return;   // not laid out yet: try next frame
+            if (contentH <= viewH) { scrolledToMode = mode; return; }
+            var card = (RectTransform)modeCards[mode].btn.transform;
+            float top = -card.anchoredPosition.y - card.rect.height * (1f - card.pivot.y);   // from the content top
+            float bottom = top + card.rect.height;
+            float y = content.anchoredPosition.y;   // how far the content is scrolled down
+            if (top < y) y = top;
+            else if (bottom > y + viewH) y = bottom - viewH;
+            content.anchoredPosition = new Vector2(content.anchoredPosition.x, Mathf.Clamp(y, 0f, contentH - viewH));
+            scrolledToMode = mode;
         }
 
         void BuildPlayerColumn(RectTransform colRt)
@@ -1141,6 +1195,7 @@ namespace AirsoftFPS
                     modeCardDescs[i].color = avail ? Muted : DangerSoft;
                 }
             }
+            ScrollModeIntoView((int)mnet.Mode);
             bool tdm = mnet.TeamMode;   // Team Deathmatch or Milsim
             tdmNote.SetActive(tdm);
 

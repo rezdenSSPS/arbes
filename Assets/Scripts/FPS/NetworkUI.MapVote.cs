@@ -20,6 +20,7 @@ namespace AirsoftFPS
             public CanvasGroup group;
             public TextMeshProUGUI votes;
             public GameObject next, yours, locked;
+            public int map;        // MapCatalog index, or MapCatalog.RANDOM for the slim RANDOM MAP row
         }
 
         readonly List<MapCard> mapCards = new List<MapCard>();
@@ -33,8 +34,10 @@ namespace AirsoftFPS
             int cols = Mathf.Min(n, 2), rows = (n + cols - 1) / cols;
             float ThumbH = rows > 1 ? 40f : 64f;
             float CardH = ThumbH + 48f;
+            const float RandH = 32f;   // RANDOM MAP: a slim row under the map cards
+            float gridH = rows * CardH + (rows - 1) * Gap;
             var block = Rect(col, "MapVote");
-            block.LE(-1, HeadH + 6f + rows * CardH + (rows - 1) * Gap);
+            block.LE(-1, HeadH + 6f + gridH + Gap + RandH);
 
             var head = Rect(block, "Head").TL(0, 0, W, HeadH);
             Caption(head, "MAP VOTE", 12, Muted, 0.16f).rectTransform.Fill();
@@ -45,7 +48,7 @@ namespace AirsoftFPS
             for (int i = 0; i < MapCatalog.Count; i++)
             {
                 int map = i;
-                var c = new MapCard();
+                var c = new MapCard { map = map };
                 c.btn = Button(block, "", Btn.Ghost, 10, () => { if (MatchNet.Instance != null) MatchNet.Instance.VoteMap(map); });
                 c.btn.GetComponent<RectTransform>().TL((i % cols) * (w + Gap), HeadH + 6f + (i / cols) * (CardH + Gap), w, CardH);
                 c.btn.label.gameObject.SetActive(false);
@@ -103,6 +106,41 @@ namespace AirsoftFPS
                 c.frame = Frame(c.btn.transform, Line, 1f);
                 mapCards.Add(c);
             }
+            BuildRandomMapRow(block, HeadH + 6f + gridH + Gap, W, RandH);
+        }
+
+        // "? RANDOM MAP · 2 votes · yours" with the share bar and the host's LOCK, under the map cards.
+        void BuildRandomMapRow(RectTransform block, float y, float w, float h)
+        {
+            var c = new MapCard { map = MapCatalog.RANDOM };
+            c.btn = Button(block, "", Btn.Ghost, 10, () => { if (MatchNet.Instance != null) MatchNet.Instance.VoteMap(MapCatalog.RANDOM); });
+            c.btn.GetComponent<RectTransform>().TL(0, y, w, h);
+            c.btn.label.gameObject.SetActive(false);
+            c.group = c.btn.gameObject.AddComponent<CanvasGroup>();
+            var dice = Box(c.btn.transform, "Dice", Scenery);
+            dice.rectTransform.TL(5, 5, h - 10, h - 10);
+            Label(dice.transform, "?", F.CondBlack, 17, Accent, TextAlignmentOptions.Center).rectTransform.Fill();
+            Label(c.btn.transform, "RANDOM MAP", F.CondBold, 16, Fg, TextAlignmentOptions.MidlineLeft, 0.02f)
+                .rectTransform.TL(h + 2, 0, 104, h);
+            c.votes = Label(c.btn.transform, "", F.BodySemi, 11, Muted, TextAlignmentOptions.MidlineLeft);
+            c.votes.rectTransform.TL(h + 108, 0, w - h - 108 - 64, h);
+            c.share = Bar(c.btn.transform, "Share", Line, Accent);
+            ((RectTransform)c.share.transform.parent).At(0f, 0f, 1, 1, w - 2, 2);
+            c.lockBtn = Button(c.btn.transform, "LOCK", Btn.Quiet, 10, () =>
+            {
+                var mn = MatchNet.Instance;
+                if (isHost && mn != null) mn.HostLockMap(mn.HostMapLock == MapCatalog.RANDOM ? -1 : MapCatalog.RANDOM);
+            });
+            c.lockBtn.GetComponent<RectTransform>().At(1f, 0.5f, -5, 0, 52, 22);
+            // states show in the frame (NEXT), the votes text (yours) and the lock button (UNLOCK)
+            c.next = new GameObject("Next");
+            c.next.transform.SetParent(c.btn.transform, false);
+            c.yours = new GameObject("Yours");
+            c.yours.transform.SetParent(c.btn.transform, false);
+            c.locked = new GameObject("Locked");
+            c.locked.transform.SetParent(c.btn.transform, false);
+            c.frame = Frame(c.btn.transform, Line, 1f);
+            mapCards.Add(c);
         }
 
         void RefreshMapVote(MatchNet mnet, NetworkManager net)
@@ -113,13 +151,14 @@ namespace AirsoftFPS
             int mine = mnet.LocalMapVote;
             int locked = mnet.HostMapLock;
             int total = 0;
-            for (int i = 0; i < mapCards.Count; i++) total += mnet.MapVotes(i);
+            foreach (var mc in mapCards) total += mnet.MapVotes(mc.map);
 
             for (int i = 0; i < mapCards.Count; i++)
             {
                 var c = mapCards[i];
-                bool win = i == winner;
-                int v = mnet.MapVotes(i);
+                int map = c.map;
+                bool win = map == winner;
+                int v = mnet.MapVotes(map);
                 c.btn.bgN = c.btn.bgP = win ? Raised : Surface;
                 c.btn.bgH = Raised;
                 c.btn.bgD = c.btn.bgN;
@@ -127,19 +166,20 @@ namespace AirsoftFPS
                 c.btn.Refresh();
                 c.frame.color = win ? Accent : Line;
                 c.frame.pixelsPerUnitMultiplier = 4f / (win ? 2f : 1f);
-                c.group.alpha = (locked >= 0 && !win) ? 0.55f : 1f;
+                c.group.alpha = (MapCatalog.ValidChoice(locked) && !win) ? 0.55f : 1f;
                 c.votes.text = v + (v == 1 ? " vote" : " votes");
                 c.votes.color = v > 0 ? Fg : Muted;
                 SetBar(c.share, total > 0 ? (float)v / total : 0f);
                 c.next.SetActive(win);
-                c.yours.SetActive(i == mine);
-                c.locked.SetActive(i == locked);
+                c.yours.SetActive(map == mine);
+                c.locked.SetActive(map == locked);
                 c.lockBtn.gameObject.SetActive(isHost);
-                c.lockBtn.SetLabel(i == locked ? "UNLOCK" : "LOCK");
-                c.lockBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(i == locked ? 60 : 46, 22);
+                c.lockBtn.SetLabel(map == locked ? "UNLOCK" : "LOCK");
+                c.lockBtn.GetComponent<RectTransform>().sizeDelta = new Vector2(map == locked ? 60 : 46, 22);
+                if (map == MapCatalog.RANDOM && map == mine) c.votes.text += " · yours";
             }
 
-            mapHint.text = locked >= 0 ? "Locked by the host"
+            mapHint.text = MapCatalog.ValidChoice(locked) ? "Locked by the host"
                          : mine < 0 ? "Click a map to vote" : "Most votes wins";
         }
     }
