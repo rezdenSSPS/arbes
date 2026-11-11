@@ -229,7 +229,7 @@ namespace AirsoftFPS
                 var slot = weaponHolder.GetChild(i);
                 if (muzzleFlashObj != null && slot == muzzleFlashObj.transform) continue;
                 AirsoftGuns.Gun g = null;
-                try { g = AirsoftGuns.Build(weapons[i].model, weapons[i].modelLength, slot); }
+                try { g = AirsoftGuns.Build(weapons[i].model, weapons[i].modelLength, slot, weapons[i].weaponName); }
                 catch (System.Exception e) { Debug.LogWarning("[Airsoft] gun model " + weapons[i].model + ": " + e.Message); }
                 if (g == null) continue;
 

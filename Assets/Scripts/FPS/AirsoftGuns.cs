@@ -14,7 +14,8 @@ namespace AirsoftFPS
             public Vector3 muzzleLocal;   // muzzle position in root space
         }
 
-        public static Gun Build(string model, float length, Transform parent)
+        // weapon: the weapon's name (WeaponData.weaponName), for weapons that share a model but not a finish.
+        public static Gun Build(string model, float length, Transform parent, string weapon = null)
         {
             if (string.IsNullOrEmpty(model)) return null;
             var prefab = Resources.Load<GameObject>("AirsoftGuns/" + model);
@@ -107,6 +108,7 @@ namespace AirsoftFPS
             var g = new Gun { root = root, muzzleLocal = toFwd * ((muzzle - grip) * k) + Vector3.forward * 0.02f };
 
             AirsoftLook.FixMaterials(inst);
+            Paint(inst, model, weapon);
             foreach (var c in inst.GetComponentsInChildren<Collider>(true)) Object.Destroy(c);
             foreach (var a in inst.GetComponentsInChildren<Animation>(true)) a.enabled = false;
             foreach (var a in inst.GetComponentsInChildren<Animator>(true)) a.enabled = false;
@@ -118,6 +120,89 @@ namespace AirsoftFPS
                 root.transform.localRotation = Quaternion.identity;
             }
             return g;
+        }
+
+        // ───────────── finishes ─────────────
+        // Most models come with their parts as named materials (Metal, Wood, Magazine, Barrel…) but all of
+        // them the same flat grey, so the guns looked like one white piece. Each part gets its own colour
+        // and surface here: gunmetal, blued steel, black polymer, wood, brass rounds. Names without an entry
+        // keep the model's own colour (AK47, BoltRifle and Uzi bring real colours in their material names).
+        struct Finish { public Color c; public float smooth, metal; public Finish(string hex, float s, float m) { c = UIKit.Hex(hex); smooth = s; metal = m; } }
+
+        static Finish Steel(string hex) => new Finish(hex, 0.55f, 0.6f);
+        static Finish Polymer(string hex) => new Finish(hex, 0.25f, 0f);
+        static Finish WoodF(string hex) => new Finish(hex, 0.3f, 0f);
+        static Finish Brass(string hex) => new Finish(hex, 0.7f, 0.8f);
+
+        static readonly Dictionary<string, Finish> ByPart = new Dictionary<string, Finish>
+        {
+            { "Metal", Steel("#6B7075") }, { "DarkerMetal", Steel("#33363A") }, { "DarkMetal", Steel("#3A3D41") },
+            { "Barrel", Steel("#2A2C2F") }, { "Barrels", Steel("#2A2C2F") }, { "Muzzle", Steel("#25272A") },
+            { "Black", Polymer("#1D1E20") }, { "Magazine", Polymer("#2B2D30") }, { "Trigger", Steel("#121314") },
+            { "Wood", WoodF("#8E5428") }, { "LightWood", WoodF("#B0713A") }, { "DarkWood", WoodF("#5C3219") },
+            { "Green", Polymer("#55613F") },
+            { "BulletYellow", Brass("#D4A23C") }, { "BulletOrange", Brass("#B8692C") }, { "BulletTip", Brass("#B87333") },
+            { "BulletRed", Polymer("#A82D26") },
+        };
+
+        // Parts named per model (generic material names, or one material over several pieces).
+        static bool ByModel(string model, string renderer, string mat, string weapon, out Finish f)
+        {
+            f = default;
+            switch (model)
+            {
+                case "Pistol":   // 1911: steel slide and frame, wooden grips
+                    if (mat == "Material.003") { f = Steel("#A3A8AD"); return true; }   // hammer / small parts
+                    break;
+                case "P90":      // FDE (tan) body, black top rail and magazine parts
+                    if (mat == "Material.001") { f = Polymer("#B29C74"); return true; }
+                    if (mat == "Material.004") { f = Polymer("#1F2022"); return true; }
+                    if (mat == "Material.003") { f = Steel("#3A3D40"); return true; }
+                    break;
+                case "Uzi":      // black steel body, darker grip panel, grey stock
+                    if (renderer == "Cube.001") { f = Steel("#2E3134"); return true; }
+                    if (renderer == "Cube") { f = Polymer("#1A1B1C"); return true; }
+                    if (renderer == "Cube.002") { f = Steel("#4C5054"); return true; }
+                    break;
+                case "AK47":     // AK: orange-brown furniture; RPK: darker walnut and a lighter receiver
+                    bool rpk = weapon != null && weapon.Contains("RPK");
+                    if (mat.EndsWith("C56100")) { f = WoodF(rpk ? "#6E3A17" : "#A4531C"); return true; }
+                    if (mat.EndsWith("2B2B2B")) { f = Steel(rpk ? "#3E4246" : "#2A2C2F"); return true; }
+                    break;
+                case "BoltRifle":   // dark wood stock, blued action, bright bolt
+                    if (mat.EndsWith("911F00")) { f = WoodF("#6A2E14"); return true; }
+                    if (mat.EndsWith("3B3B3B")) { f = Steel("#2F3236"); return true; }
+                    if (mat.EndsWith("C2C2C2")) { f = Steel("#B9BEC3"); return true; }
+                    break;
+                case "Shotgun":   // M870: black polymer furniture, lighter steel receiver and barrel
+                    if (mat == "DarkMetal") { f = Steel("#5A5F64"); return true; }
+                    if (mat == "Barrels") { f = Steel("#3F4347"); return true; }
+                    break;
+                case "SniperRifle":   // L96: olive stock
+                    if (mat == "Green") { f = Polymer("#56633D"); return true; }
+                    break;
+            }
+            return false;
+        }
+
+        static void Paint(GameObject inst, string model, string weapon)
+        {
+            foreach (var r in inst.GetComponentsInChildren<Renderer>(true))
+            {
+                var mats = r.sharedMaterials;
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    var m = mats[i];
+                    if (m == null) continue;
+                    string n = m.name;
+                    if (!ByModel(model, r.name, n, weapon, out var f) && !ByPart.TryGetValue(n, out f)) continue;
+                    if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", f.c);
+                    if (m.HasProperty("_Color")) m.SetColor("_Color", f.c);
+                    if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", f.smooth);
+                    if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", f.smooth);
+                    if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", f.metal);
+                }
+            }
         }
     }
 }

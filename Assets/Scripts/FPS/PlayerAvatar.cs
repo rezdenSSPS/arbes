@@ -131,7 +131,7 @@ namespace AirsoftFPS
             if (avatar.rightHand == null) return;
             var w = weapons.weapons[idx];
             AirsoftGuns.Gun g = null;
-            try { g = AirsoftGuns.Build(w.model, w.modelLength, null); } catch { }
+            try { g = AirsoftGuns.Build(w.model, w.modelLength, null, w.weaponName); } catch { }
             if (g == null) return;
             handGun = g.root;
             // point the barrel where the character faces, grip in the right hand

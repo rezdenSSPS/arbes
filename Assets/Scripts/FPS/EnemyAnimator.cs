@@ -111,7 +111,7 @@ namespace AirsoftFPS
             var all = WeaponData.GetAllWeapons();
             var w = idx >= 0 && idx < all.Length ? all[idx] : null;
             AirsoftGuns.Gun g = null;
-            try { g = w != null ? AirsoftGuns.Build(w.model, w.modelLength, null) : AirsoftGuns.Build("AK47", 0.68f, null); } catch { }
+            try { g = w != null ? AirsoftGuns.Build(w.model, w.modelLength, null, w.weaponName) : AirsoftGuns.Build("AK47", 0.68f, null); } catch { }
             if (g == null) return;
             handGun = g.root;
             gunMuzzleLocal = g.muzzleLocal;
