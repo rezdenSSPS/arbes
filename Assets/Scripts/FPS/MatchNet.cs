@@ -639,6 +639,7 @@ namespace AirsoftFPS
             cm.RegisterNamedMessageHandler(MSG_LOOK,  OnServerRecvLook);
             cm.RegisterNamedMessageHandler(MSG_WIPE,  (sender, _) => MatchAwards.RecordWipe(sender));
             RegisterMapVoteServerHandlers(cm);
+            RegisterChatServerHandlers(cm);   // lobby chat (MatchNet.Chat.cs)
             serverHandlersUp = true;
 
             // Make sure the host's own entry exists.
@@ -653,6 +654,7 @@ namespace AirsoftFPS
             nm.CustomMessagingManager.RegisterNamedMessageHandler(MSG_KILL, OnClientRecvKill);
             nm.CustomMessagingManager.RegisterNamedMessageHandler(MSG_DEATH, OnClientRecvDeath);
             RegisterMapVoteClientHandlers(nm.CustomMessagingManager);
+            RegisterChatClientHandlers(nm.CustomMessagingManager);
             clientHandlersUp = true;
         }
 
@@ -676,6 +678,7 @@ namespace AirsoftFPS
         void HandleClientDisconnected(ulong clientId)
         {
             if (nm == null || !nm.IsServer || nm.ShutdownInProgress) return;
+            ChatOnLeft(clientId);   // "<name> left." while the name is still in the roster
             for (int i = roster.Count - 1; i >= 0; i--)
                 if (roster[i].clientId == clientId) roster.RemoveAt(i);
             BroadcastState();
@@ -699,6 +702,7 @@ namespace AirsoftFPS
             WindSystem.Apply(false, 0f, 0f);
             awards.Clear();
             ClearMapVoteState();
+            ClearChatSession();
             serverHandlersUp = false;
             clientHandlersUp = false;
             OnStateChanged?.Invoke();
@@ -718,8 +722,10 @@ namespace AirsoftFPS
             reader.ReadValueSafe(out string n);
             n = UniqueName(Sanitize(n), sender);
             EnsureEntry(sender);
+            string oldName = NameFor(sender);
             for (int i = 0; i < roster.Count; i++)
                 if (roster[i].clientId == sender) { var e = roster[i]; e.name = n; roster[i] = e; }
+            ChatOnName(sender, oldName, NameFor(sender));   // "<name> joined." / renamed (MatchNet.Chat.cs)
             BroadcastState();
         }
 

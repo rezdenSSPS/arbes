@@ -155,7 +155,8 @@ namespace AirsoftFPS
             var kb = Keyboard.current;
             bool overlay = (settings != null && settings.IsOpen)
                            || (CharacterCustomizerUI.Instance != null && CharacterCustomizerUI.Instance.IsOpen);
-            if (kb != null && mnet != null && !overlay && !TypingInField())
+            ChatUpdate(kb, overlay);   // lobby chat (NetworkUI.Chat.cs)
+            if (kb != null && mnet != null && !overlay && !LobbyHotkeysBlocked)
             {
                 if (kb.rKey.wasPressedThisFrame) mnet.ToggleReady();
                 if (isHost && kb.mKey.wasPressedThisFrame) mnet.HostCycleMode();
@@ -203,6 +204,7 @@ namespace AirsoftFPS
             startMatchButton.gameObject.SetActive(host);
             hostModeKey.SetActive(host);
             clientModeNote.SetActive(!host);
+            CloseChat();
             ShowScreen(lobbyScreen);
             RefreshLobby();
         }
@@ -830,6 +832,7 @@ namespace AirsoftFPS
             barRt.anchoredPosition = Vector2.zero;
             barRt.sizeDelta = new Vector2(1200, 88);
             Button(bar.transform, "LEAVE", Btn.Danger, 18, OnLeave).LE(100, 48);
+            BuildChatButton(bar.transform);   // NetworkUI.Chat.cs
             hintText = Label(bar.transform, "", F.Body, 15, Muted, TextAlignmentOptions.MidlineRight);
             hintText.LE(-1, 48, 1);
             readyButton = Button(bar.transform, "READY UP", Btn.Secondary, 21, () => MatchNet.Instance?.ToggleReady(), F.CondBlack);
@@ -841,6 +844,8 @@ namespace AirsoftFPS
             readyLabel = readyButton.label;
             startMatchButton = Button(bar.transform, "START MATCH", Btn.Primary, 22, OnStartMatch, F.CondBlack, 14);
             startMatchButton.LE(196, 56);
+
+            BuildChatPanel(stage);   // last: drawn over the columns while open
 
             return screen.gameObject;
         }
