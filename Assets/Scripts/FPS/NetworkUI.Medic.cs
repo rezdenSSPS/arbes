@@ -43,7 +43,7 @@ namespace AirsoftFPS
         void RefreshMedicOptions(MatchNet mnet)
         {
             if (medicRow == null) return;
-            bool medic = mnet.Mode == MatchNet.GameModeType.Medic;
+            bool medic = mnet.Mode == MatchNet.GameModeType.Medic || mnet.RandomModePending;   // random may draw Medic
             medicRow.SetActive(medic);
             int want = Medic.LocalVolunteer ? 1 : 0;
             if (medicSeg.Selected != want) medicSeg.Select(want, false);

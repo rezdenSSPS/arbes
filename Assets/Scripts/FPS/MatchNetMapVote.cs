@@ -100,11 +100,18 @@ namespace AirsoftFPS
         {
             int choice = WinningMap;
             if (choice != MapCatalog.RANDOM) { MatchMapIndex = choice; return; }
+            MatchMapIndex = DrawRandomMap(Mode, MatchMapIndex, drawRng);
+        }
+
+        // RANDOM MAP draw (pure, for ObjectiveLogicCheck): a map that can play the mode, not lastMap if there
+        // is another; 0 when no map can.
+        public static int DrawRandomMap(GameModeType mode, int lastMap, System.Random rng)
+        {
             var pool = new List<int>();
             for (int i = 0; i < MapCatalog.Count; i++)
-                if (ObjectiveMode.IsAvailableOn(Mode, MapCatalog.SceneOf(i), out _)) pool.Add(i);
-            if (pool.Count > 1) pool.Remove(MatchMapIndex);
-            MatchMapIndex = pool.Count > 0 ? pool[UnityEngine.Random.Range(0, pool.Count)] : 0;
+                if (ObjectiveMode.IsAvailableOn(mode, MapCatalog.SceneOf(i), out _)) pool.Add(i);
+            if (pool.Count > 1) pool.Remove(lastMap);
+            return pool.Count > 0 ? pool[rng.Next(pool.Count)] : 0;
         }
 
         // Server: a fresh vote for the next match (ReturnToLobby).

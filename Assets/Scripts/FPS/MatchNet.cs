@@ -13,7 +13,7 @@ namespace AirsoftFPS
     // Networking uses the NetworkManager's CustomMessagingManager, which works
     // WITHOUT a spawned NetworkObject -- the server owns the roster and broadcasts
     // the whole state to clients whenever it changes.
-    public partial class MatchNet : MonoBehaviour   // bots: MatchNet.Bots.cs, map vote: MatchNetMapVote.cs
+    public partial class MatchNet : MonoBehaviour   // bots: MatchNet.Bots.cs, map vote: MatchNetMapVote.cs, random mode: MatchNet.RandomMode.cs
     {
         public enum GameModeType { Coop = 0, FreeForAll = 1, TeamDeathmatch = 2, GunGame = 3, Milsim = 4, CaptureTheFlag = 5, Domination = 6, Medic = 7, Bomb = 8, VipEscort = 9, Infection = 10,
                                    Juggernaut = 11, OneInTheChamber = 12 }
@@ -268,25 +268,38 @@ namespace AirsoftFPS
 
         public bool IsHost => nm != null && nm.IsServer;
 
+        // M in the lobby: the next mode this map can play, in the order of the lobby cards
+        // (RANDOM MODE, Co-op, Free-for-All, …, One in the Chamber, then RANDOM MODE again).
         public void HostCycleMode()
         {
             if (!IsHost) return;
-            var m = Mode;
-            for (int i = 0; i < MODE_COUNT; i++)   // skip modes this map can't play
+            int start = RandomMode ? -1 : (int)Mode;
+            for (int i = start + 1; i < MODE_COUNT; i++)   // skip modes this map can't play
             {
-                m = (GameModeType)(((int)m + 1) % MODE_COUNT);
-                if (ObjectiveMode.IsAvailable(m, out _)) break;
+                if (!ObjectiveMode.IsAvailable((GameModeType)i, out _)) continue;
+                Mode = (GameModeType)i;
+                RandomMode = false;
+                BroadcastState();
+                return;
             }
-            Mode = m;
-            BroadcastState();
+            if (RandomModeAvailable(out _)) { RandomMode = true; BroadcastState(); return; }
+            for (int i = 0; i <= start && i < MODE_COUNT; i++)   // (no random: wrap to the first playable mode)
+            {
+                if (!ObjectiveMode.IsAvailable((GameModeType)i, out _)) continue;
+                Mode = (GameModeType)i;
+                RandomMode = false;
+                BroadcastState();
+                return;
+            }
         }
 
         // Host picks a mode directly (lobby mode cards).
         public void HostSetMode(GameModeType mode)
         {
-            if (!IsHost || Mode == mode) return;
+            if (!IsHost || (Mode == mode && !RandomMode)) return;
             if (!ObjectiveMode.IsAvailable(mode, out _)) return;   // the map lacks this mode's points
             Mode = mode;
+            RandomMode = false;
             BroadcastState();
         }
 
@@ -356,8 +369,14 @@ namespace AirsoftFPS
         public void HostStartMatch()
         {
             if (!IsHost) return;
-            if (!ObjectiveMode.IsAvailable(Mode, out _)) return;   // lobby shows why on the mode card
-            ChooseMatchMap();   // lobby map vote (MatchNetMapVote)
+            if (RandomMode)
+            {
+                if (!DrawMatchMode()) return;   // RANDOM MODE: the real mode is drawn now (MatchNet.RandomMode.cs)
+            }
+            else if (!ObjectiveMode.IsAvailable(Mode, out _)) return;   // lobby shows why on the mode card
+            ChooseMatchMap();   // lobby map vote (MatchNetMapVote); RANDOM MAP: a map that can play Mode
+            lastPlayedMode = Mode;
+            DropBotsIfModeHasNone();   // random drew a mode without bots (Co-op): the lobby's bots leave
             WindSystem.Roll(WindSetting, MatchScene, out float windDir, out float windSpeed);
             WindDir = windDir;
             WindSpeed = windSpeed;
@@ -699,6 +718,7 @@ namespace AirsoftFPS
             WindSystem.Apply(false, 0f, 0f);
             awards.Clear();
             ClearMapVoteState();
+            lastPlayedMode = null;
             serverHandlersUp = false;
             clientHandlersUp = false;
             OnStateChanged?.Invoke();
@@ -767,6 +787,7 @@ namespace AirsoftFPS
             w.WriteValueSafe(CoopWave);
             w.WriteValueSafe((byte)WindSetting);
             w.WriteValueSafe(FogEnabled);
+            w.WriteValueSafe(RandomMode);
             w.WriteValueSafe(WindDir);
             w.WriteValueSafe(WindSpeed);
             w.WriteValueSafe((byte)awards.Count);
@@ -808,6 +829,7 @@ namespace AirsoftFPS
             reader.ReadValueSafe(out int coopWave);
             reader.ReadValueSafe(out byte windSetting);
             reader.ReadValueSafe(out bool fog);
+            reader.ReadValueSafe(out bool randomMode);
             reader.ReadValueSafe(out float windDir);
             reader.ReadValueSafe(out float windSpeed);
             reader.ReadValueSafe(out byte awardCount);
@@ -847,6 +869,7 @@ namespace AirsoftFPS
             CoopWave = coopWave;
             WindSetting = windSetting;
             FogEnabled = fog;
+            RandomMode = randomMode;
             WindDir = windDir;
             WindSpeed = windSpeed;
             WindSystem.Apply(CurrentPhase != Phase.Lobby, WindDir, WindSpeed);

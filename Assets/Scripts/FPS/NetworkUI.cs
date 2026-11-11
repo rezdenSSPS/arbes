@@ -858,9 +858,9 @@ namespace AirsoftFPS
             key.anchoredPosition = Vector2.zero;
             hostModeKey = key.gameObject;
 
-            // Up to five modes: 72 px cards with a wrapped description. More: 48 px cards in a scrolling list
+            // Up to five cards: 72 px cards with a wrapped description. More: 48 px cards in a scrolling list
             // (mouse wheel / drag, thin bar on the right), so the text stays readable however many modes there are.
-            bool compact = MatchNet.MODE_COUNT > 5;
+            bool compact = MatchNet.MODE_COUNT + 1 > 5;   // + the RANDOM MODE card
             float cardH = compact ? 48f : 72f;
             Transform cardParent = colRt;
             if (compact)
@@ -899,6 +899,7 @@ namespace AirsoftFPS
                 modeScroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
                 cardParent = content.transform;
             }
+            BuildRandomModeCard(cardParent, cardH, compact);   // first card: RANDOM MODE (NetworkUI.RandomMode.cs)
             for (int i = 0; i < MatchNet.MODE_COUNT; i++)
             {
                 var mode = (MatchNet.GameModeType)i;
@@ -959,15 +960,17 @@ namespace AirsoftFPS
         }
 
         // Keep the picked mode visible in the scrolling list (the host cycles with M; clients follow the host).
+        // mode = a GameModeType value, or RANDOM_MODE_KEY for the RANDOM MODE card.
         void ScrollModeIntoView(int mode)
         {
-            if (modeScroll == null || mode == scrolledToMode || mode < 0 || mode >= modeCards.Count) return;
+            if (modeScroll == null || mode == scrolledToMode || mode < 0 || mode > modeCards.Count) return;
+            if (mode == RANDOM_MODE_KEY && randomModeBtn == null) return;
             var content = modeScroll.content;
             var view = modeScroll.viewport;
             float viewH = view.rect.height, contentH = content.rect.height;
             if (viewH <= 0f || contentH <= 0f) return;   // not laid out yet: try next frame
             if (contentH <= viewH) { scrolledToMode = mode; return; }
-            var card = (RectTransform)modeCards[mode].btn.transform;
+            var card = (RectTransform)(mode == RANDOM_MODE_KEY ? randomModeBtn : modeCards[mode].btn).transform;
             float top = -card.anchoredPosition.y - card.rect.height * (1f - card.pivot.y);   // from the content top
             float bottom = top + card.rect.height;
             float y = content.anchoredPosition.y;   // how far the content is scrolled down
@@ -1096,7 +1099,8 @@ namespace AirsoftFPS
         void RefreshBotOptions(MatchNet mnet)
         {
             if (botFillSeg == null) return;
-            bool modeHasBots = MatchNet.ModeHasBots(mnet.Mode);
+            bool random = mnet.RandomModePending;   // the drawn mode may have bots
+            bool modeHasBots = random || MatchNet.ModeHasBots(mnet.Mode);
             int fi = Array.IndexOf(MatchNet.BOT_FILL_OPTIONS, mnet.BotFill);
             if (fi >= 0 && botFillSeg.Selected != fi) botFillSeg.Select(fi, false);
             int si = (int)mnet.BotSkill;
@@ -1106,8 +1110,9 @@ namespace AirsoftFPS
             botSkillGroup.alpha = modeHasBots && mnet.BotFill > 0 ? 1f : 0.45f;
             botSkillRow.SetActive(true);
             botNote.text = !modeHasBots ? "No bots in this mode."
+                : random && mnet.BotFill > 0 ? "Bots fill the empty slots if the drawn mode has bots."
                 : mnet.BotFill > 0 ? "Bots fill the empty slots and leave when players join."
-                : isHost ? "Bots can fill the empty slots in this mode." : "";
+                : isHost ? (random ? "Bots can fill the empty slots if the drawn mode has bots." : "Bots can fill the empty slots in this mode.") : "";
         }
 
         void BuildCharacterColumn(RectTransform colRt)
@@ -1191,11 +1196,13 @@ namespace AirsoftFPS
             lobbyCode.fontSize = online ? 26 : 22;
             lobbyCode.characterSpacing = online ? 20 : 4;
 
-            // modes
+            // modes (RANDOM MODE picked: the mode is drawn at START, so mode-dependent settings stay usable)
+            bool randomMode = mnet.RandomModePending;
+            RefreshRandomModeCard(mnet);
             for (int i = 0; i < modeCards.Count; i++)
             {
                 var (btn, frame, group) = modeCards[i];
-                bool sel = (int)mnet.Mode == i;
+                bool sel = !randomMode && (int)mnet.Mode == i;
                 // objective modes need their points on the map (MapLayout): otherwise greyed out with the reason
                 bool avail = ObjectiveMode.IsAvailable((MatchNet.GameModeType)i, out string why);
                 btn.bgN = btn.bgP = sel ? Raised : Surface;
@@ -1212,13 +1219,13 @@ namespace AirsoftFPS
                     modeCardDescs[i].color = avail ? Muted : DangerSoft;
                 }
             }
-            ScrollModeIntoView((int)mnet.Mode);
-            bool tdm = mnet.TeamMode;   // Team Deathmatch or Milsim
+            ScrollModeIntoView(randomMode ? RANDOM_MODE_KEY : (int)mnet.Mode);
+            bool tdm = mnet.TeamMode && !randomMode;   // Team Deathmatch or Milsim
             tdmNote.SetActive(tdm);
 
             // time limit
-            bool coop = mnet.Mode == MatchNet.GameModeType.Coop;
-            bool noClock = coop || ObjectiveMode.HasOwnClock(mnet.Mode);   // Bomb / VIP escort: timed rounds
+            bool coop = !randomMode && mnet.Mode == MatchNet.GameModeType.Coop;
+            bool noClock = coop || (!randomMode && ObjectiveMode.HasOwnClock(mnet.Mode));   // Bomb / VIP escort: timed rounds
             timeSeg.gameObject.SetActive(!noClock);
             timeUnit.SetActive(!noClock);
             timeCoopNote.SetActive(noClock);
@@ -1289,17 +1296,18 @@ namespace AirsoftFPS
             int waiting = 0;
             foreach (var e in roster) if (!e.ready) waiting++;
             bool allReady = mnet.AllReady();
-            bool modeOk = ObjectiveMode.IsAvailable(mnet.Mode, out string modeWhy);
+            string modeWhy;
+            bool modeOk = randomMode ? mnet.RandomModeAvailable(out modeWhy) : ObjectiveMode.IsAvailable(mnet.Mode, out modeWhy);
             if (isHost && !modeOk)
             {
                 startMatchButton.interactable = false;
-                hintText.text = ModeName(mnet.Mode) + ": " + modeWhy + ". Pick another mode.";
+                hintText.text = (randomMode ? "Random mode" : ModeName(mnet.Mode)) + ": " + modeWhy + ". Pick another mode.";
                 hintText.color = DangerSoft;
             }
             else if (isHost)
             {
                 startMatchButton.interactable = allReady;
-                hintText.text = allReady ? "Everyone is ready. Start the match."
+                hintText.text = allReady ? (randomMode ? "Everyone is ready. The mode is drawn when you start." : "Everyone is ready. Start the match.")
                     : "Waiting for " + waiting + (waiting == 1 ? " player" : " players") + " to ready up…";
                 hintText.color = allReady ? Ready : Muted;
             }
