@@ -33,14 +33,14 @@ namespace AirsoftFPS
         static Mesh s_sphere;
 
         public static void Fire(WeaponData w, Vector3 origin, Vector3 dir, Vector3 muzzle, LayerMask mask,
-                                Transform ignoreRoot, HitHandler onHit)
+                                Transform ignoreRoot, HitHandler onHit, int bbWeight = 0)
         {
             BBProjectile bb = null;
             while (s_pool.Count > 0 && bb == null) bb = s_pool.Pop();   // pooled ones die with their scene
             if (bb == null) bb = Create();
 
             bb.weapon = w;
-            bb.state = BBBallistics.Launch(w, origin, dir);
+            bb.state = BBBallistics.Launch(w, origin, dir, bbWeight);
             bb.prevPos = origin;
             bb.accum = 0f;
             bb.muzzleOffset = muzzle - origin;

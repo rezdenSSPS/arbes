@@ -891,6 +891,7 @@ namespace AirsoftFPS
             fpsText = Label(tl.transform, "", F.MonoBold, 12, Ready);
             fpsText.LE(-1, 16);
             Minimap.Create(tl.transform);   // under the code chip, clear of kill feed / health / ammo
+            WindSystem.CreateHud(tl.transform);   // wind arrow + speed (hidden when calm)
 
             // top-center widget
             var top = VCol(root, "TopCenter", 6, TextAnchor.UpperCenter, false);

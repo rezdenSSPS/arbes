@@ -8,11 +8,26 @@ namespace AirsoftFPS
     // and seed, so they agree on where each BB went.
     //
     // Forces per step: gravity, hop-up lift (backspin, perpendicular to the velocity, fading out
-    // over hopTime and with speed) and quadratic air drag. Semi-implicit Euler at 60 Hz.
+    // over hopTime and with speed) and quadratic air drag against the air, which moves with the
+    // match wind. Semi-implicit Euler at 60 Hz.
+    //
+    // BB weight: WeaponData muzzle velocities are 0.20 g ratings. A heavier BB leaves the same gun with
+    // about the same energy (v ~ 1/sqrt(m)) and drag slows it less (a ~ 1/m), so it is slower at the
+    // muzzle but keeps its speed and drifts less in the wind.
     public static class BBBallistics
     {
         public const float STEP = 1f / 60f;          // seconds per simulated segment
         public const float MAX_FLIGHT_TIME = 3f;     // a BB that is still flying after this is gone
+
+        // BB weights in grams (index = what the shooter sends with the shot). 0 = the 0.20 g baseline.
+        public static readonly float[] Weights = { 0.20f, 0.25f, 0.28f, 0.32f };
+        const float BASE_WEIGHT = 0.20f;
+        public static int ClampWeight(int i) => Mathf.Clamp(i, 0, Weights.Length - 1);
+        public static string WeightLabel(int i) => Weights[ClampWeight(i)].ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + " g";
+
+        // Match wind (m/s, horizontal), the same on every peer: MatchNet sets it from the match state
+        // (WindSystem). The server re-flies shots with it, so it must never differ between peers mid-match.
+        public static Vector3 Wind;
 
         public struct State
         {
@@ -20,11 +35,16 @@ namespace AirsoftFPS
             public Vector3 vel;
             public float time;       // seconds since the shot
             public float traveled;   // path length so far (metres)
+            public float v0;         // muzzle speed of this BB (hop-up lift scales with speed / v0)
+            public float dragMul;    // drag factor of this BB's weight (1 = 0.20 g)
         }
 
-        public static State Launch(WeaponData w, Vector3 origin, Vector3 dir)
+        public static State Launch(WeaponData w, Vector3 origin, Vector3 dir, int bbWeight = 0)
         {
-            return new State { pos = origin, vel = dir.normalized * w.muzzleVelocity, time = 0f, traveled = 0f };
+            float m = Weights[ClampWeight(bbWeight)];
+            float v0 = w.muzzleVelocity * Mathf.Sqrt(BASE_WEIGHT / m);
+            return new State { pos = origin, vel = dir.normalized * v0, time = 0f, traveled = 0f,
+                               v0 = v0, dragMul = BASE_WEIGHT / m };
         }
 
         // Advances one STEP. Returns false once the BB has used up its range or flight time.
@@ -34,7 +54,10 @@ namespace AirsoftFPS
 
             Vector3 v = s.vel;
             float speed = v.magnitude;
-            Vector3 acc = Vector3.down * w.bbGravity - v * (w.drag * speed);
+            Vector3 rel = v - Wind;   // velocity through the air
+            float dragMul = s.dragMul > 0f ? s.dragMul : 1f;
+            Vector3 acc = Vector3.down * w.bbGravity - rel * (w.drag * dragMul * rel.magnitude);
+            float v0 = s.v0 > 0f ? s.v0 : w.muzzleVelocity;
 
             float fade = w.hopTime > 0f ? 1f - s.time / w.hopTime : 0f;
             if (fade > 0f && speed > 0.01f)
@@ -43,7 +66,7 @@ namespace AirsoftFPS
                 Vector3 lift = Vector3.up - vh * Vector3.Dot(Vector3.up, vh);
                 float lm = lift.magnitude;
                 if (lm > 1e-4f)
-                    acc += lift / lm * (w.bbGravity * w.hopUp * fade * Mathf.Min(1f, speed / w.muzzleVelocity));
+                    acc += lift / lm * (w.bbGravity * w.hopUp * fade * Mathf.Min(1f, speed / v0));
             }
 
             Vector3 prev = s.pos;
@@ -113,9 +136,9 @@ namespace AirsoftFPS
         // `miss` = its distance from `point`.
         public static PathResult TracePath(WeaponData w, Vector3 origin, Vector3 dir, Vector3 point,
                                            LayerMask mask, float pathTolerance, float endMargin,
-                                           out float timeAt, out float miss)
+                                           out float timeAt, out float miss, int bbWeight = 0)
         {
-            var s = Launch(w, origin, dir);
+            var s = Launch(w, origin, dir, bbWeight);
             float bestSq = float.MaxValue;
             timeAt = 0f;
             bool blocked = false;

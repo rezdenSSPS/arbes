@@ -90,9 +90,14 @@ namespace AirsoftFPS
         static readonly RaycastHit[] s_hits = new RaycastHit[16];
 
         // Called by MatchNet before the soldier is spawned.
+        // BB weight this bot loads (BBBallistics.Weights): harder bots pick heavier BBs.
+        int bbWeight;
+
         public void Setup(ulong botId, MatchNet.BotDifficulty difficulty)
         {
             BotId = botId;
+            bbWeight = difficulty == MatchNet.BotDifficulty.Hard ? Random.Range(2, 4)
+                     : difficulty == MatchNet.BotDifficulty.Easy ? 0 : Random.Range(0, 3);
             Difficulty = difficulty;
             skill = For(difficulty);
             configured = true;
@@ -536,8 +541,8 @@ namespace AirsoftFPS
             int pellets = Mathf.Max(1, w.pelletsPerShot);
             for (int p = 0; p < pellets; p++)
                 BBProjectile.Fire(w, origin, BBBallistics.PelletDirection(w, dir, seed, p, false), muzzle, ~0, transform,
-                                  hit => OnBBHit(hit, w));
-            if (fx != null) fx.BotShotRpc(weaponIdx, origin, dir, seed);
+                                  hit => OnBBHit(hit, w), bbWeight);
+            if (fx != null) fx.BotShotRpc(weaponIdx, origin, dir, seed, (byte)bbWeight);
         }
 
         // The server flies the bot's BBs itself, so a hit here is authoritative.

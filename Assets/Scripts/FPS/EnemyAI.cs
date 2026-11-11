@@ -222,7 +222,7 @@ namespace AirsoftFPS
         // A bot fired (BotBrain, server). The server already flies the real BBs; everyone else flies a
         // visual-only copy from the same origin, direction and seed. Muzzle flash everywhere.
         [Rpc(SendTo.Everyone)]
-        public void BotShotRpc(int weaponIdx, Vector3 origin, Vector3 dir, uint seed)
+        public void BotShotRpc(int weaponIdx, Vector3 origin, Vector3 dir, uint seed, byte bb)
         {
             s_botWeapons ??= WeaponData.GetAllWeapons();
             if (weaponIdx >= 0 && weaponIdx < s_botWeapons.Length) AirsoftAudio.Shot(s_botWeapons[weaponIdx], origin, false);
@@ -237,7 +237,7 @@ namespace AirsoftFPS
                     int pellets = Mathf.Max(1, w.pelletsPerShot);
                     for (int p = 0; p < pellets; p++)
                         BBProjectile.Fire(w, origin, BBBallistics.PelletDirection(w, dir, seed, p, false), muzzle,
-                                          ~0, transform, null);
+                                          ~0, transform, null, bb);
                 }
             }
             var flash = GetComponentInChildren<Light>(true);

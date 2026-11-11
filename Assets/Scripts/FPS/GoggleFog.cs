@@ -11,9 +11,9 @@ namespace AirsoftFPS
     // breath after a run and while you stand in smoke, and clears slowly when you walk (air through the vents).
     // F wipes it: a sweep across the lens for WIPE_SECONDS, during which you can't aim or shoot.
     //
-    // How fast it fogs depends on the eye protection picked in the character customizer (AirsoftLook.Eyewear):
-    // a sealed full face mask fogs worst, vented shooting glasses and the mesh mask much less, no eyewear not
-    // at all. Settings > Gameplay can turn it off. Added to the owner's player object by FPSController.
+    // It's a match rule the host picks in the lobby (MatchNet.FogEnabled): either everyone's lens fogs, at the
+    // same rate whatever eyewear they picked (so eyewear stays cosmetic), or nobody's. Added to the owner's
+    // player object by FPSController.
     [DisallowMultipleComponent]
     public class GoggleFog : MonoBehaviour
     {
@@ -27,22 +27,12 @@ namespace AirsoftFPS
         const float WIPE_LEFT = 0.12f;       // a wipe leaves a few smears
         const float PROMPT_AT = 0.3f;        // show the "F  WIPE GOGGLES" prompt from this fog level
 
-        // per second, for goggles (scaled by RateFor)
+        // per second
         const float GAIN_SPRINT = 0.055f;
         const float GAIN_PANT = 0.03f;       // out of breath: scaled by the missing stamina
         const float GAIN_SMOKE = 0.12f;
         const float DECAY_MOVING = 0.02f;    // walking: air through the vents
         const float DECAY_IDLE = 0.008f;
-
-        // Fog speed by eyewear (None, Goggles, Shooting Glasses, Full Face Mask, Mesh Mask).
-        public static float RateFor(int eyewear) => eyewear switch
-        {
-            1 => 1f,      // goggles
-            2 => 0.6f,    // shooting glasses: open at the sides
-            3 => 1.4f,    // full face mask: your breath stays inside
-            4 => 0.3f,    // mesh mask: breath goes out through the grille
-            _ => 0f       // no eyewear: nothing to fog
-        };
 
         public static string LensName(int eyewear) => eyewear == 3 ? "MASK" : eyewear == 2 ? "GLASSES" : "GOGGLES";
 
@@ -90,7 +80,8 @@ namespace AirsoftFPS
 
             bool dead = health != null && health.IsSpawned && health.isDead.Value;
             int eyewear = LocalEyewear();
-            float rate = GameSettings.GoggleFog ? RateFor(eyewear) : 0f;
+            var mn = MatchNet.Instance;
+            float rate = mn != null && mn.FogEnabled ? 1f : 0f;   // match rule: everyone or nobody
             if (dead || rate <= 0f)
             {
                 fog = 0f;   // a fresh, clean lens after the respawn

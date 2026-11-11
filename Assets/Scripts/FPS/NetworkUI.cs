@@ -937,7 +937,8 @@ namespace AirsoftFPS
             tdmNote = note.gameObject;
 
             BuildBotOptions(colRt, 34 + 4 * 62 + 52);
-            BuildMedicOptions(colRt, 34 + 4 * 62 + 52 + 122);   // Medic mode volunteer (NetworkUI.Medic.cs)
+            BuildMatchRules(colRt, 34 + 4 * 62 + 52 + 92);      // wind + goggle fog
+            BuildMedicOptions(colRt, 34 + 4 * 62 + 52 + 126);   // Medic mode volunteer (NetworkUI.Medic.cs)
         }
 
         // "Fill with bots" (Off / up to 4 / up to 8 players) and bot difficulty, under the player slots.
@@ -971,8 +972,49 @@ namespace AirsoftFPS
             botSkillGroup = botSkillSeg.gameObject.AddComponent<CanvasGroup>();
             botSkillRow = skill.gameObject;
 
-            botNote = Label(colRt, "", F.Body, 13, Muted).Wrap();
-            botNote.rectTransform.TL(0, y + 80, 556, 36);
+            botNote = Label(colRt, "", F.Body, 13, Muted);
+            botNote.overflowMode = TextOverflowModes.Ellipsis;
+            botNote.rectTransform.TL(0, y + 74, 556, 18);
+        }
+
+        // Match rules (host picks, everyone sees): wind strength and goggle fog, one row under the bot note.
+        Segmented windSeg, fogSeg;
+        CanvasGroup rulesGroup;
+
+        void BuildMatchRules(RectTransform colRt, float y)
+        {
+            var row = Rect(colRt, "MatchRules").TL(0, y, 556, 30);
+            rulesGroup = row.gameObject.AddComponent<CanvasGroup>();
+
+            var wind = Rect(row, "Wind").TL(0, 0, 286, 30);
+            Caption(wind, "WIND", 12, Muted, 0.16f).rectTransform.Fill();
+            windSeg = Segments(wind, WindSystem.SETTING_NAMES, WindSystem.DEFAULT_SETTING, 28, 12, i =>
+            {
+                if (isHost && MatchNet.Instance != null) MatchNet.Instance.HostSetWind(i);
+            }, 10f);
+            var wrt = (RectTransform)windSeg.transform;
+            wrt.anchorMin = wrt.anchorMax = wrt.pivot = new Vector2(1f, 0.5f);
+            wrt.anchoredPosition = Vector2.zero;
+
+            var fog = Rect(row, "Fog").TL(304, 0, 252, 30);
+            Caption(fog, "GOGGLE FOG", 12, Muted, 0.16f).rectTransform.Fill();
+            fogSeg = Segments(fog, new[] { "OFF", "ON" }, 1, 28, 12, i =>
+            {
+                if (isHost && MatchNet.Instance != null) MatchNet.Instance.HostSetFog(i == 1);
+            }, 12f);
+            var frt = (RectTransform)fogSeg.transform;
+            frt.anchorMin = frt.anchorMax = frt.pivot = new Vector2(1f, 0.5f);
+            frt.anchoredPosition = Vector2.zero;
+        }
+
+        void RefreshMatchRules(MatchNet mnet)
+        {
+            if (windSeg == null) return;
+            if (windSeg.Selected != mnet.WindSetting) windSeg.Select(mnet.WindSetting, false);
+            int fi = mnet.FogEnabled ? 1 : 0;
+            if (fogSeg.Selected != fi) fogSeg.Select(fi, false);
+            rulesGroup.blocksRaycasts = isHost;
+            rulesGroup.alpha = isHost ? 1f : 0.75f;
         }
 
         void RefreshBotOptions(MatchNet mnet)
@@ -1110,6 +1152,7 @@ namespace AirsoftFPS
             timeGroup.blocksRaycasts = isHost;
 
             RefreshBotOptions(mnet);
+            RefreshMatchRules(mnet);
             RefreshMedicOptions(mnet);
 
             // roster

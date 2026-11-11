@@ -29,7 +29,7 @@ namespace AirsoftFPS
             backdrop.gameObject.AddComponent<UIClick>().onClick = panel.Close;
 
             var card = Card(root, "Card", Surface, Line, 1f);
-            card.rectTransform.At(0.5f, 0.5f, 0, 0, 820, 600);
+            card.rectTransform.At(0.5f, 0.5f, 0, 0, 820, 680);
             var col = VCol(card.transform, "Col", 14);
             col.padding = new RectOffset(40, 40, 32, 28);
             col.GetComponent<RectTransform>().Fill();
@@ -53,13 +53,13 @@ namespace AirsoftFPS
             {
                 var it = item;
                 var r = HRow(list.transform, it.id, 12, TextAnchor.MiddleLeft);
-                r.LE(-1, 64);
-                r.padding = new RectOffset(16, 16, 8, 8);
+                r.LE(-1, 50);
+                r.padding = new RectOffset(16, 16, 4, 4);
                 r.gameObject.AddComponent<Image>().color = Raised;
 
                 var info = VCol(r.transform, "Info", 2, TextAnchor.MiddleLeft);
-                info.LE(0, 48, 1f);   // grows
-                Label(info.transform, it.label, F.CondBold, 20, Fg).LE(-1, 22);
+                info.LE(0, 42, 1f);   // grows
+                Label(info.transform, it.label, F.CondBold, 19, Fg).LE(-1, 21);
                 Label(info.transform, it.note, F.Body, 12, Muted).LE(-1, 15);
 
                 var cost = Label(r.transform, "", F.MonoBold, 16, Accent, TextAlignmentOptions.MidlineRight);
@@ -79,6 +79,28 @@ namespace AirsoftFPS
                 panel.rows.Add(new Row { item = it, status = status, buy = buy });
             }
 
+            // BB weight: four cells; click an owned one to load it, an unowned one to buy (and load) it
+            Caption(col.transform, "BB WEIGHT  ·  HEAVIER = SLOWER, BUT STEADIER IN THE WIND", 12, Muted, 0.16f).LE(-1, 14);
+            var bbRow = HRow(col.transform, "BBs", 8);
+            bbRow.LE(-1, 56);
+            bbRow.childControlWidth = bbRow.childControlHeight = true;
+            bbRow.childForceExpandWidth = true;
+            for (int i = 0; i < ShopCatalog.Bbs.Count; i++)
+            {
+                int idx = i;
+                var it = ShopCatalog.Bbs[i];
+                var b = Button(bbRow.transform, "", Btn.Quiet, 15, () =>
+                {
+                    if (!ShopCatalog.OwnedBb(idx) && PlayerProfile.Level >= it.rank) PlayerProfile.Buy(it.id, it.cost);
+                    if (ShopCatalog.OwnedBb(idx)) PlayerProfile.SetBbWeight(idx);
+                    panel.Refresh();
+                }, F.CondBold);
+                b.LE(-1, 56, 1f);
+                b.label.richText = true;
+                b.label.lineSpacing = -10f;
+                panel.bbButtons.Add(b);
+            }
+
             Spacer(col.transform);
             Label(col.transform, "Credits are earned every match. Buying a weapon unlocks it for your loadout; higher-tier weapons also need a rank. Everything is saved on this computer.",
                 F.Body, 12, Faint).Wrap().LE(-1, 32);
@@ -92,6 +114,7 @@ namespace AirsoftFPS
         {
             public TextMeshProUGUI credits;
             public readonly List<Row> rows = new List<Row>();
+            public readonly List<KitButton> bbButtons = new List<KitButton>();
 
             public void Open() { Refresh(); gameObject.SetActive(true); transform.SetAsLastSibling(); }
             public void Close() => gameObject.SetActive(false);
@@ -122,6 +145,22 @@ namespace AirsoftFPS
                         var img = row.buy.GetComponent<Image>();
                         if (img != null) img.color = affordable ? Accent : Scrim(0.5f);
                     }
+                }
+
+                int loaded = PlayerProfile.BbIndex;
+                for (int i = 0; i < bbButtons.Count && i < ShopCatalog.Bbs.Count; i++)
+                {
+                    var it = ShopCatalog.Bbs[i];
+                    var b = bbButtons[i];
+                    bool owned = ShopCatalog.OwnedBb(i);
+                    string sub = i == loaded ? "LOADED"
+                        : owned ? (it.cost == 0 ? "FREE · LOAD" : "OWNED · LOAD")
+                        : level < it.rank ? "RANK " + it.rank
+                        : "◆ " + ProfileUI.Num(it.cost) + (cr >= it.cost ? "" : " · NEED CR");
+                    b.label.text = $"{it.label}\n<size=60%>{sub}</size>";
+                    b.SetStyle(i == loaded ? Btn.Primary : Btn.Quiet);
+                    b.interactable = owned || (level >= it.rank && cr >= it.cost);
+                    b.Refresh();
                 }
             }
         }

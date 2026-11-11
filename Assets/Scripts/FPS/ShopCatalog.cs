@@ -35,6 +35,22 @@ namespace AirsoftFPS
 
         public static IReadOnlyList<Item> Weapons => weapons;
 
+        // BB weights (index = BBBallistics.Weights). 0.20 g and 0.25 g are free; heavier BBs are bought once.
+        public const int DEFAULT_BB = 1;
+        static readonly Item[] bbs =
+        {
+            new Item { id = "",           label = "0.20 g", cost = 0,   rank = 1, note = "Fastest, drifts most in the wind" },
+            new Item { id = "",           label = "0.25 g", cost = 0,   rank = 1, note = "All-round" },
+            new Item { id = "BB 0.28 g",  label = "0.28 g", cost = 400, rank = 2, note = "Steadier in the wind" },
+            new Item { id = "BB 0.32 g",  label = "0.32 g", cost = 900, rank = 6, note = "Slow but barely drifts" },
+        };
+
+        public static IReadOnlyList<Item> Bbs => bbs;
+
+        // Free weights have no id (PlayerProfile.Owns treats an empty id as owned).
+        public static bool OwnedBb(int index) =>
+            index >= 0 && index < bbs.Length && PlayerProfile.Owns(bbs[index].id);
+
         public static bool IsStarter(string id) => Array.IndexOf(StarterWeapons, id) >= 0;
 
         // Can this weapon be put in a loadout (free starter or already bought)?

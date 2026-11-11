@@ -21,7 +21,7 @@ namespace AirsoftFPS
         public List<string> owned = new List<string>();   // ids of weapons / parts bought from the shop
         public string loadoutPrimary = "";
         public string loadoutSecondary = "";
-        public int bbWeightIndex = 2;   // index into PlayerProfile.BB_WEIGHTS (default 0.28 g)
+        public int bbWeightIndex = 1;   // index into BBBallistics.Weights (default 0.25 g)
     }
 
     [Serializable]
@@ -121,7 +121,7 @@ namespace AirsoftFPS
         public static MatchXp LastMatch { get; private set; }
 
         // ───────────── loadout ─────────────
-        public static readonly float[] BB_WEIGHTS = { 0.20f, 0.25f, 0.28f, 0.32f, 0.40f };
+        public static float[] BB_WEIGHTS => BBBallistics.Weights;
 
         // Chosen weapons, falling back to a starter when the saved one isn't owned.
         public static string LoadoutPrimary
@@ -132,7 +132,25 @@ namespace AirsoftFPS
         {
             get { var s = Data.loadoutSecondary; return ShopCatalog.OwnedWeapon(s) ? s : "1911 GBB Pistol"; }
         }
-        public static float BbWeight => BB_WEIGHTS[Mathf.Clamp(Data.bbWeightIndex, 0, BB_WEIGHTS.Length - 1)];
+        public static float BbWeight => BB_WEIGHTS[BbIndex];
+
+        // BB weight the player loads (index into BBBallistics.Weights): the chosen one if owned, else 0.25 g.
+        public static int BbIndex
+        {
+            get
+            {
+                int i = BBBallistics.ClampWeight(Data.bbWeightIndex);
+                return ShopCatalog.OwnedBb(i) ? i : ShopCatalog.DEFAULT_BB;
+            }
+        }
+
+        public static void SetBbWeight(int index)
+        {
+            var d = Data;
+            d.bbWeightIndex = BBBallistics.ClampWeight(index);
+            Save();
+            Changed?.Invoke();
+        }
 
         public static void SetLoadout(string primary, string secondary, int bbIndex)
         {

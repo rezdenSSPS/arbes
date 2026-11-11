@@ -12,12 +12,13 @@ namespace AirsoftFPS
         {
             public string scene;   // scene name in the build settings
             public string name;    // shown on the lobby map cards
+            public float wind;     // how much of the lobby wind setting reaches this map (0 = indoor, no wind)
         }
 
         public static readonly MapInfo[] Maps =
         {
-            new MapInfo { scene = "AirsoftArena", name = "Town" },            // 80 x 80 m: streets, houses, park, container yard
-            new MapInfo { scene = "AirsoftWarehouse", name = "Warehouse" },   // 60 x 60 m CQB: hall, office block, loading yards
+            new MapInfo { scene = "AirsoftArena", name = "Town", wind = 1f },            // 80 x 80 m: streets, houses, park, container yard
+            new MapInfo { scene = "AirsoftWarehouse", name = "Warehouse", wind = 0f },   // 60 x 60 m CQB: hall, office block, loading yards
         };
 
         public static int Count => Maps.Length;
@@ -27,6 +28,13 @@ namespace AirsoftFPS
         public static string SceneOf(int i) => Maps[Valid(i) ? i : 0].scene;
 
         public static string NameOf(int i) => Maps[Valid(i) ? i : 0].name;
+
+        // Wind factor of a map scene (0 for unknown scenes).
+        public static float WindFor(string scene)
+        {
+            int i = IndexOfScene(scene);
+            return i >= 0 ? Maps[i].wind : 0f;
+        }
 
         public static int IndexOfScene(string scene)
         {

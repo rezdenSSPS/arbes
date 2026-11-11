@@ -45,6 +45,8 @@ namespace AirsoftFPS
         public static readonly int[] TIME_LIMIT_OPTIONS = { 0, 5, 10, 15 };
         public const int DEFAULT_TIME_LIMIT = 10;
         const string TIME_LIMIT_PREF = "Airsoft.TimeLimit";
+        const string WIND_PREF = "Airsoft.Wind";
+        const string FOG_PREF = "Airsoft.GoggleFog";
         const string MATCH_SCENE = "AirsoftArena";   // default map; the lobby vote picks MatchScene (MatchNetMapVote)
         const string LOBBY_SCENE = "AirsoftLobby";
         // The map scene the next / current match is played on (objective modes check its MapLayout).
@@ -66,6 +68,13 @@ namespace AirsoftFPS
         public bool IsDraw { get; private set; }          // match ended on time with an exact tie
         public bool EndedOnTime { get; private set; }     // match ended because the clock ran out
         public int TimeLimitMinutes { get; private set; } = DEFAULT_TIME_LIMIT;
+        // Match rules the host picks in the lobby (same for everyone): wind strength (WindSystem.SETTING_NAMES)
+        // and whether eye protection fogs up (GoggleFog).
+        public int WindSetting { get; private set; } = WindSystem.DEFAULT_SETTING;
+        public bool FogEnabled { get; private set; } = true;
+        // The wind of the current match (rolled by the server at match start): heading it blows to, m/s.
+        public float WindDir { get; private set; }
+        public float WindSpeed { get; private set; }
         // Network server time (NetworkManager.ServerTime) when the clock runs out; 0 = not running.
         public double MatchEndTime { get; private set; }
         // Co-op: the wave the server's EnemySpawner is on (clients have no live spawner state of their own).
@@ -131,6 +140,8 @@ namespace AirsoftFPS
             localLook = AirsoftLook.LoadLocal();
             int saved = PlayerPrefs.GetInt(TIME_LIMIT_PREF, DEFAULT_TIME_LIMIT);
             TimeLimitMinutes = Array.IndexOf(TIME_LIMIT_OPTIONS, saved) >= 0 ? saved : DEFAULT_TIME_LIMIT;
+            WindSetting = Mathf.Clamp(PlayerPrefs.GetInt(WIND_PREF, WindSystem.DEFAULT_SETTING), 0, WindSystem.SETTING_NAMES.Length - 1);
+            FogEnabled = PlayerPrefs.GetInt(FOG_PREF, 1) == 1;
         }
 
         void Update()
@@ -151,6 +162,7 @@ namespace AirsoftFPS
 
             if (nm.IsServer) TickMatchClock();
             BotsUpdate();
+            WindSystem.SyncWorld();          // windsocks in the arena
             ObjectiveMode.Sync(this, nm);   // objective modes (CTF, Domination): create / remove the rules object
         }
 
@@ -257,6 +269,26 @@ namespace AirsoftFPS
             BroadcastState();
         }
 
+        // Host picks the wind (index into WindSystem.SETTING_NAMES) and goggle fog in the lobby.
+        public void HostSetWind(int setting)
+        {
+            if (!IsHost || CurrentPhase != Phase.Lobby || WindSetting == setting) return;
+            if (setting < 0 || setting >= WindSystem.SETTING_NAMES.Length) return;
+            WindSetting = setting;
+            PlayerPrefs.SetInt(WIND_PREF, setting);
+            PlayerPrefs.Save();
+            BroadcastState();
+        }
+
+        public void HostSetFog(bool on)
+        {
+            if (!IsHost || CurrentPhase != Phase.Lobby || FogEnabled == on) return;
+            FogEnabled = on;
+            PlayerPrefs.SetInt(FOG_PREF, on ? 1 : 0);
+            PlayerPrefs.Save();
+            BroadcastState();
+        }
+
         // True when the current mode plays with the time limit (Co-op never does).
         public bool UsesTimeLimit => Mode != GameModeType.Coop && TimeLimitMinutes > 0
                                      && !ObjectiveMode.HasOwnClock(Mode);   // Bomb / VIP: timed rounds instead
@@ -294,6 +326,9 @@ namespace AirsoftFPS
             if (!IsHost) return;
             if (!ObjectiveMode.IsAvailable(Mode, out _)) return;   // lobby shows why on the mode card
             ChooseMatchMap();   // lobby map vote (MatchNetMapVote)
+            WindSystem.Roll(WindSetting, MatchScene, out float windDir, out float windSpeed);
+            WindDir = windDir;
+            WindSpeed = windSpeed;
             EnemiesEnabled = (Mode == GameModeType.Coop);
             CoopWave = 1;
             CurrentPhase = Phase.InMatch;
@@ -598,6 +633,8 @@ namespace AirsoftFPS
             MatchEndTime = 0;
             LastDeath = default;
             CoopWave = 1;
+            WindSpeed = 0f;
+            WindSystem.Apply(false, 0f, 0f);
             ClearMapVoteState();
             serverHandlersUp = false;
             clientHandlersUp = false;
@@ -641,6 +678,7 @@ namespace AirsoftFPS
 
         void BroadcastState()
         {
+            WindSystem.Apply(CurrentPhase != Phase.Lobby, WindDir, WindSpeed);
             OnStateChanged?.Invoke(); // refresh the host's own UI immediately
 
             if (nm == null || !nm.IsServer || nm.ShutdownInProgress || nm.CustomMessagingManager == null) return;
@@ -654,6 +692,10 @@ namespace AirsoftFPS
             w.WriteValueSafe((byte)TimeLimitMinutes);
             w.WriteValueSafe(MatchEndTime);
             w.WriteValueSafe(CoopWave);
+            w.WriteValueSafe((byte)WindSetting);
+            w.WriteValueSafe(FogEnabled);
+            w.WriteValueSafe(WindDir);
+            w.WriteValueSafe(WindSpeed);
             w.WriteValueSafe(roster.Count);
             foreach (var e in roster)
             {
@@ -682,6 +724,10 @@ namespace AirsoftFPS
             reader.ReadValueSafe(out byte timeLimit);
             reader.ReadValueSafe(out double matchEnd);
             reader.ReadValueSafe(out int coopWave);
+            reader.ReadValueSafe(out byte windSetting);
+            reader.ReadValueSafe(out bool fog);
+            reader.ReadValueSafe(out float windDir);
+            reader.ReadValueSafe(out float windSpeed);
             reader.ReadValueSafe(out int count);
 
             roster.Clear();
@@ -706,6 +752,11 @@ namespace AirsoftFPS
             TimeLimitMinutes = timeLimit;
             MatchEndTime = matchEnd;
             CoopWave = coopWave;
+            WindSetting = windSetting;
+            FogEnabled = fog;
+            WindDir = windDir;
+            WindSpeed = windSpeed;
+            WindSystem.Apply(CurrentPhase != Phase.Lobby, WindDir, WindSpeed);
             EnemiesEnabled = (Mode == GameModeType.Coop);
             OnStateChanged?.Invoke();
         }

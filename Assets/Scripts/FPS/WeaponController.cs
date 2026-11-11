@@ -86,6 +86,7 @@ namespace AirsoftFPS
             public Vector3 origin, dir;
             public uint seed;
             public bool aimed;
+            public int bb;           // BB weight index (BBBallistics.Weights)
             public float time;       // server receive time (Time.unscaledTime)
             public int usedPellets;  // bitmask of pellets that already scored
         }
@@ -885,10 +886,11 @@ namespace AirsoftFPS
             Vector3 dir = playerCam.transform.forward;
             uint seed = (uint)Random.Range(int.MinValue, int.MaxValue);
             bool aimed = isAiming;
+            int bb = PlayerProfile.BbIndex;   // BB weight from the loadout (Armory)
 
-            ShootRpc(shot, weaponIdx, origin, dir, seed, aimed);
+            ShootRpc(shot, weaponIdx, origin, dir, seed, aimed, (byte)bb);
             AirsoftAudio.Shot(w, origin, true);
-            SpawnBBs(w, origin, dir, seed, aimed, hit =>
+            SpawnBBs(w, origin, dir, seed, aimed, bb, hit =>
             {
                 if (this == null) return;   // player despawned while the BB was in the air
                 SpawnImpact(hit.point, hit.normal);
@@ -899,7 +901,7 @@ namespace AirsoftFPS
         }
 
         // Launches every pellet of a shot. `onHit` == null -> visual-only copy (remote clients).
-        void SpawnBBs(WeaponData w, Vector3 origin, Vector3 dir, uint seed, bool aimed,
+        void SpawnBBs(WeaponData w, Vector3 origin, Vector3 dir, uint seed, bool aimed, int bb,
                       BBProjectile.HitHandler onHit)
         {
             // The BB is drawn leaving the gun and slides onto the true eye-line path over a few metres.
@@ -909,7 +911,7 @@ namespace AirsoftFPS
             if (onHit == null) onHit = hit => { if (this != null) SpawnImpact(hit.point, hit.normal); };
             for (int p = 0; p < pellets; p++)
                 BBProjectile.Fire(w, origin, BBBallistics.PelletDirection(w, dir, seed, p, aimed), muzzle,
-                                  hitMask, transform, onHit);
+                                  hitMask, transform, onHit, bb);
         }
 
         // ───── Visual effects ─────
@@ -955,7 +957,7 @@ namespace AirsoftFPS
         // Fire-time checks happen here, once per trigger pull: sender, alive, weapon, fire rate and
         // origin. The shot is remembered so HitRpc can re-fly its BBs, then relayed to everyone.
         [Rpc(SendTo.Server)]
-        void ShootRpc(int shotSeq, int weaponIdx, Vector3 origin, Vector3 dir, uint seed, bool aimed,
+        void ShootRpc(int shotSeq, int weaponIdx, Vector3 origin, Vector3 dir, uint seed, bool aimed, byte bb,
                       RpcParams rpcParams = default)
         {
             if (rpcParams.Receive.SenderClientId != OwnerClientId) return;   // no shooting "as" someone else
@@ -988,6 +990,7 @@ namespace AirsoftFPS
             if (!IsFinite(origin) || !IsFinite(dir) || dir.sqrMagnitude < 0.25f || dir.sqrMagnitude > 4f)
             { RejectShot(shotSeq, "bad origin/direction"); return; }
             if (!OriginPlausible(origin)) { RejectShot(shotSeq, "origin too far from shooter"); return; }
+            if (bb >= BBBallistics.Weights.Length) { RejectShot(shotSeq, "unknown BB weight " + bb); return; }
 
             // Server-authoritative ammo: a trigger pull costs one round and you can't fire mid-reload or empty.
             if (svMag != null)
@@ -1005,11 +1008,12 @@ namespace AirsoftFPS
             rec.dir = dir.normalized;
             rec.seed = seed;
             rec.aimed = aimed;
+            rec.bb = bb;
             rec.time = now;
             rec.usedPellets = 0;
 
             if (ownHealth != null) ownHealth.EndSpawnProtection();   // firing ends spawn protection
-            ShootEffectsRpc(weaponIdx, origin, rec.dir, seed, aimed);
+            ShootEffectsRpc(weaponIdx, origin, rec.dir, seed, aimed, bb);
         }
 
         static bool IsFinite(Vector3 v) =>
@@ -1017,12 +1021,12 @@ namespace AirsoftFPS
               float.IsInfinity(v.x) || float.IsInfinity(v.y) || float.IsInfinity(v.z));
 
         [Rpc(SendTo.Everyone)]
-        void ShootEffectsRpc(int weaponIdx, Vector3 origin, Vector3 dir, uint seed, bool aimed)
+        void ShootEffectsRpc(int weaponIdx, Vector3 origin, Vector3 dir, uint seed, bool aimed, byte bb)
         {
             // Remote players fly a visual-only copy of the same BBs (the owner already has its own).
             if (!IsOwner && weapons != null && weaponIdx >= 0 && weaponIdx < weapons.Length)
             {
-                SpawnBBs(weapons[weaponIdx], origin, dir, seed, aimed, null);
+                SpawnBBs(weapons[weaponIdx], origin, dir, seed, aimed, bb, null);
                 AirsoftAudio.Shot(weapons[weaponIdx], origin, false);
             }
 
@@ -1084,7 +1088,7 @@ namespace AirsoftFPS
                 if ((rec.usedPellets & (1 << p)) != 0) continue;
                 Vector3 pd = BBBallistics.PelletDirection(w, rec.dir, rec.seed, p, rec.aimed);
                 var r = BBBallistics.TracePath(w, rec.origin, pd, hitPoint, hitMask, PATH_TOLERANCE, LOS_END_MARGIN,
-                                               out float t, out float miss);
+                                               out float t, out float miss, rec.bb);
                 if (r == BBBallistics.PathResult.Hit && miss < bestMiss) { match = p; tof = t; bestMiss = miss; }
                 else if (r == BBBallistics.PathResult.Blocked) blocked = true;
             }
