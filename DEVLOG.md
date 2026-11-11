@@ -266,3 +266,7 @@ Vyvíjeno paralelně ve čtyřech větvích (`feat/ui-fixes`, `feat/random-mode`
 - Nové kontroly: `RandomModePlayCheck` (23), `ChatPlayCheck` (35), 15 kontrol losování v `ObjectiveLogicCheck`.
 - Testy po sloučení: kompilace čistá, objektivy 104/0, medik 39/0, zvuk 34/0, medik v play módu 27/0, CTF 19/0, Domination 18/0, Bomb 29/0, VIP 23/0, Random mode 23/0, chat 35/0, `MapNavCheck` 254/0.
 - **Neověřeno:** druhý skutečný klient přes síť (chat, pole RandomMode ve stavu zápasu, pohled klienta na LOCK), skutečná klávesnice (Enter/Esc v chatu, T), ruka a prohlídka zbraně v interaktivní hře (jen vykreslené snímky ve všech 10 zbraních).
+
+## 2026-11-11 — Vlna v co-opu pod minimapou
+- Ukazatel vlny v režimu Co-op („WAVE N“ a počet zbývajících nepřátel) se přesunul ze středu nahoře pod minimapu vlevo nahoře. Je to jen text bez podkladu a rámečku, vycentrovaný pod mapou.
+- Testy: kompilace čistá, objektivy 104/0, zvuk 34/0; HUD v co-opu vykreslený a zkontrolovaný očima.

@@ -969,7 +969,7 @@ namespace AirsoftFPS
 
             // top-left: join code + fps
             var tl = VCol(root, "TopLeft", 6, TextAnchor.UpperLeft, false);
-            tl.GetComponent<RectTransform>().At(0f, 1f, 24, -20, 400, 260);
+            tl.GetComponent<RectTransform>().At(0f, 1f, 24, -20, 400, 340);
             var chip = ScrimRow(tl.transform, "Code", 10, new RectOffset(10, 10, 6, 6));
             Label(chip, "CODE", F.BodyBold, 12, Muted, TextAlignmentOptions.MidlineLeft, 0.14f);
             codeValue = Label(chip, "", F.MonoBold, 12, Accent, TextAlignmentOptions.MidlineLeft, 0.16f);
@@ -987,6 +987,15 @@ namespace AirsoftFPS
             fpsText = Label(tl.transform, "", F.MonoBold, 12, Ready);
             fpsText.LE(-1, 16);
             Minimap.Create(tl.transform);   // under the code chip, clear of kill feed / health / ammo
+            // co-op: wave and enemies left as plain text right under the minimap (no panel or outline)
+            var coop = VCol(tl.transform, "Coop", -2, TextAnchor.UpperCenter, false);
+            coop.LE(168, -1);
+            coopWidget = coop.gameObject;
+            coopWave = Label(coop.transform, "WAVE 1", F.CondBlack, 28, Fg, TextAlignmentOptions.Center, 0.04f);
+            coopWave.LE(168, 32);
+            var left = HRow(coop.transform, "Left", 5, TextAnchor.LowerCenter);
+            coopLeftNum = Label(left.transform, "0", F.CondBold, 18, Accent, TextAlignmentOptions.BottomLeft);
+            Label(left.transform, "enemies left", F.BodyBold, 13, Fg, TextAlignmentOptions.BottomLeft).margin = new Vector4(0, 0, 0, 2);
             WindSystem.CreateHud(tl.transform);   // wind arrow + speed (hidden when calm)
 
             // top-center widget
@@ -1040,13 +1049,6 @@ namespace AirsoftFPS
             steps.LE(-1, 6);
             for (int i = 0; i < MatchNet.GUNGAME_WEAPONS; i++) ggSteps.Add(Box(steps.transform, "Step", Line).LE(-1, 6, 1));
 
-            var coop = ScrimRow(top.transform, "Coop", 16, new RectOffset(18, 18, 8, 8), 0.78f);
-            coopWidget = coop.gameObject;
-            coopWave = Label(coop, "WAVE 1", F.CondBlack, 30, Fg);
-            Box(coop, "Sep", LineStrong).LE(1, 26);
-            var left = HRow(coop, "Left", 6, TextAnchor.LowerLeft);
-            coopLeftNum = Label(left.transform, "0", F.CondBold, 22, Accent, TextAlignmentOptions.BottomLeft);
-            Label(left.transform, "enemies left", F.Body, 14, Fg, TextAlignmentOptions.BottomLeft).margin = new Vector4(0, 0, 0, 3);
 
             // match clock under the mode widget (hidden when there is no time limit)
             var clock = ScrimRow(top.transform, "Clock", 8, new RectOffset(12, 12, 4, 4), 0.78f);
