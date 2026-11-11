@@ -198,7 +198,8 @@ a `AirsoftFPS.Editor.ObjectiveMapSetup.UpdateArenaLayout`.
 **Pozadí menu** jsou skutečné snímky ze hry (`Assets/Resources/MenuShots/m<mapa>_g<režim>_<n>.jpg`). Fotí je
 `MenuShotsCapture`: odehraje zápas s boty a ve chvíli, kdy bot střílí, vyfotí pohled z první osoby s replikou,
 přes rameno bota a kamerou za botem. Všechny kombinace mapa / režim / zbraň najednou: `tools/menu_shots.sh`
-(Unity s projektem nesmí být otevřené). Menu je prolíná s pomalým posunem a zoomem a dole ukazuje mapu a režim.
+(Unity s projektem nesmí být otevřené). Menu je prolíná s pomalým posunem a zoomem a dole ukazuje mapu a režim;
+lobby má zase tmavé pozadí.
 
 Nová mapa potřebuje: scénu v build settings, záznam v `MapCatalog.Maps`, komponentu `MapLayout` s body režimů,
 `SpawnPoint`y a náhled v `Resources/MapPreviews`.

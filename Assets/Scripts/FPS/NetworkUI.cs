@@ -787,7 +787,6 @@ namespace AirsoftFPS
         {
             var screen = Rect(root, "LobbyScreen").Fill();
             Box(screen, "Ground", Ground, true).rectTransform.Fill();
-            MenuShowcase.Create(screen, 0.88f, false);   // game frames breathing faintly behind the panels
 
             var stage = Rect(screen, "Stage").At(0.5f, 0.5f, 0, 0, 1280, 720);
             // header rule and bottom bar run past the 1280 stage to the screen edges
