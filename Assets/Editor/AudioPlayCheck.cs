@@ -20,7 +20,7 @@ namespace AirsoftFPS.Editor
     // Batch: Unity -batchmode -projectPath <p> -executeMethod AirsoftFPS.Editor.AudioPlayCheck.RunBatch
     public static class AudioPlayCheck
     {
-        const string BOT_FILL_PREF = "Airsoft.BotFill";   // MatchNet.Bots; restored afterwards
+        const string BOT_FILL_PREF = "Airsoft.Bots";   // MatchNet.Bots; restored afterwards
         static int stage, fails, passes;
         static double stageStart, runStart;
         static bool batch;
@@ -199,7 +199,7 @@ namespace AirsoftFPS.Editor
                     case 2:   // Milsim with bots, ready
                         if (mn == null || mn.Roster.Count == 0 || InStage < 1) return;
                         mn.HostSetMode(MatchNet.GameModeType.Milsim);
-                        mn.HostSetBotFill(4);
+                        mn.HostSetBots(3);
                         if (!mn.LocalReady) mn.ToggleReady();
                         Next(); break;
                     case 3:

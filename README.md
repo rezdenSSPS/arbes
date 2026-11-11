@@ -60,7 +60,8 @@ už používá jiná spuštěná hra na stejném počítači, hostování skonč
 
 ### Lobby
 - Hostitel vybírá režim (karty, nebo klávesa **M**; seznam režimů se posouvá kolečkem myši), časový limit
-  (Off / 5 / 10 / 15 min), boty a obtížnost botů.
+  (Off / 5 / 10 / 15 min), počet botů (posuvník **BOTS** 0–7, 0 = bez botů) a obtížnost botů. Boti se vejdou jen do
+  volných míst (lobby má 8 míst), takže když se připojí další hráči, boti uvolní místo a po odchodu hráče se vrátí.
 - Každý hráč si nastaví jméno (callsign), postavu (**CUSTOMIZE**), hlasuje o mapě a dá **READY UP** (klávesa **R**).
   Hlasovat jde i pro **RANDOM MAP**: mapa se vylosuje při startu z map, které zvolený režim umí, a pokud to jde,
   jiná než naposledy hraná. Host může zamknout i náhodnou mapu.
@@ -68,7 +69,7 @@ už používá jiná spuštěná hra na stejném počítači, hostování skonč
 - **Random mode** – místo režimu může host zvolit kartu **RANDOM MODE** (první v seznamu, nebo klávesou **M**). Režim se
   vylosuje až po stisku START MATCH z režimů, které mapa umí, a nezopakuje se ten minulý (pokud je z čeho vybírat).
   S RANDOM MAP se vylosuje platná dvojice mapa + režim. Časový limit a boty jde nastavit dál, platí, pokud je režim používá.
-- V režimech bez botů (Co-op) se řádky FILL WITH BOTS / BOT DIFFICULTY skryjí.
+- V režimech bez botů (Co-op) se řádky BOTS / BOT DIFFICULTY skryjí.
 - Host může v hlasování o mapě tlačítkem **LOCK** vybrat mapu sám (hlasy se pak nepočítají, ostatní vidí „LOCKED BY HOST“);
   **UNLOCK** vrací rozhodnutí hlasování.
 - **Chat:** ikona bubliny vlevo dole (vedle LEAVE) otevře chat lobby, oranžové číslo ukazuje nepřečtené zprávy. Enter zprávu

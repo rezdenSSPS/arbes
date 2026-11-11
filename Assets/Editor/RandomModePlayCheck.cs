@@ -9,7 +9,7 @@ using UnityEngine.SceneManagement;
 
 namespace AirsoftFPS.Editor
 {
-    // Host-only play-mode check of RANDOM MODE through the real game flow (bots fill up to 4 so every mode
+    // Host-only play-mode check of RANDOM MODE through the real game flow (3 bots so every mode
     // can be drawn): lobby -> host -> M cycles to RANDOM MODE -> START -> the arena runs a real mode the map
     // can play -> back to the lobby (still RANDOM) -> RANDOM MAP too -> START -> a different mode on a map
     // that can play it.
@@ -18,7 +18,7 @@ namespace AirsoftFPS.Editor
     // (relies on Enter Play Mode Options with domain reload off, as set in this project)
     public static class RandomModePlayCheck
     {
-        const string BOT_FILL_PREF = "Airsoft.BotFill";
+        const string BOT_FILL_PREF = "Airsoft.Bots";
         static int stage, savedBotFill, round;
         static double stageStart, runStart;
         static int fails, passes;
@@ -34,7 +34,7 @@ namespace AirsoftFPS.Editor
         {
             stage = 0; round = 0; fails = passes = 0;
             savedBotFill = PlayerPrefs.GetInt(BOT_FILL_PREF, 0);
-            PlayerPrefs.SetInt(BOT_FILL_PREF, 4);   // bots fill up to 4: random may draw any mode (alone = Co-op only)
+            PlayerPrefs.SetInt(BOT_FILL_PREF, 3);   // 3 bots: random may draw any mode (alone = Co-op only)
             PlayerPrefs.Save();
             log.Clear();
             log.AppendLine("[Airsoft] Play check RANDOM MODE");

@@ -36,8 +36,8 @@ namespace AirsoftFPS.Editor
         static void Run()
         {
             stage = 0; fails = passes = 0; ui = null;
-            savedBotFill = PlayerPrefs.GetInt("Airsoft.BotFill", 0);
-            PlayerPrefs.SetInt("Airsoft.BotFill", 0);   // host-only check: no bots
+            savedBotFill = PlayerPrefs.GetInt("Airsoft.Bots", 0);
+            PlayerPrefs.SetInt("Airsoft.Bots", 0);   // host-only check: no bots
             PlayerPrefs.Save();
             log.Clear();
             log.AppendLine("[Airsoft] Play check: lobby chat");
@@ -63,7 +63,7 @@ namespace AirsoftFPS.Editor
             log.AppendLine($"  => {passes} passed, {fails} failed");
             if (fails == 0) Debug.Log(log.ToString()); else Debug.LogError(log.ToString());
             EditorApplication.update -= Tick;
-            PlayerPrefs.SetInt("Airsoft.BotFill", savedBotFill);
+            PlayerPrefs.SetInt("Airsoft.Bots", savedBotFill);
             PlayerPrefs.Save();
             if (batch) EditorApplication.Exit(fails == 0 ? 0 : 1);
             else EditorApplication.isPlaying = false;

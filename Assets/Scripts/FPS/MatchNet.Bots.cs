@@ -21,10 +21,11 @@ namespace AirsoftFPS
         public static bool IsBotId(ulong id) => id >= BOT_ID_BASE && id != ulong.MaxValue;
 
         public enum BotDifficulty { Easy = 0, Normal = 1, Hard = 2 }
-        public static readonly int[] BOT_FILL_OPTIONS = { 0, 4, 8 };   // total players incl. bots; 0 = off
+        public const int BOT_MAX = 7;   // most bots the host can ask for (the roster holds 8 with the host)
         public static readonly string[] BOT_DIFFICULTY_NAMES = { "Easy", "Normal", "Hard" };
         const int BOT_MAX_ROSTER = 8;
-        const string BOT_FILL_PREF = "Airsoft.BotFill";
+        const string BOT_COUNT_PREF = "Airsoft.Bots";          // exact bot count 0..7
+        const string BOT_FILL_PREF_OLD = "Airsoft.BotFill";     // old "up to 4 / 8 players" choice, migrated once
         const string BOT_DIFFICULTY_PREF = "Airsoft.BotDifficulty";
         const string MSG_BOTS = "mn_bots";   // server -> clients (bot settings, for the lobby)
 
@@ -36,7 +37,7 @@ namespace AirsoftFPS
         };
 
         // Shared view (host setting, synced to clients for the lobby).
-        public int BotFill { get; private set; }
+        public int BotsWanted { get; private set; }   // the host's pick: how many bots (0 = off)
         public BotDifficulty BotSkill { get; private set; } = BotDifficulty.Normal;
 
         // Modes that get bots. Explicit list so a new mode stays bot-free until its bot behaviour is written.
@@ -50,7 +51,7 @@ namespace AirsoftFPS
 
         // (Lobby with RANDOM MODE picked: the drawn mode may have bots, so they fill the slots already;
         // DropBotsIfModeHasNone removes them at START if it has none.)
-        public bool BotsActive => (ModeHasBots(Mode) || RandomModePending) && BotFill > 0;
+        public bool BotsActive => (ModeHasBots(Mode) || RandomModePending) && BotsWanted > 0;
 
         public int BotCount
         {
@@ -59,12 +60,13 @@ namespace AirsoftFPS
 
         // ───────── host API (lobby) ─────────
 
-        public void HostSetBotFill(int total)
+        // Exact number of bots (0 = off). They still give up their slots when players join a full lobby.
+        public void HostSetBots(int count)
         {
-            if (!IsHost || CurrentPhase != Phase.Lobby || BotFill == total) return;
-            if (System.Array.IndexOf(BOT_FILL_OPTIONS, total) < 0) return;
-            BotFill = total;
-            PlayerPrefs.SetInt(BOT_FILL_PREF, total);
+            count = Mathf.Clamp(count, 0, BOT_MAX);
+            if (!IsHost || CurrentPhase != Phase.Lobby || BotsWanted == count) return;
+            BotsWanted = count;
+            PlayerPrefs.SetInt(BOT_COUNT_PREF, count);
             PlayerPrefs.Save();
             SendBotSettings();
             SyncBotRoster();
@@ -134,8 +136,7 @@ namespace AirsoftFPS
             if (!botPrefsLoaded)
             {
                 botPrefsLoaded = true;
-                int fill = PlayerPrefs.GetInt(BOT_FILL_PREF, 0);
-                BotFill = System.Array.IndexOf(BOT_FILL_OPTIONS, fill) >= 0 ? fill : 0;
+                BotsWanted = Mathf.Clamp(PlayerPrefs.GetInt(BOT_COUNT_PREF, LegacyBotCount()), 0, BOT_MAX);
                 BotSkill = (BotDifficulty)Mathf.Clamp(PlayerPrefs.GetInt(BOT_DIFFICULTY_PREF, 1), 0, BOT_DIFFICULTY_NAMES.Length - 1);
             }
 
@@ -166,7 +167,7 @@ namespace AirsoftFPS
             SpawnMissingBots();
         }
 
-        // Keeps the roster at "Fill with bots" players: adds bots for empty slots, removes bots when
+        // Keeps the host's bot count (as many as fit next to the players): adds bots, removes them when
         // players join (or the mode has no bots), and keeps every bot ready.
         void SyncBotRoster()
         {
@@ -175,7 +176,7 @@ namespace AirsoftFPS
 
             int humans = 0, bots = 0;
             foreach (var e in roster) { if (IsBotId(e.clientId)) bots++; else humans++; }
-            int want = BotsActive ? Mathf.Clamp(BotFill - humans, 0, Mathf.Max(0, BOT_MAX_ROSTER - humans)) : 0;
+            int want = BotsActive ? Mathf.Clamp(BotsWanted, 0, Mathf.Max(0, BOT_MAX_ROSTER - humans)) : 0;
 
             while (bots > want)
             {
@@ -339,13 +340,20 @@ namespace AirsoftFPS
             }
         }
 
+        // The old setting was "fill up to 4 / 8 players" (with the host): the same lobby alone is 3 / 7 bots.
+        static int LegacyBotCount()
+        {
+            int fill = PlayerPrefs.GetInt(BOT_FILL_PREF_OLD, 0);
+            return fill > 0 ? fill - 1 : 0;
+        }
+
         // ───────── settings sync ─────────
 
         void SendBotSettings()
         {
             if (nm == null || !nm.IsServer || !nm.IsListening) return;
             using var w = new FastBufferWriter(8, Allocator.Temp);
-            w.WriteValueSafe((byte)BotFill);
+            w.WriteValueSafe((byte)BotsWanted);
             w.WriteValueSafe((byte)BotSkill);
             nm.CustomMessagingManager.SendNamedMessageToAll(MSG_BOTS, w, NetworkDelivery.Reliable);
         }
@@ -355,7 +363,7 @@ namespace AirsoftFPS
             if (nm == null || nm.IsServer || sender != NetworkManager.ServerClientId) return;
             reader.ReadValueSafe(out byte fill);
             reader.ReadValueSafe(out byte skill);
-            BotFill = fill;
+            BotsWanted = Mathf.Clamp(fill, 0, BOT_MAX);
             BotSkill = (BotDifficulty)Mathf.Clamp(skill, 0, BOT_DIFFICULTY_NAMES.Length - 1);
             OnStateChanged?.Invoke();
         }

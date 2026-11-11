@@ -14,7 +14,7 @@ using UnityEngine.SceneManagement;
 namespace AirsoftFPS.Editor
 {
     // Real game frames for the main-menu background (MenuShowcase): plays an actual match with bots
-    // (host + bot fill 8) on one map / mode and, once the bots are fighting, takes three pictures:
+    // (host + 7 bots) on one map / mode and, once the bots are fighting, takes three pictures:
     //   0  first person: the host stands behind a teammate, looking at the enemy that teammate fights,
     //      holding the chosen replica (viewmodel in frame)
     //   1  over the shoulder of a fighting bot
@@ -54,7 +54,7 @@ namespace AirsoftFPS.Editor
                 if (a[i] == "-shotDelay") delay = float.Parse(a[i + 1], System.Globalization.CultureInfo.InvariantCulture);
             }
             stage = 0; shot = 0; fpWeaponSet = false;
-            savedBotFill = PlayerPrefs.GetInt("Airsoft.BotFill", 0);
+            savedBotFill = PlayerPrefs.GetInt("Airsoft.Bots", 0);
             Directory.CreateDirectory(DIR);
             EditorSceneManager.OpenScene("Assets/Scenes/AirsoftLobby.unity", OpenSceneMode.Single);
             runStart = stageStart = EditorApplication.timeSinceStartup;
@@ -69,7 +69,7 @@ namespace AirsoftFPS.Editor
         {
             Debug.Log("[Airsoft] Menu shots: " + why);
             EditorApplication.update -= Tick;
-            PlayerPrefs.SetInt("Airsoft.BotFill", savedBotFill);
+            PlayerPrefs.SetInt("Airsoft.Bots", savedBotFill);
             PlayerPrefs.Save();
             EditorApplication.Exit(why.StartsWith("done") ? 0 : 1);
         }
@@ -100,7 +100,7 @@ namespace AirsoftFPS.Editor
                         if (mn == null || mn.Roster.Count == 0 || InStage < 1) return;
                         mn.HostLockMap(mapIndex);
                         mn.HostSetMode(mode);
-                        mn.HostSetBotFill(8);
+                        mn.HostSetBots(7);
                         if (!mn.LocalReady) mn.ToggleReady();
                         Next(); break;
                     case 2:

@@ -9,6 +9,7 @@ using UnityEngine.SceneManagement;
 namespace AirsoftFPS.Editor
 {
     // Host-only play-mode check of the lobby MATCH RULES through the real game flow: lobby -> host with 3 bots
+    // (bot slider: exact count, clamped to 7)
     // -> FFA -> rules 200 HP, 150 % speed, moon jump, 1 s respawn, 1 life, infinite ammo -> START -> the
     // arena uses them (health, respawn delay, speed / jump factors, the HUD lives chip) -> two bots are
     // eliminated and stay down (out of lives) -> the last bot falls -> the host wins as the last one standing.
@@ -16,7 +17,7 @@ namespace AirsoftFPS.Editor
     // Batch: Unity -batchmode -projectPath <p> -executeMethod AirsoftFPS.Editor.RulesPlayCheck.RunBatch
     public static class RulesPlayCheck
     {
-        const string BOT_FILL_PREF = "Airsoft.BotFill";
+        const string BOT_FILL_PREF = "Airsoft.Bots";
         const string RULES_PREF = "Airsoft.MatchRules";
         static int stage, savedBotFill, savedMode = -1;
         static string savedRules;
@@ -34,7 +35,7 @@ namespace AirsoftFPS.Editor
             stage = 0; fails = passes = 0;
             savedBotFill = PlayerPrefs.GetInt(BOT_FILL_PREF, 0);
             savedRules = PlayerPrefs.GetString(RULES_PREF, "");
-            PlayerPrefs.SetInt(BOT_FILL_PREF, 4);
+            PlayerPrefs.SetInt(BOT_FILL_PREF, 3);
             PlayerPrefs.Save();
             log.Clear();
             log.AppendLine("[Airsoft] Play check MATCH RULES");
@@ -97,6 +98,11 @@ namespace AirsoftFPS.Editor
                         Check(mn.HealthFactor == 1f && mn.RuleSpeedFactor == 1f && mn.RespawnSeconds == 3f && mn.Lives == 0 && !mn.InfiniteAmmo,
                               "normal rules = 100 HP, 100 % speed, 3 s, unlimited lives, normal ammo");
                         mn.HostSetMode(MatchNet.GameModeType.FreeForAll);
+                        Check(mn.BotsWanted == 3, $"bot slider: 3 bots from the saved count ({mn.BotsWanted})");
+                        mn.HostSetBots(12);
+                        Check(mn.BotsWanted == MatchNet.BOT_MAX && mn.BotCount == 7, $"bot slider clamps to 7 and the roster fills ({mn.BotCount})");
+                        mn.HostSetBots(3);
+                        Check(mn.BotCount == 3 && PlayerPrefs.GetInt(BOT_FILL_PREF, -1) == 3, "back to exactly 3 bots, saved for the host");
                         mn.HostSetRule(MatchNet.RuleId.Health, 3);
                         mn.HostSetRule(MatchNet.RuleId.Speed, 3);
                         mn.HostSetRule(MatchNet.RuleId.Jump, 2);
@@ -133,7 +139,8 @@ namespace AirsoftFPS.Editor
                         Check(mn.LivesActive && mn.LivesLeft(nm.LocalClientId) == 1, "1 life left");
                         var chip = GameObject.Find("Lives");
                         Check(chip != null && chip.activeInHierarchy, "HUD shows the lives chip");
-                        // two bots fall
+                        // two bots fall (spawn protection off: bots that came in late would shrug off the hit)
+                        foreach (var b in bots) b.spawnProtectedUntil.Value = 0;
                         bots[0].TakeDamage(9999, nm.LocalClientId, "check");
                         bots[1].TakeDamage(9999, nm.LocalClientId, "check");
                         Next(); break;

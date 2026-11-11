@@ -93,7 +93,9 @@ namespace AirsoftFPS
         GameObject timeUnit, timeCoopNote;
         readonly List<Slot> slots = new List<Slot>();
         // bots (host: "Fill with bots" + difficulty; clients see them read-only)
-        Segmented botFillSeg, botSkillSeg;
+        Slider botCountSlider;
+        TextMeshProUGUI botCountValue;
+        Segmented botSkillSeg;
         GameObject botFillRow, botSkillRow;
         TextMeshProUGUI botNote;
         // the rows under the bot options move up when those are hidden (modes without bots)
@@ -1030,22 +1032,27 @@ namespace AirsoftFPS
             // (RefreshBotOptions moves both up by BotBlockH when the mode has no bots)
         }
 
-        // "Fill with bots" (Off / up to 4 / up to 8 players) and bot difficulty, under the player slots.
+        // Bot count (slider 0..7, 0 = off) and bot difficulty, under the player slots.
         void BuildBotOptions(RectTransform colRt, float y)
         {
             botBlockY = y;
             var fill = Rect(colRt, "BotFill").TL(0, y, 556, 32);
-            Caption(fill, "FILL WITH BOTS", 12, Muted, 0.16f).rectTransform.Fill();
-            var fillOpts = new string[MatchNet.BOT_FILL_OPTIONS.Length];
-            for (int i = 0; i < fillOpts.Length; i++)
-                fillOpts[i] = MatchNet.BOT_FILL_OPTIONS[i] == 0 ? "OFF" : "UP TO " + MatchNet.BOT_FILL_OPTIONS[i];
-            botFillSeg = Segments(fill, fillOpts, 0, 28, 12, i =>
+            Caption(fill, "BOTS", 12, Muted, 0.16f).rectTransform.Fill();
+            botCountSlider = UIKit.Slider(fill, 0, MatchNet.BOT_MAX, 0, true, v =>
             {
-                if (isHost && MatchNet.Instance != null) MatchNet.Instance.HostSetBotFill(MatchNet.BOT_FILL_OPTIONS[i]);
-            }, 12f);
-            var fillRt = (RectTransform)botFillSeg.transform;
-            fillRt.anchorMin = fillRt.anchorMax = fillRt.pivot = new Vector2(1f, 0.5f);
-            fillRt.anchoredPosition = Vector2.zero;
+                if (isHost && MatchNet.Instance != null) MatchNet.Instance.HostSetBots(Mathf.RoundToInt(v));
+                botCountValue.text = BotCountText(Mathf.RoundToInt(v));
+            });
+            botCountSlider.name = "BotCountSlider";
+            var sRt = (RectTransform)botCountSlider.transform;
+            sRt.anchorMin = sRt.anchorMax = sRt.pivot = new Vector2(1f, 0.5f);
+            sRt.anchoredPosition = new Vector2(-92, 0);
+            sRt.sizeDelta = new Vector2(250, 22);
+            botCountValue = Label(fill, BotCountText(0), F.CondBold, 16, Fg, TextAlignmentOptions.MidlineRight, 0.04f);
+            var vRt = botCountValue.rectTransform;
+            vRt.anchorMin = vRt.anchorMax = vRt.pivot = new Vector2(1f, 0.5f);
+            vRt.anchoredPosition = Vector2.zero;
+            vRt.sizeDelta = new Vector2(80, 28);
             botFillRow = fill.gameObject;
 
             var skill = Rect(colRt, "BotSkill").TL(0, y + 40, 556, 32);
@@ -1109,11 +1116,13 @@ namespace AirsoftFPS
         // match setup. Modes without bots hide them completely and the rows below move up.
         // (Single hook for every "are bots possible" case, e.g. a random mode pick.)
         // RANDOM MODE still undrawn = the drawn mode may have bots, so the rows stay.
+        static string BotCountText(int n) => n == 0 ? "OFF" : n == 1 ? "1 BOT" : n + " BOTS";
+
         static bool LobbyShowsBots(MatchNet mn) => mn != null && (mn.RandomModePending || MatchNet.ModeHasBots(mn.Mode));
 
         void RefreshBotOptions(MatchNet mnet)
         {
-            if (botFillSeg == null) return;
+            if (botCountSlider == null) return;
             bool random = mnet.RandomModePending;
             bool show = LobbyShowsBots(mnet);
             if (botFillRow.activeSelf != show)
@@ -1127,14 +1136,19 @@ namespace AirsoftFPS
                 if (medicRowRt != null) medicRowRt.anchoredPosition = new Vector2(0, -(y + 34));
             }
             if (!show) return;
-            int fi = Array.IndexOf(MatchNet.BOT_FILL_OPTIONS, mnet.BotFill);
-            if (fi >= 0 && botFillSeg.Selected != fi) botFillSeg.Select(fi, false);
+            int want = mnet.BotsWanted;
+            if (Mathf.RoundToInt(botCountSlider.value) != want) botCountSlider.SetValueWithoutNotify(want);
+            botCountValue.text = BotCountText(want);
+            botCountValue.color = want > 0 ? Fg : Muted;
             int si = (int)mnet.BotSkill;
             if (botSkillSeg.Selected != si) botSkillSeg.Select(si, false);
-            botFillSeg.SetInteractable(isHost);
+            botCountSlider.interactable = isHost;
             botSkillSeg.SetInteractable(isHost);
-            botNote.text = random && mnet.BotFill > 0 ? "Bots fill the empty slots if the drawn mode has bots."
-                : mnet.BotFill > 0 ? "Bots fill the empty slots and leave when players join."
+            int humans = mnet.Roster.Count - mnet.BotCount;
+            int fit = Mathf.Max(0, 8 - humans);
+            botNote.text = want > fit ? $"Only {fit} {(fit == 1 ? "bot fits" : "bots fit")} next to {humans} players: more join when someone leaves."
+                : random && want > 0 ? "Bots join if the drawn mode has bots."
+                : want > 0 ? "Bots give up their slots when players join a full lobby."
                 : isHost ? (random ? "Bots can fill the empty slots if the drawn mode has bots." : "Bots can fill the empty slots in this mode.") : "";
         }
 

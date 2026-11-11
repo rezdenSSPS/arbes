@@ -56,8 +56,8 @@ namespace AirsoftFPS.Editor
         {
             mode = m; stage = 0; fails = passes = 0;
             introWait = introSawFrozen = introSawFlying = introSawStill = introRan = introPrepSeen = false; introShot = 0;
-            savedBotFill = UnityEngine.PlayerPrefs.GetInt("Airsoft.BotFill", 0);
-            UnityEngine.PlayerPrefs.SetInt("Airsoft.BotFill", 0);   // host-only check: no bots (they would interfere)
+            savedBotFill = UnityEngine.PlayerPrefs.GetInt("Airsoft.Bots", 0);
+            UnityEngine.PlayerPrefs.SetInt("Airsoft.Bots", 0);   // host-only check: no bots (they would interfere)
             UnityEngine.PlayerPrefs.Save();
             log.Clear();
             log.AppendLine("[Airsoft] Play check " + m);
@@ -84,7 +84,7 @@ namespace AirsoftFPS.Editor
             log.AppendLine($"  => {passes} passed, {fails} failed");
             if (fails == 0) Debug.Log(log.ToString()); else Debug.LogError(log.ToString());
             EditorApplication.update -= Tick;
-            UnityEngine.PlayerPrefs.SetInt("Airsoft.BotFill", savedBotFill);   // restore the host's bot-fill
+            UnityEngine.PlayerPrefs.SetInt("Airsoft.Bots", savedBotFill);   // restore the host's bot-fill
             UnityEngine.PlayerPrefs.Save();
             int code = fails == 0 ? 0 : 1;
             if (batch) EditorApplication.Exit(code);
