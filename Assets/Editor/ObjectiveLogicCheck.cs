@@ -37,6 +37,7 @@ namespace AirsoftFPS.Editor
             try { CheckDomination(); } catch (System.Exception e) { fails++; log.AppendLine("  EXCEPTION (Domination) " + e); }
             try { CheckBomb(); } catch (System.Exception e) { fails++; log.AppendLine("  EXCEPTION (Bomb) " + e); }
             try { CheckVip(); } catch (System.Exception e) { fails++; log.AppendLine("  EXCEPTION (VIP) " + e); }
+            try { CheckRandomMode(); } catch (System.Exception e) { fails++; log.AppendLine("  EXCEPTION (Random mode) " + e); }
             log.AppendLine($"  => {passes} passed, {fails} failed");
             if (fails == 0) Debug.Log(log.ToString()); else Debug.LogError(log.ToString());
             return fails == 0;
@@ -425,6 +426,76 @@ namespace AirsoftFPS.Editor
             Check(vm.RoundStage == RoundMode.Stage.Over && vm.RoundWinner == vm.DefendTeam, "VIP out in the tick: hunters win");
             Check(vm.TeamScore(1) == 3 && vm.TeamScore(2) == 1, $"round score {vm.TeamScore(1)} : {vm.TeamScore(2)}");
             Object.DestroyImmediate(go);
+        }
+
+        // ───────────────────────── Random mode (lobby RANDOM MODE draw) ─────────────────────────
+        static void CheckRandomMode()
+        {
+            log.AppendLine(" Random mode");
+            const string town = "AirsoftArena", noMap = "NoSuchMap";   // a scene without layout data: no objective modes
+            var rng = new System.Random(1234);
+            var all = new List<MatchNet.GameModeType>();
+            for (int i = 0; i < MatchNet.MODE_COUNT; i++) all.Add((MatchNet.GameModeType)i);
+
+            // the pool is exactly the modes the map can play
+            var townPool = MatchNet.RandomModePool(new[] { town }, null, 4);
+            Check(townPool.Count > 1 && townPool.TrueForAll(m => ObjectiveMode.IsAvailableOn(m, town, out _)), $"Town pool: {townPool.Count} modes, all available there");
+            Check(all.TrueForAll(m => townPool.Contains(m) == ObjectiveMode.IsAvailableOn(m, town, out _)), "Town pool has every mode Town can play");
+            var noPool = MatchNet.RandomModePool(new[] { noMap }, null, 4);
+            Check(!noPool.Contains(MatchNet.GameModeType.CaptureTheFlag) && !noPool.Contains(MatchNet.GameModeType.Domination)
+                  && !noPool.Contains(MatchNet.GameModeType.Bomb) && !noPool.Contains(MatchNet.GameModeType.VipEscort),
+                  "map without layout data: no CTF / Domination / Bomb / VIP in the pool");
+            Check(noPool.Contains(MatchNet.GameModeType.FreeForAll) && noPool.Contains(MatchNet.GameModeType.TeamDeathmatch),
+                  "map without layout data: FFA / TDM still in the pool");
+
+            // draws only return available modes
+            bool onlyAvail = true;
+            for (int k = 0; k < 2000; k++)
+            {
+                var d = MatchNet.DrawRandomMode(noMap, null, 4, rng);
+                if (d == null || !ObjectiveMode.IsAvailableOn(d.Value, noMap, out _)) { onlyAvail = false; break; }
+            }
+            Check(onlyAvail, "2000 draws on a map without layout data: only available modes");
+
+            // the last mode is avoided while another is left; every other mode still comes up
+            var seen = new HashSet<MatchNet.GameModeType>();
+            bool repeated = false;
+            for (int k = 0; k < 3000; k++)
+            {
+                var d = MatchNet.DrawRandomMode(town, MatchNet.GameModeType.TeamDeathmatch, 4, rng);
+                if (d == null || d.Value == MatchNet.GameModeType.TeamDeathmatch) repeated = true;
+                else seen.Add(d.Value);
+            }
+            Check(!repeated, "last mode (TDM) never drawn again");
+            Check(seen.Count == townPool.Count - 1, $"every other mode comes up ({seen.Count} of {townPool.Count - 1})");
+
+            // alone: only Co-op; the last mode is kept when it is the only option
+            bool coopOnly = true;
+            for (int k = 0; k < 200; k++) if (MatchNet.DrawRandomMode(town, null, 1, rng) != MatchNet.GameModeType.Coop) coopOnly = false;
+            Check(coopOnly, "one player: always Co-op");
+            Check(MatchNet.DrawRandomMode(town, MatchNet.GameModeType.Coop, 1, rng) == MatchNet.GameModeType.Coop, "only option = last mode: drawn anyway");
+            Check(MatchNet.RandomModePool(new[] { town }, MatchNet.GameModeType.Coop, 2).Count == townPool.Count - 1, "two players: everything but the last mode");
+
+            // nothing to play: null; same seed, same draw
+            Check(MatchNet.DrawRandomMode(new string[0], null, 4, rng) == null, "no map scenes: nothing drawn");
+            Check(MatchNet.DrawRandomMode(town, null, 4, new System.Random(7)) == MatchNet.DrawRandomMode(town, null, 4, new System.Random(7)), "same seed, same mode");
+
+            // RANDOM MAP + RANDOM MODE: the mode comes from the union of the maps, then the map can play it
+            var scenes = new List<string>();
+            for (int i = 0; i < MapCatalog.Count; i++) scenes.Add(MapCatalog.SceneOf(i));
+            var withNoMap = MatchNet.RandomModePool(new[] { noMap, town }, null, 4);
+            Check(withNoMap.Count == townPool.Count, "several maps: pool = modes any of them can play");
+            bool pairsOk = true, mapRepeated = false;
+            for (int k = 0; k < 500; k++)
+            {
+                var mode = MatchNet.DrawRandomMode(scenes, null, 4, rng);
+                if (mode == null) { pairsOk = false; break; }
+                int map = MatchNet.DrawRandomMap(mode.Value, 0, rng);
+                if (!ObjectiveMode.IsAvailableOn(mode.Value, MapCatalog.SceneOf(map), out _)) pairsOk = false;
+                if (map == 0 && MapCatalog.Count > 1) mapRepeated = true;
+            }
+            Check(pairsOk, "500 random (map, mode) pairs: the map can play the mode");
+            Check(!mapRepeated, "random map avoids the last map");
         }
     }
 }

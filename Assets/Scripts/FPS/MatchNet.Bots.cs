@@ -48,7 +48,9 @@ namespace AirsoftFPS
             m == GameModeType.Medic || m == GameModeType.Infection ||
             m == GameModeType.Juggernaut || m == GameModeType.OneInTheChamber;
 
-        public bool BotsActive => ModeHasBots(Mode) && BotFill > 0;
+        // (Lobby with RANDOM MODE picked: the drawn mode may have bots, so they fill the slots already;
+        // DropBotsIfModeHasNone removes them at START if it has none.)
+        public bool BotsActive => (ModeHasBots(Mode) || RandomModePending) && BotFill > 0;
 
         public int BotCount
         {
@@ -203,6 +205,18 @@ namespace AirsoftFPS
             }
 
             if (changed) BroadcastState();
+        }
+
+        // Server, at START: the mode has no bots (RANDOM MODE drew Co-op), so the lobby's bots leave the roster.
+        void DropBotsIfModeHasNone()
+        {
+            if (ModeHasBots(Mode)) return;
+            for (int i = roster.Count - 1; i >= 0; i--)
+            {
+                if (!IsBotId(roster[i].clientId)) continue;
+                DespawnBot(roster[i].clientId);
+                roster.RemoveAt(i);
+            }
         }
 
         // Last bot in the roster; mid-match in a team mode, one from the bigger team.
