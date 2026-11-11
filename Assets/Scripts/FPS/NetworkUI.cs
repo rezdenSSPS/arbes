@@ -90,14 +90,16 @@ namespace AirsoftFPS
         int scrolledToMode = -1;
         readonly List<TextMeshProUGUI> modeCardDescs = new();   // one-line description, or why the map can't play it
         Segmented timeSeg;
-        CanvasGroup timeGroup;
         GameObject timeUnit, timeCoopNote;
         readonly List<Slot> slots = new List<Slot>();
         // bots (host: "Fill with bots" + difficulty; clients see them read-only)
         Segmented botFillSeg, botSkillSeg;
-        CanvasGroup botFillGroup, botSkillGroup;
-        GameObject botSkillRow;
+        GameObject botFillRow, botSkillRow;
         TextMeshProUGUI botNote;
+        // the rows under the bot options move up when those are hidden (modes without bots)
+        float botBlockY;
+        const float BotBlockH = 92f;
+        RectTransform rulesRow, medicRowRt;
         float copyFlashUntil;
         float refreshTimer;
 
@@ -938,7 +940,6 @@ namespace AirsoftFPS
             var segRt = (RectTransform)timeSeg.transform;
             segRt.anchorMin = segRt.anchorMax = segRt.pivot = new Vector2(1f, 0.5f);
             segRt.anchoredPosition = new Vector2(-30, 0);
-            timeGroup = timeSeg.gameObject.AddComponent<CanvasGroup>();
             var unit = Label(time, "min", F.Body, 13, Muted, TextAlignmentOptions.MidlineRight);
             unit.rectTransform.Fill();
             timeUnit = unit.gameObject;
@@ -1012,13 +1013,15 @@ namespace AirsoftFPS
             tdmNote = note.gameObject;
 
             BuildBotOptions(colRt, 34 + 4 * 62 + 52);
-            BuildMatchRules(colRt, 34 + 4 * 62 + 52 + 92);      // wind + goggle fog
-            BuildMedicOptions(colRt, 34 + 4 * 62 + 52 + 126);   // Medic mode volunteer (NetworkUI.Medic.cs)
+            BuildMatchRules(colRt, 34 + 4 * 62 + 52 + BotBlockH);        // wind + goggle fog
+            BuildMedicOptions(colRt, 34 + 4 * 62 + 52 + BotBlockH + 34);   // Medic mode volunteer (NetworkUI.Medic.cs)
+            // (RefreshBotOptions moves both up by BotBlockH when the mode has no bots)
         }
 
         // "Fill with bots" (Off / up to 4 / up to 8 players) and bot difficulty, under the player slots.
         void BuildBotOptions(RectTransform colRt, float y)
         {
+            botBlockY = y;
             var fill = Rect(colRt, "BotFill").TL(0, y, 556, 32);
             Caption(fill, "FILL WITH BOTS", 12, Muted, 0.16f).rectTransform.Fill();
             var fillOpts = new string[MatchNet.BOT_FILL_OPTIONS.Length];
@@ -1031,7 +1034,7 @@ namespace AirsoftFPS
             var fillRt = (RectTransform)botFillSeg.transform;
             fillRt.anchorMin = fillRt.anchorMax = fillRt.pivot = new Vector2(1f, 0.5f);
             fillRt.anchoredPosition = Vector2.zero;
-            botFillGroup = botFillSeg.gameObject.AddComponent<CanvasGroup>();
+            botFillRow = fill.gameObject;
 
             var skill = Rect(colRt, "BotSkill").TL(0, y + 40, 556, 32);
             Caption(skill, "BOT DIFFICULTY", 12, Muted, 0.16f).rectTransform.Fill();
@@ -1044,7 +1047,6 @@ namespace AirsoftFPS
             var skillRt = (RectTransform)botSkillSeg.transform;
             skillRt.anchorMin = skillRt.anchorMax = skillRt.pivot = new Vector2(1f, 0.5f);
             skillRt.anchoredPosition = Vector2.zero;
-            botSkillGroup = botSkillSeg.gameObject.AddComponent<CanvasGroup>();
             botSkillRow = skill.gameObject;
 
             botNote = Label(colRt, "", F.Body, 13, Muted);
@@ -1054,12 +1056,11 @@ namespace AirsoftFPS
 
         // Match rules (host picks, everyone sees): wind strength and goggle fog, one row under the bot note.
         Segmented windSeg, fogSeg;
-        CanvasGroup rulesGroup;
 
         void BuildMatchRules(RectTransform colRt, float y)
         {
             var row = Rect(colRt, "MatchRules").TL(0, y, 556, 30);
-            rulesGroup = row.gameObject.AddComponent<CanvasGroup>();
+            rulesRow = row;
 
             var wind = Rect(row, "Wind").TL(0, 0, 286, 30);
             Caption(wind, "WIND", 12, Muted, 0.16f).rectTransform.Fill();
@@ -1088,24 +1089,37 @@ namespace AirsoftFPS
             if (windSeg.Selected != mnet.WindSetting) windSeg.Select(mnet.WindSetting, false);
             int fi = mnet.FogEnabled ? 1 : 0;
             if (fogSeg.Selected != fi) fogSeg.Select(fi, false);
-            rulesGroup.blocksRaycasts = isHost;
-            rulesGroup.alpha = isHost ? 1f : 0.75f;
+            windSeg.SetInteractable(isHost);   // clients see the host's pick, readable but not clickable
+            fogSeg.SetInteractable(isHost);
         }
+
+        // Whether the lobby shows the bot options (FILL WITH BOTS, BOT DIFFICULTY and the bot note) for this
+        // match setup. Modes without bots hide them completely and the rows below move up.
+        // (Single hook for every "are bots possible" case, e.g. a random mode pick.)
+        static bool LobbyShowsBots(MatchNet mn) => mn != null && MatchNet.ModeHasBots(mn.Mode);
 
         void RefreshBotOptions(MatchNet mnet)
         {
             if (botFillSeg == null) return;
-            bool modeHasBots = MatchNet.ModeHasBots(mnet.Mode);
+            bool show = LobbyShowsBots(mnet);
+            if (botFillRow.activeSelf != show)
+            {
+                botFillRow.SetActive(show);
+                botSkillRow.SetActive(show);
+                botNote.gameObject.SetActive(show);
+                // close the gap: match rules + medic row sit right under the player slots
+                float y = botBlockY + (show ? BotBlockH : 0f);
+                if (rulesRow != null) rulesRow.anchoredPosition = new Vector2(0, -y);
+                if (medicRowRt != null) medicRowRt.anchoredPosition = new Vector2(0, -(y + 34));
+            }
+            if (!show) return;
             int fi = Array.IndexOf(MatchNet.BOT_FILL_OPTIONS, mnet.BotFill);
             if (fi >= 0 && botFillSeg.Selected != fi) botFillSeg.Select(fi, false);
             int si = (int)mnet.BotSkill;
             if (botSkillSeg.Selected != si) botSkillSeg.Select(si, false);
-            botFillGroup.blocksRaycasts = botSkillGroup.blocksRaycasts = isHost;
-            botFillGroup.alpha = modeHasBots ? 1f : 0.45f;
-            botSkillGroup.alpha = modeHasBots && mnet.BotFill > 0 ? 1f : 0.45f;
-            botSkillRow.SetActive(true);
-            botNote.text = !modeHasBots ? "No bots in this mode."
-                : mnet.BotFill > 0 ? "Bots fill the empty slots and leave when players join."
+            botFillSeg.SetInteractable(isHost);
+            botSkillSeg.SetInteractable(isHost);
+            botNote.text = mnet.BotFill > 0 ? "Bots fill the empty slots and leave when players join."
                 : isHost ? "Bots can fill the empty slots in this mode." : "";
         }
 
@@ -1120,11 +1134,13 @@ namespace AirsoftFPS
             prev.LE(-1, -1, -1, 1);
             previewBox = prev.rectTransform;
             AttachPreview();
-            var chip = Badge(prev.transform, "3D preview · drag to rotate", Scrim(0.78f), Fg, Color.clear, 11);
+            // small hint in the bottom-right corner, beside the (centred) model rather than over it
+            var chip = Badge(prev.transform, "drag to rotate", Scrim(0.6f), Muted, Color.clear, 9);
             var chipText = chip.GetComponentInChildren<TextMeshProUGUI>();
             ApplyFont(chipText, F.Body); chipText.characterSpacing = 0;
-            chip.anchorMin = chip.anchorMax = chip.pivot = new Vector2(0f, 1f);
-            chip.anchoredPosition = new Vector2(12, -12);
+            chip.anchorMin = chip.anchorMax = chip.pivot = new Vector2(1f, 0f);
+            chip.anchoredPosition = new Vector2(-6, 6);
+            foreach (var g in chip.GetComponentsInChildren<Graphic>()) g.raycastTarget = false;   // keep dragging
 
             var nameBlock = VCol(colRt, "Callsign", 6);
             Caption(nameBlock.transform, "CALLSIGN").LE(-1, 14);
@@ -1225,7 +1241,7 @@ namespace AirsoftFPS
                 noClockText.text = coop ? "No limit in co-op" : "Timed rounds instead";
             int ti = Array.IndexOf(MatchNet.TIME_LIMIT_OPTIONS, mnet.TimeLimitMinutes);
             if (ti >= 0 && timeSeg.Selected != ti) timeSeg.Select(ti, false);
-            timeGroup.blocksRaycasts = isHost;
+            timeSeg.SetInteractable(isHost);
 
             RefreshBotOptions(mnet);
             RefreshMatchRules(mnet);

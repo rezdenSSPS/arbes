@@ -102,12 +102,8 @@ namespace AirsoftFPS
             Caption(head, "PROFILE", 12, Muted, 0.16f).rectTransform.TL(0, 0, 300, 14);
             panel.callsign = Label(head, "", F.CondBlack, 40, Fg);
             panel.callsign.rectTransform.TL(0, 16, 520, 42);
-            var close = Button(head, "CLOSE", Btn.Quiet, 16, panel.Close);
-            close.GetComponent<RectTransform>().At(1f, 0.5f, 0, 0, 120, 40);
-            close.label.rectTransform.Fill(14, 0, 46, 0);
-            var esc = KeyCap(close.transform, "ESC", 10);
-            esc.anchorMin = esc.anchorMax = esc.pivot = new Vector2(1f, 0.5f);
-            esc.anchoredPosition = new Vector2(-12, 0);
+            var close = KeyButton(head, "CLOSE", "ESC", Btn.Quiet, 16, panel.Close);
+            close.Rt().At(1f, 0.5f, 0, 0, close.Rt().sizeDelta.x, 40);
 
             // level + XP bar
             var lvlRow = HRow(col.transform, "LevelRow", 20, TextAnchor.MiddleLeft);

@@ -47,8 +47,8 @@ namespace AirsoftFPS
             Caption(head, "ACCOUNT", 12, Muted, 0.16f).rectTransform.TL(0, 0, 300, 14);
             panel.title = Label(head, "SIGN IN", F.CondBlack, 34, Fg);
             panel.title.rectTransform.TL(0, 14, 360, 38);
-            var close = Button(head, "CLOSE", Btn.Quiet, 16, panel.Close);
-            close.GetComponent<RectTransform>().At(1f, 0.5f, 0, 0, 120, 40);
+            var close = KeyButton(head, "CLOSE", "ESC", Btn.Quiet, 16, panel.Close);   // ESC closes it too
+            close.Rt().At(1f, 0.5f, 0, 0, close.Rt().sizeDelta.x, 40);
 
             Caption(col.transform, "USERNAME", 11, Muted, 0.14f).LE(-1, 13);
             panel.user = Input(col.transform, "callsign", F.Body, 16, 16);

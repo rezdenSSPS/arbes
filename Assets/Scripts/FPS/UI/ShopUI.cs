@@ -38,13 +38,11 @@ namespace AirsoftFPS
             var head = Rect(col.transform, "Header").LE(-1, 58);
             Caption(head, "ARMORY", 12, Muted, 0.16f).rectTransform.TL(0, 0, 300, 14);
             Label(head, "BUY WEAPONS", F.CondBlack, 38, Fg).rectTransform.TL(0, 16, 460, 42);
+            var close = KeyButton(head, "CLOSE", "ESC", Btn.Quiet, 16, panel.Close);
+            float closeW = close.Rt().sizeDelta.x;
+            close.Rt().At(1f, 0.5f, 0, 0, closeW, 40);
             panel.credits = Label(head, "", F.MonoBold, 22, Accent, TextAlignmentOptions.MidlineRight);
-            panel.credits.rectTransform.At(1f, 0.5f, -140, 0, 220, 30);
-            var close = Button(head, "CLOSE", Btn.Quiet, 16, panel.Close);
-            close.GetComponent<RectTransform>().At(1f, 0.5f, 0, 0, 120, 40);
-            var esc = KeyCap(close.transform, "ESC", 10);
-            esc.anchorMin = esc.anchorMax = esc.pivot = new Vector2(1f, 0.5f);
-            esc.anchoredPosition = new Vector2(-12, 0);
+            panel.credits.rectTransform.At(1f, 0.5f, -(closeW + 20), 0, 220, 30);
 
             Caption(col.transform, "WEAPONS", 12, Muted, 0.16f).LE(-1, 14);
             var list = VCol(col.transform, "List", 8);

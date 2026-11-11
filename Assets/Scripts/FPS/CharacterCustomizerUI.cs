@@ -134,13 +134,11 @@ namespace AirsoftFPS
             rt = new RenderTexture(640, 820, 24) { name = "CharacterPreview", antiAliasing = 4 };
             var camGo = new GameObject("PreviewCam");
             camGo.transform.SetParent(stage, false);
-            camGo.transform.localPosition = new Vector3(0f, 1.15f, 3.4f);
-            camGo.transform.LookAt(stage.position + Vector3.up * 0.95f);
             previewCam = camGo.AddComponent<Camera>();
             previewCam.cullingMask = 1 << PreviewLayer;
             previewCam.clearFlags = CameraClearFlags.SolidColor;
             previewCam.backgroundColor = Scenery;
-            previewCam.fieldOfView = 34f;
+            previewCam.fieldOfView = PreviewFov;
             previewCam.nearClipPlane = 0.1f; previewCam.farClipPlane = 20f;
             previewCam.targetTexture = rt;
             previewCam.depth = -10;
@@ -186,6 +184,52 @@ namespace AirsoftFPS
             try { avatar = AirsoftLook.BuildAvatar(turn, AirsoftLook.Pack(look)); }
             catch (System.Exception e) { Debug.LogWarning("[Airsoft] preview failed: " + e.Message); }
             if (avatar != null) AirsoftLook.SetLayer(avatar.root, PreviewLayer);
+            FrameCamera();
+        }
+
+        const float PreviewFov = 30f;
+        const float PreviewMargin = 0.07f;    // empty space above the head / below the feet, share of the height
+        const float PreviewPitch = 5f;       // look slightly down onto the platform
+
+        // Fits the whole character (feet to the top of the tallest hat) into the render texture with a
+        // small margin, whatever the body or hat: measured from the avatar's renderers, with the
+        // turntable radius added so arms swinging towards the camera stay in frame while it spins.
+        // The preview images show the whole texture (AspectRatioFitter FitInParent), so the same framing
+        // holds in the lobby's wide box and in the editor's tall pane.
+        void FrameCamera()
+        {
+            if (previewCam == null || stage == null) return;
+            Vector3 o = stage.position;
+            float bottom = -0.04f, top = 1.8f, radius = 0.45f;
+            if (avatar != null && avatar.root)
+            {
+                bool any = false;
+                Bounds b = default;
+                foreach (var r in avatar.root.GetComponentsInChildren<Renderer>())
+                {
+                    if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds);
+                }
+                if (any)
+                {
+                    top = Mathf.Max(b.max.y - o.y, 0.5f);
+                    bottom = Mathf.Min(b.min.y - o.y, -0.04f);   // feet, and the platform's top edge
+                    float rx = Mathf.Max(Mathf.Abs(b.min.x - o.x), Mathf.Abs(b.max.x - o.x));
+                    float rz = Mathf.Max(Mathf.Abs(b.min.z - o.z), Mathf.Abs(b.max.z - o.z));
+                    radius = Mathf.Clamp(Mathf.Sqrt(rx * rx + rz * rz), 0.25f, 1.2f);
+                }
+            }
+            float tan = Mathf.Tan(PreviewFov * 0.5f * Mathf.Deg2Rad);
+            float aspect = rt != null ? rt.width / (float)rt.height : 0.78f;
+            float halfH = (top - bottom) * 0.5f / (1f - 2f * PreviewMargin);
+            float halfW = radius / (1f - 2f * PreviewMargin);
+            // distance to the turntable axis; + depth: parts swinging towards the camera (arms, a hat brim)
+            // come that much closer and look bigger
+            float dist = Mathf.Max(halfH / tan, halfW / (tan * aspect)) + Mathf.Min(radius, 0.3f);
+            float midY = (top + bottom) * 0.5f;
+            var cam = previewCam.transform;
+            cam.localPosition = new Vector3(0f, midY + dist * Mathf.Tan(PreviewPitch * Mathf.Deg2Rad), dist);
+            cam.LookAt(o + Vector3.up * midY);
+            previewCam.farClipPlane = dist + 10f;
         }
 
         void Update()
@@ -304,7 +348,8 @@ namespace AirsoftFPS
             modal.SetActive(false);
         }
 
-        // A RawImage showing the 3D preview, cropped to fill its parent, drag to rotate.
+        // A RawImage showing the whole 3D preview, fitted inside its parent (the camera background has the
+        // parent's Scenery colour, so the bars beside it don't show), drag to rotate.
         public RectTransform PreviewImage(Transform parent)
         {
             var holder = Rect(parent, "Preview3D");
@@ -313,7 +358,7 @@ namespace AirsoftFPS
             var raw = img.gameObject.AddComponent<RawImage>();
             raw.texture = rt;
             var fit = img.gameObject.AddComponent<AspectRatioFitter>();
-            fit.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+            fit.aspectMode = AspectRatioFitter.AspectMode.FitInParent;   // never crop: head and feet stay visible
             fit.aspectRatio = rt.width / (float)rt.height;
             var hit = holder.gameObject.AddComponent<Image>();
             hit.color = Color.clear;

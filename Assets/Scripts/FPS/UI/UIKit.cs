@@ -470,6 +470,39 @@ namespace AirsoftFPS
             return b;
         }
 
+        // Button with its label and a key cap side by side ("CLOSE [ESC]"), sized to fit both with even
+        // padding so the cap never runs into the text. Returns the button; its RectTransform already has
+        // the content width (sizeDelta / LayoutElement), so callers only anchor it, e.g.
+        //     var close = KeyButton(head, "CLOSE", "ESC", Btn.Quiet, 16, panel.Close);
+        //     close.Rt().At(1f, 0.5f, 0, 0, close.Rt().sizeDelta.x, 40);
+        public static KitButton KeyButton(Transform parent, string text, string key, Btn style, float fontSize,
+            UnityAction onClick, float height = 40f, float keySize = 10f, F font = F.CondBold)
+        {
+            const float PadL = 16f, PadR = 10f, Gap = 10f;
+            var b = Button(parent, text, style, fontSize, onClick, font);
+            var row = HRow(b.transform, "Content", Gap, TextAnchor.MiddleCenter);
+            row.padding = new RectOffset((int)PadL, (int)PadR, 0, 0);
+            row.GetComponent<RectTransform>().Fill();
+            b.label.transform.SetParent(row.transform, false);
+            b.label.alignment = TextAlignmentOptions.MidlineLeft;
+            float labelW = Mathf.Ceil(b.label.preferredWidth) + 2f;
+            b.label.LE(labelW, height);
+            var cap = KeyCap(row.transform, key, keySize);
+            cap.GetComponent<ContentSizeFitter>().enabled = false;   // the row sizes it now
+            var capText = cap.GetComponentInChildren<TextMeshProUGUI>();
+            float capW = Mathf.Ceil(capText.preferredWidth) + 14f;   // KeyCap padding 7 + 7
+            cap.LE(capW, Mathf.Ceil(capText.preferredHeight) + 5f);   // KeyCap padding 1 + 4
+            // the button's own frame / background stay on top of / under the row as before
+            if (b.frame) b.frame.transform.SetAsLastSibling();
+            float w = PadL + labelW + Gap + capW + PadR;
+            var rt = (RectTransform)b.transform;
+            rt.sizeDelta = new Vector2(w, height);
+            b.LE(w, height);
+            return b;
+        }
+
+        public static RectTransform Rt(this Component c) => (RectTransform)c.transform;
+
         // ───────────── inputs ─────────────
         public static TMP_InputField Input(Transform parent, string placeholder, F font, float size, int limit,
             float spacingEm = 0f, bool upper = false)
@@ -688,12 +721,14 @@ namespace AirsoftFPS
         public Color bgN, bgH, bgP, bgD, fgN, fgH, fgD, lineN, lineH, lineD;
         public bool selectedLook;   // for tabs / segments
         public Color bgSel, fgSel, lineSel;
+        public Color bgSelD, fgSelD;   // selected look while disabled (tabs / segments)
         public UIKit.Btn style;
 
         public void SetStyle(UIKit.Btn s)
         {
             style = s;
             Color clear = Color.clear;
+            bgSelD = fgSelD = clear;
             switch (s)
             {
                 case UIKit.Btn.Primary:
@@ -719,12 +754,15 @@ namespace AirsoftFPS
                     bgN = bgH = bgP = bgD = clear;
                     fgN = UIKit.Muted; fgH = UIKit.Fg; fgD = UIKit.DisabledFg;
                     lineN = lineH = lineD = clear;
-                    bgSel = clear; fgSel = UIKit.Fg; break;
+                    bgSel = clear; fgSel = UIKit.Fg;
+                    bgSelD = clear; fgSelD = UIKit.TextSoft; break;
                 case UIKit.Btn.Segment:
                     bgN = clear; bgH = UIKit.A(UIKit.Fg, 0.08f); bgP = UIKit.A(UIKit.Fg, 0.16f); bgD = clear;
                     fgN = UIKit.Muted; fgH = UIKit.Fg; fgD = UIKit.DisabledFg;
                     lineN = lineH = lineD = clear;
-                    bgSel = UIKit.Fg; fgSel = UIKit.Ground; break;
+                    bgSel = UIKit.Fg; fgSel = UIKit.Ground;
+                    // read-only (disabled) control: the picked option stays clearly marked and readable
+                    bgSelD = UIKit.LineStrong; fgSelD = UIKit.Fg; break;
             }
             Refresh(true);
         }
@@ -757,6 +795,7 @@ namespace AirsoftFPS
             Color f = dis ? fgD : hov || prs ? fgH : fgN;
             Color l = dis ? lineD : hov || prs ? lineH : lineN;
             if (selectedLook && !dis) { b = (hov && bgSel.a == 0) ? bgH : bgSel; f = fgSel; if (lineSel.a > 0) l = lineSel; }
+            else if (selectedLook && (bgSelD.a > 0 || fgSelD.a > 0)) { b = bgSelD; f = fgSelD; }
             bg.color = b;
             if (label) label.color = f;
             if (frame) frame.color = l;
@@ -775,6 +814,14 @@ namespace AirsoftFPS
             Selected = i;
             for (int k = 0; k < buttons.Count; k++) buttons[k].SetSelectedLook(k == i);
             if (notify) onPick?.Invoke(i);
+        }
+
+        // Read-only (e.g. a lobby setting only the host may change): the options can't be clicked and the
+        // picked one shows as light text on a solid LineStrong fill (KitButton bgSelD / fgSelD).
+        // Use this instead of fading the control with a CanvasGroup, which made the pick unreadable.
+        public void SetInteractable(bool on)
+        {
+            foreach (var b in buttons) if (b.interactable != on) b.interactable = on;
         }
     }
 

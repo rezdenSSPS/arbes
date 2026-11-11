@@ -30,6 +30,7 @@ namespace AirsoftFPS
             segRt.anchorMin = segRt.anchorMax = segRt.pivot = new Vector2(1f, 0.5f);
             segRt.anchoredPosition = Vector2.zero;
             medicRow = row.gameObject;
+            medicRowRt = row;
             medicRow.SetActive(false);
 
             foreach (var s in slots)
