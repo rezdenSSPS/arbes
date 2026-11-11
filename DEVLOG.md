@@ -207,3 +207,22 @@ AutoConnect.cs, NetDiag.cs.
 - Kouř: klienti si teď pamatují dopadlé mraky i lokálně (`SmokeField.Contains`), server je registroval už dřív kvůli botům.
 - Nastavení *Gameplay → Goggle fog* (výchozí zapnuto), klávesa F v seznamu ovládání.
 - Testy: kompilace čistá, editorové checky beze změny (89/0, 39/0). Vzhled mlhy a rychlosti zamlžení zatím **nebyly vyzkoušené ve hře**.
+
+## 2026-11-11 — Vítr, váha kuliček, zamlžování jako pravidlo zápasu
+- **Vítr** (`Wind.cs`, žádný asset): host v lobby volí OFF / LIGHT / STRONG, server při startu zápasu vylosuje směr a sílu (násobenou faktorem mapy z `MapCatalog`: Town 1, Warehouse 0) a posílá je ve stavu zápasu. `BBBallistics` počítá odpor vzduchu vůči větru, takže kulička se unáší a ověření zásahu na serveru dává stejný výsledek jako u střelce.
+- Vítr ve světě: rukávy (windsock) u prvního spawnu obou týmů, v HUDu čip „WIND“ se šipkou otočenou podle kamery.
+- **Váha kuliček** 0,20 / 0,25 / 0,28 / 0,32 g: úsťová rychlost klesá s odmocninou hmotnosti, odpor vzduchu s hmotností. Váha jde s výstřelem (`ShootRpc`) a server dráhu přepočítá s ní. 0,28 g (400 CR, rank 2) a 0,32 g (900 CR, rank 6) se kupují v Armory, výchozí je 0,25 g. Těžší boti nosí těžší kuličky.
+- **Zamlžování brýlí** je teď pravidlo zápasu z lobby (ON / OFF pro všechny) a mlží se všem stejně rychle bez ohledu na typ brýlí. Osobní přepínač v nastavení zmizel.
+
+## 2026-11-11 — Juggernaut a One in the Chamber
+- **Juggernaut** (`Objectives/Juggernaut.cs`): jeden hráč má RPK (dostane ji, i když ji nemá koupenou), pohybuje se na 85 % a nesprintuje. Ostatní se navzájem nezraní a jdou po něm. Každý zásah mu ubere stejný díl zdraví: padne po `HitsFor(hráči)` zásazích (4–12, při 8 hráčích 8), bang počítá za 3. Kdo ho sejme, je nový juggernaut s plným zdravím a nabitou RPK; při pádu nebo odpojení se vybere náhodně. Body = killy v rosteru, vyhrává 15, po čase nejvíc killů. Nad juggernautem je pro všechny značka se zbývajícími zásahy.
+- **One in the Chamber** (`Objectives/OneInTheChamber.cs`): jen 1911, každý život začíná s 1 BB a bez zásobníku navíc, jakýkoli zásah zabíjí (bang taky), kill = +1 BB. 3 životy (kdo se připojí později, má 1), bez životů hráč zůstane mrtvý a sleduje. Vyhrává poslední, kdo má životy; po čase nejvíc killů, při shodě víc životů. Životy jsou objektivové body (scoreboard, výsledky).
+- Nové hooky v `ObjectiveMode` pro režimy „každý sám“: blokování zranění mezi dvojicí (`BlocksDamageBetween`, používá ho `MatchNet.BlocksDamage`, takže i bang a boti), úprava zranění (`AdjustDamage` v `Health.TakeDamage`), přidělené zbraně (`WeaponGranted`), náboje na začátku života (`LifeAmmo` – owner i server si je nastaví sami, bez zprávy), vítěz-hráč (`DeclarePlayerWinner`). `DecideOnTimeout` u netýmových objektivů nechává rozhodnutí na `MatchNet`.
+- `WeaponController`: `ServerGiveAmmo` / `ServerRefillAmmo` (server → owner RPC). Boti mají zásobu nábojů podle režimu a bez nábojů přejdou na bang.
+- Lobby: 13 karet režimů, karty jsou nižší (28 px, menší písmo).
+
+## 2026-11-11 — Ocenění po zápase
+- `Awards.cs` (`MatchAwards`): server sleduje zásahy, killy, série, bangy, otření brýlí (zpráva `mn_wipe` z `GoggleFog`) a sejmutí juggernauta. Na konci zápasu vybere až 4 ocenění, maximálně 2 na hráče, a pošle je se stavem výsledků (`MatchNet.Awards`).
+- Ocenění: **Ghost** (nejvíc killů bez jediného zásahu, aspoň 2), **Rambo** (nejdelší série, aspoň 4), **Bang Master** (aspoň 2 bang eliminace), **Sharpshooter** (nejdelší zásah, aspoň 25 m), **Patient Zero** (Infection, nejvíc nakažených), **Last Survivor** (Infection, jediný přeživší na konci), **Giant Slayer** (Juggernaut, nejvíc sejmutí), **Clear Eyes** (se zapnutým zamlžováním nejvíc killů bez otření, jen hráči). V co-opu se nerozdávají.
+- Výsledková obrazovka má pod pódiem karty ocenění (moje zvýrazněné) a drží 8 s místo 6. Každé ocenění dá +25 XP a +40 CR (`PlayerProfile.Commit`, řádky v XP/CR přehledu).
+- Testy: kompilace čistá (Unity 6000.6.8f1, batch), editorové checky zelené (objektivy 89/0, medik 39/0). Vítr, váhy kuliček, oba nové režimy ani ocenění zatím **nebyly odehrány** v play módu ani s druhým klientem.

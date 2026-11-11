@@ -13,8 +13,9 @@ Unity 6.6 (URP), Netcode for GameObjects, Unity Relay.
 
 Hráči se utkají na dvou low-poly mapách s replikami airsoftových zbraní (GBB pistole, AEG, pružinové pušky).
 Místo okamžitého zásahu (hitscan) létají skutečné kuličky (BB) s úsťovou rychlostí, gravitací, hop-upem a odporem
-vzduchu. Zásahy ověřuje server. Hra má 11 režimů: kooperaci proti AI, klasický deathmatch, airsoftový Milsim
-(„jeden zásah = HIT“, dojdi zpět na základnu) i objektivové režimy (vlajky, body, bomba, VIP, medik).
+vzduchu. Zásahy ověřuje server. Hra má 13 režimů: kooperaci proti AI, klasický deathmatch, airsoftový Milsim
+(„jeden zásah = HIT“, dojdi zpět na základnu), objektivové režimy (vlajky, body, bomba, VIP, medik) i party režimy
+(Infection, Juggernaut, One in the Chamber). Na kuličky působí vítr a jejich váha, po zápase se rozdávají ocenění.
 
 V lobby je editor postavy (tělo, čepice, brýle/maska, barvy), hlasování o mapě, boti do volných míst a lokální
 profil se statistikami, XP a odemykáním vzhledu. **Texty ve hře jsou anglicky.**
@@ -79,7 +80,12 @@ už používá jiná spuštěná hra na stejném počítači, hostování skonč
 | Lobby: ready / změna režimu (host) | R / M |
 
 Nastavení (*Settings*): citlivost myši a v puškohledu, invertovaná osa Y, FOV, rozlišení, celá obrazovka, V-Sync,
-kvalita, post-processing, barva a velikost zaměřovače, ukazatele zdraví nad hlavami, killcam, minimapa, zamlžování brýlí. Ukládá se do PlayerPrefs.
+kvalita, post-processing, barva a velikost zaměřovače, ukazatele zdraví nad hlavami, killcam, minimapa. Ukládá se do PlayerPrefs.
+
+Pravidla zápasu volí host v lobby (platí pro všechny):
+- **Vítr** OFF / LIGHT / STRONG: na začátku zápasu se losuje směr a síla (u LIGHT asi 2,5 m/s, u STRONG asi 5 m/s ± 20 %).
+  Na Town fouká naplno, ve Warehouse (uvnitř) vůbec. Vítr ukazují rukávy u spawnů obou týmů a čip se šipkou pod minimapou.
+- **Zamlžování brýlí** ON / OFF: buď se mlží všem stejně rychle (bez ohledu na typ brýlí), nebo nikomu. Otírá se klávesou F.
 
 ## Herní režimy
 
@@ -96,10 +102,16 @@ kvalita, post-processing, barva a velikost zaměřovače, ukazatele zdraví nad 
 | Bomb | Red vs Blue, kola | položit bombu na A/B nebo ji zneškodnit, v kole bez respawnu; 4 kola | ne |
 | VIP Escort | Red vs Blue, kola | dovést VIP k evakuaci, nebo ho vyřadit; 3 kola | ne |
 | Infection | Survivors vs Infected | infikovaní (bez zbraně) označují přeživší na blízko (LMB / V), označený přeživší se mění v infikovaného; přeživší musí vydržet 4 min | ano |
+| Juggernaut | všichni proti jednomu | juggernaut má RPK, je pomalejší a nesprintuje; ostatní se navzájem nezraní. Padne po N zásazích (roste s počtem hráčů, 8 při 8 hráčích; bang = 3 zásahy) a kdo ho sejme, stává se novým juggernautem. 15 killů | ano |
+| One in the Chamber | každý sám | jen 1911, každý život 1 BB, jakýkoli zásah zabíjí, kill = +1 BB; 3 životy, vyhrává poslední, kdo přežije | ano |
 
 Časový limit z lobby platí ve všech režimech kromě Co-op, Bomb, VIP Escort a Infection (ty mají vlastní časování). Po vypršení
-vyhrává lepší skóre, při přesné shodě je remíza. V týmových režimech je vypnutý friendly fire. Po spawnu mají
-hráči 3 s ochranu, která skončí prvním výstřelem.
+vyhrává lepší skóre (Juggernaut a One in the Chamber: nejvíc killů, v One in the Chamber při shodě víc zbylých životů),
+při přesné shodě je remíza. V týmových režimech je vypnutý friendly fire. Po spawnu mají hráči 3 s ochranu, která
+skončí prvním výstřelem.
+
+Po zápase výsledková obrazovka ukáže až 4 **ocenění** (Ghost, Rambo, Bang Master, Sharpshooter, Patient Zero,
+Last Survivor, Giant Slayer, Clear Eyes). Každé dá držiteli +25 XP a +40 Credits.
 
 ## Zbraně
 
@@ -107,6 +119,9 @@ Pořadí slotů (klávesy 1–0) je zároveň pořadí v Gun Game:
 1911 GBB pistole, CO2 revolver, Uzi GBB, P90 AEG, pružinová brokovnice M870 (3 kuličky na výstřel), AK AEG,
 RPK podpůrná AEG, M14 DMR, pružinová opakovačka, L96 pružinová odstřelovačka.
 Statistiky jsou v `Assets/Scripts/FPS/WeaponData.cs`.
+
+**Váha kuliček** (Armory): 0,20 g a 0,25 g (výchozí) jsou zdarma, 0,28 g a 0,32 g se kupují. Těžší kulička vyletí
+pomaleji, ale méně ji brzdí vzduch a méně ji unáší vítr, takže na dálku drží dráhu líp.
 
 ## Pro vývojáře
 
