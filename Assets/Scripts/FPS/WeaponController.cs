@@ -51,6 +51,7 @@ namespace AirsoftFPS
         float reloadLerp;        // smoothed reload dip
         float bobTimer;
         bool haveRest;
+        ViewmodelHands hands;    // owner: the support hand (reload animation, inspect on T)
 
         // Muzzle flash
         Light muzzleLight;
@@ -203,7 +204,15 @@ namespace AirsoftFPS
                 BuildMuzzleFlash();
             }
 
-            if (IsOwner) ApplyWeaponModels();
+            if (IsOwner)
+            {
+                ApplyWeaponModels();
+                if (weaponHolder != null)
+                {
+                    hands = gameObject.AddComponent<ViewmodelHands>();
+                    hands.Init(weaponHolder, weapons);
+                }
+            }
 
             netWeaponIndex.OnValueChanged += OnWeaponChanged;
             SwitchToWeapon(netWeaponIndex.Value);
@@ -313,6 +322,10 @@ namespace AirsoftFPS
                 // drop out of the scope
                 isAiming = false;
                 if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, BaseFov, Time.deltaTime * 10f);
+                // inspecting (T) works in the 3-2-1 countdown, nothing else blocked
+                if (MatchNet.IntroFrozen && !MatchIntro.Flying && !HUDManager.InputBlocked && !dead
+                    && !(ownHealth != null && ownHealth.IsOut) && !GoggleFog.Wiping) HandleInspect();
+                else if (hands != null) hands.CancelInspect();
                 // dead: drop a reload in progress (restarted on respawn); otherwise let it finish
                 if (dead)
                 {
@@ -329,6 +342,7 @@ namespace AirsoftFPS
             {
                 isAiming = false;
                 isReloading = false;
+                if (hands != null) hands.CancelInspect();
                 if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, BaseFov, Time.deltaTime * 10f);
                 SetHeldWeaponVisible(false);
                 HandleBang(true);
@@ -348,8 +362,25 @@ namespace AirsoftFPS
             HandleReload();
             HandleAim();
             HandleFire();
+            HandleInspect();
             HandleBang(false);
             HandleSmoke();
+        }
+
+        // Inspect the replica (T, like CS:GO): cancelled by firing, aiming / RMB, reloading and sprinting
+        // (switching, dying, menus and the goggle wipe cancel it in Update / ViewmodelHands).
+        void HandleInspect()
+        {
+            if (hands == null) return;
+            var kb = Keyboard.current;
+            var mouse = Mouse.current;
+            if (isReloading || isAiming || (fpsController != null && fpsController.IsSprinting)
+                || (mouse != null && (mouse.leftButton.isPressed || mouse.rightButton.isPressed)))
+            {
+                hands.CancelInspect();
+                return;
+            }
+            if (kb != null && kb.tKey.wasPressedThisFrame) hands.StartInspect();
         }
 
         // Owner: show / hide the first-person weapon (hidden while melee-only).
@@ -400,13 +431,23 @@ namespace AirsoftFPS
                 bob.y = Mathf.Sin(Time.time * 1.4f) * 0.0025f; // idle sway
             }
 
-            // Lowered offset from switch + reload
-            float lower = Mathf.Clamp01(switchLower + reloadLerp);
+            // Lowered offset from switch + reload (with the support hand: its own lighter reload tilt + inspect)
+            float dip = hands != null && hands.Has(currentIndex) ? 0f : reloadLerp;
+            float lower = Mathf.Clamp01(switchLower + dip);
             Vector3 lowerOffset = new Vector3(0f, -0.14f, -0.05f) * lower;
-            Quaternion reloadTilt = Quaternion.Euler(reloadLerp * 30f, reloadLerp * 10f, 0f);
+            Quaternion baseRot = weaponRestRot * Quaternion.Euler(recoilRot) * Quaternion.Euler(dip * 30f, dip * 10f, 0f);
+            Vector3 handPos = Vector3.zero;
+            Quaternion handRot = Quaternion.identity;
+            if (hands != null)
+            {
+                float reloadU = isReloading
+                    ? 1f - (reloadEndTime - Time.time) / Mathf.Max(0.01f, weapons[currentIndex].reloadTime) : -1f;
+                hands.Animate(currentIndex, reloadU, baseRot, out handPos, out handRot);
+            }
 
-            weaponHolder.localPosition = weaponRestPos + recoilPos + lowerOffset + bob;
-            weaponHolder.localRotation = weaponRestRot * Quaternion.Euler(recoilRot) * reloadTilt;
+            weaponHolder.localPosition = weaponRestPos + recoilPos + lowerOffset + bob + handPos;
+            weaponHolder.localRotation = baseRot * handRot;
+            if (hands != null) hands.LateHands();
         }
 
         void HandleWeaponSwitch()
