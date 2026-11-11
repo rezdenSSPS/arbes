@@ -42,6 +42,9 @@ namespace AirsoftFPS
                 nextSpawnTime = Time.time + 1.5f;
             }
 
+            // match-start intro: the first wave comes a moment after everyone may move
+            if (MatchNet.IntroFrozen) { nextSpawnTime = Mathf.Max(nextSpawnTime, Time.time + 1.5f); return; }
+
             activeEnemies.RemoveAll(e => e == null || !e.IsSpawned);
             enemiesAlive = activeEnemies.Count;
 

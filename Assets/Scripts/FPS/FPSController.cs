@@ -33,6 +33,12 @@ namespace AirsoftFPS
         public float leanRoll = 11f;             // camera roll, degrees
         public float leanSpeed = 9f;
 
+        [Header("Feel")]
+        public float groundAccel = 50f;          // m/s² towards the wanted speed on the ground
+        public float groundDecel = 60f;          // m/s² when slowing down / stopping
+        public float airAccel = 4f;              // m/s²: a little steering in the air, never extra speed
+        public float sprintFovKick = 8f;         // degrees added to the FOV at full sprint
+
         CharacterController cc;
         Vector3 velocity;
         float xRotation;
@@ -44,12 +50,21 @@ namespace AirsoftFPS
         float stamina = 1f;
         bool staminaExhausted;
         float lean;       // -1..1, smoothed
+        Vector3 horiz;    // horizontal velocity (momentum: a jump keeps the take-off speed, doesn't add to it)
+        float takeoffSpeed;
+        bool airborne, sprintAtTakeoff;
+        float airTime, landSlow = 1f;
+        float bobPhase, bobWeight, bobSprint, landDip, fallSpeed;
+        float fovKick;
         Health health;
 
         public bool IsSprinting { get; private set; }
         public bool IsCrouching => isCrouching;
         public float Stamina => stamina;          // 0..1, for the HUD
         public float LeanAmount => lean;          // -1..1
+        public float FovKick => fovKick;          // degrees on top of the Settings FOV (sprinting)
+        public float GroundSpeed { get; private set; }   // m/s actually moved on the ground (0 in the air)
+        public bool Grounded { get; private set; }
 
         public override void OnNetworkSpawn()
         {
@@ -131,6 +146,7 @@ namespace AirsoftFPS
                 cc.enabled = false;
                 transform.SetPositionAndRotation(pose.position, pose.rotation);
                 velocity = Vector3.zero;
+                horiz = Vector3.zero;
                 cc.enabled = true;
             }
         }
@@ -159,6 +175,7 @@ namespace AirsoftFPS
         {
             var kb = Keyboard.current;
             if (kb == null) return;
+            float dt = Time.deltaTime;
 
             bool grounded = cc.isGrounded;
             if (grounded && velocity.y < 0)
@@ -166,6 +183,7 @@ namespace AirsoftFPS
 
             bool downed = ObjectiveMode.IsDowned(OwnerClientId);   // Medic: down in place until revived / bled out
             bool input = !HUDManager.InputBlocked && !downed
+                         && !MatchNet.IntroFrozen                                         // match-start flyover / 3-2-1
                          && !(health != null && health.IsSpawned && health.isDead.Value);   // dead: no walking around
             float h = 0f;
             float v = 0f;
@@ -174,20 +192,38 @@ namespace AirsoftFPS
             if (input && kb.wKey.isPressed) v += 1f;
             if (input && kb.sKey.isPressed) v -= 1f;
 
+            // Landing: a jump costs a moment of speed (no bunny-hopping faster than running) and dips the camera
+            if (grounded && airborne)
+            {
+                airborne = false;
+                if (airTime > 0.25f) landSlow = 0.6f;
+                landDip = -Mathf.Min(0.14f, 0.012f * fallSpeed);
+            }
+            if (!grounded && !airborne)
+            {
+                airborne = true;
+                airTime = 0f;
+                takeoffSpeed = horiz.magnitude;
+                sprintAtTakeoff = IsSprinting;
+            }
+            if (airborne) { airTime += dt; fallSpeed = Mathf.Max(0f, -velocity.y); }
+            landSlow = Mathf.MoveTowards(landSlow, 1f, dt * 1.3f);
+
             // Sprint (gated by stamina: drains while sprinting, regens otherwise; after it empties you
-            // can't sprint again until it has recovered a little)
+            // can't sprint again until it has recovered a little). It can't start in the air.
             bool wantSprint = input && kb.leftShiftKey.isPressed && v > 0.1f && !isCrouching
                               && !ObjectiveMode.CannotSprint(OwnerClientId);   // e.g. carrying the flag (CTF)
             if (staminaExhausted && stamina < minStaminaToSprint) wantSprint = false;
+            if (airborne && !sprintAtTakeoff) wantSprint = false;
             IsSprinting = wantSprint && stamina > 0f;
-            if (IsSprinting)
+            if (IsSprinting && !airborne)
             {
-                stamina -= Time.deltaTime / Mathf.Max(0.1f, sprintSeconds);
+                stamina -= dt / Mathf.Max(0.1f, sprintSeconds);
                 if (stamina <= 0f) { stamina = 0f; staminaExhausted = true; }
             }
-            else
+            else if (!IsSprinting)
             {
-                stamina = Mathf.Min(1f, stamina + Time.deltaTime / Mathf.Max(0.1f, staminaRegenSeconds));
+                stamina = Mathf.Min(1f, stamina + dt / Mathf.Max(0.1f, staminaRegenSeconds));
                 if (stamina >= minStaminaToSprint) staminaExhausted = false;
             }
 
@@ -212,18 +248,52 @@ namespace AirsoftFPS
             }
 
             float speed = isCrouching ? crouchSpeed : (IsSprinting ? sprintSpeed : walkSpeed);
-            speed *= speedMultiplier * ObjectiveMode.SpeedFactor(OwnerClientId);   // e.g. frozen before a round, slower VIP
+            speed *= speedMultiplier * ObjectiveMode.SpeedFactor(OwnerClientId) * landSlow;   // e.g. frozen before a round, slower VIP
+            if (MatchNet.IntroFrozen) speed = 0f;
 
-            Vector3 move = transform.right * h + transform.forward * v;
-            if (move.sqrMagnitude > 1f) move.Normalize();
-            cc.Move(move * speed * Time.deltaTime);
+            Vector3 wish = transform.right * h + transform.forward * v;
+            if (wish.sqrMagnitude > 1f) wish.Normalize();
+            wish *= speed;
+
+            if (!airborne)
+            {
+                // quick but not instant: a few frames to get going, a short slide to a stop
+                float acc = wish.sqrMagnitude > horiz.sqrMagnitude ? groundAccel : groundDecel;
+                horiz = Vector3.MoveTowards(horiz, wish, acc * dt);
+            }
+            else
+            {
+                // in the air: keep the take-off momentum, steer a little, never speed up past the take-off speed
+                horiz = Vector3.MoveTowards(horiz, wish, airAccel * dt);
+                float cap = Mathf.Max(takeoffSpeed, 1.5f);
+                if (horiz.magnitude > cap) horiz = horiz.normalized * cap;
+            }
 
             // Jump
             if (input && kb.spaceKey.wasPressedThisFrame && grounded && !isCrouching)
                 velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
 
-            velocity.y += gravity * Time.deltaTime;
-            cc.Move(velocity * Time.deltaTime);
+            velocity.y += gravity * dt;
+            Vector3 before = transform.position;
+            cc.Move((horiz + Vector3.up * velocity.y) * dt);
+
+            // walls and obstacles eat momentum: keep only what we actually moved (sliding along a wall stays)
+            if (dt > 0f)
+            {
+                Vector3 moved = transform.position - before; moved.y = 0f;
+                Vector3 real = moved / dt;
+                if (real.sqrMagnitude < horiz.sqrMagnitude) horiz = real;
+            }
+
+            Grounded = cc.isGrounded;
+            GroundSpeed = Grounded ? horiz.magnitude : 0f;
+
+            // Sprint feel: the view widens a little while actually running fast
+            float kickTarget = IsSprinting && Grounded
+                ? sprintFovKick * Mathf.Clamp01(Mathf.InverseLerp(walkSpeed, sprintSpeed * 0.9f, horiz.magnitude / Mathf.Max(0.3f, speedMultiplier)))
+                : 0f;
+            if (!GameSettings.ViewBob) kickTarget *= 0.5f;
+            fovKick = Mathf.Lerp(fovKick, kickTarget, 1f - Mathf.Exp(-(kickTarget > fovKick ? 6f : 4f) * dt));
         }
 
         // Peek left (Q) / right (E): shift the camera sideways with a little roll, shortened if a wall is
@@ -250,9 +320,29 @@ namespace AirsoftFPS
                     && hit.collider.GetComponentInParent<Health>() == null)   // walls block the lean, not people
                     target *= Mathf.Clamp01((hit.distance - 0.3f) / leanOffset);
             }
-            lean = Mathf.MoveTowards(lean, target, leanSpeed * Time.deltaTime);
-            cameraHolder.localPosition = new Vector3(lean * leanOffset, cc.height - 0.15f, 0f);
-            cameraHolder.localRotation = Quaternion.Euler(xRotation, 0f, -lean * leanRoll);
+            float dt = Time.deltaTime;
+            lean = Mathf.MoveTowards(lean, target, leanSpeed * dt);
+
+            // Head bob: one dip per step, a sway from foot to foot every two steps, a touch of roll.
+            // Driven by the speed actually moved on the ground, so it eases out when you stop or hit a wall.
+            float sp = GroundSpeed;
+            float sprintT = Mathf.Clamp01(Mathf.InverseLerp(walkSpeed * 0.9f, sprintSpeed * 0.9f, sp));
+            bobSprint = Mathf.Lerp(bobSprint, sprintT, 1f - Mathf.Exp(-6f * dt));
+            float wantBob = GameSettings.ViewBob ? Mathf.Clamp01(sp / (walkSpeed * 0.7f)) : 0f;
+            bobWeight = Mathf.Lerp(bobWeight, wantBob, 1f - Mathf.Exp(-8f * dt));
+            float stepsPerSec = isCrouching ? 1.5f : Mathf.Lerp(1.85f, 2.75f, bobSprint);
+            if (bobWeight > 0.01f) bobPhase += dt * Mathf.PI * stepsPerSec;
+            else bobPhase = 0f;
+            float crouchMul = isCrouching ? 0.55f : 1f;
+            float w = bobWeight * crouchMul;
+            float by = Mathf.Lerp(0.032f, 0.06f, bobSprint) * w * (Mathf.Cos(2f * bobPhase) - 1f) * 0.5f;   // 0 .. -A
+            float bx = Mathf.Lerp(0.018f, 0.032f, bobSprint) * w * Mathf.Sin(bobPhase);
+            float roll = Mathf.Lerp(0.45f, 1.0f, bobSprint) * w * Mathf.Sin(bobPhase);
+            float pitch = Mathf.Lerp(0.25f, 0.6f, bobSprint) * w * (1f - Mathf.Cos(2f * bobPhase)) * 0.5f;
+            landDip = Mathf.Lerp(landDip, 0f, 1f - Mathf.Exp(-9f * dt));
+
+            cameraHolder.localPosition = new Vector3(lean * leanOffset + bx, cc.height - 0.15f + by + landDip, 0f);
+            cameraHolder.localRotation = Quaternion.Euler(xRotation + pitch, 0f, -lean * leanRoll + roll);
         }
 
         public void SetSpeedMultiplier(float mult) => speedMultiplier = mult;

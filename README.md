@@ -71,10 +71,10 @@ už používá jiná spuštěná hra na stejném počítači, hostování skonč
 | Akce | Klávesa |
 |---|---|
 | Pohyb | W A S D |
-| Sprint | Shift (omezený výdrží – ukazatel u zdraví) |
+| Sprint | Shift (omezený výdrží – ukazatel u zdraví); při sprintu se zorné pole mírně rozšíří |
 | Náklon (lean) | Q / E (držet) |
 | Přikrčení | C / Ctrl (v nastavení přepnutí nebo držení) |
-| Skok | Space |
+| Skok | Space (skok drží rychlost z odrazu, nezrychluje; po dopadu krátké zpomalení) |
 | Střelba | levé tlačítko myši |
 | Míření / puškohled | pravé tlačítko myši |
 | Bang (eliminace na blízko bez výstřelu) | V |
@@ -90,7 +90,8 @@ už používá jiná spuštěná hra na stejném počítači, hostování skonč
 | Lobby: ready / změna režimu (host) | R / M |
 
 Nastavení (*Settings*): citlivost myši a v puškohledu, invertovaná osa Y, FOV, rozlišení, celá obrazovka, V-Sync,
-kvalita, post-processing, barva a velikost zaměřovače, ukazatele zdraví nad hlavami, killcam, minimapa. Ukládá se do PlayerPrefs.
+kvalita, post-processing, barva a velikost zaměřovače, ukazatele zdraví nad hlavami, killcam, pohupování kamery
+při chůzi, minimapa. Ukládá se do PlayerPrefs.
 
 Pravidla zápasu volí host v lobby (platí pro všechny):
 - **Vítr** OFF / LIGHT / STRONG: na začátku zápasu se losuje směr a síla (u LIGHT asi 2,5 m/s, u STRONG asi 5 m/s ± 20 %).
@@ -116,6 +117,10 @@ Pravidla zápasu volí host v lobby (platí pro všechny):
 | Infection | Survivors vs Infected | infikovaní (bez zbraně) označují přeživší na blízko (LMB / V), označený přeživší se mění v infikovaného; přeživší musí vydržet 4 min | ano |
 | Juggernaut | všichni proti jednomu | juggernaut má RPK, je pomalejší a nesprintuje; ostatní se navzájem nezraní. Padne po N zásazích (roste s počtem hráčů, 8 při 8 hráčích; bang = 3 zásahy) a kdo ho sejme, stává se novým juggernautem. 15 killů | ano |
 | One in the Chamber | každý sám | jen 1911, každý život 1 BB, jakýkoli zásah zabíjí, kill = +1 BB; 3 životy, vyhrává poslední, kdo přežije | ano |
+
+**Začátek zápasu:** po načtení mapy proletí kamera jako dron nad místy, o která v režimu jde (základny, body A/B/C,
+místa bomby, trasa VIP), pak se snese do očí hráče a odpočítá se 3-2-1. Do té doby se nikdo nehýbe ani nestřílí
+(ani boti) a časový limit začne běžet až od startu. V Bomb a VIP Escort je to zároveň příprava prvního kola.
 
 Časový limit z lobby platí ve všech režimech kromě Co-op, Bomb, VIP Escort a Infection (ty mají vlastní časování). Po vypršení
 vyhrává lepší skóre (Juggernaut a One in the Chamber: nejvíc killů, v One in the Chamber při shodě víc zbylých životů),
@@ -190,6 +195,11 @@ Některé kroky jdou spustit i bez otevřeného editoru (batch mode), např.:
 Další metody: `AirsoftFPS.Editor.AirsoftWarehouseBuilder.RenderMapPreviews` (v batch mode jako samostatný druhý krok)
 a `AirsoftFPS.Editor.ObjectiveMapSetup.UpdateArenaLayout`.
 
+**Pozadí menu** jsou skutečné snímky ze hry (`Assets/Resources/MenuShots/m<mapa>_g<režim>_<n>.jpg`). Fotí je
+`MenuShotsCapture`: odehraje zápas s boty a ve chvíli, kdy bot střílí, vyfotí pohled z první osoby s replikou,
+přes rameno bota a kamerou za botem. Všechny kombinace mapa / režim / zbraň najednou: `tools/menu_shots.sh`
+(Unity s projektem nesmí být otevřené). Menu je prolíná s pomalým posunem a zoomem a dole ukazuje mapu a režim.
+
 Nová mapa potřebuje: scénu v build settings, záznam v `MapCatalog.Maps`, komponentu `MapLayout` s body režimů,
 `SpawnPoint`y a náhled v `Resources/MapPreviews`.
 
@@ -229,23 +239,26 @@ Assets/
     PlayerSpawner.cs         výběr spawnu, SpawnPoint.cs, SpawnProtectionFX.cs
     EnemyAI.cs, EnemySpawner.cs   AI a vlny v Co-op
     BotBrain.cs              boti v PvP
-    HUDManager.cs, KillCam.cs, WorldHealthBar.cs
+    HUDManager.cs, KillCam.cs, MatchIntro.cs (průlet dronem a 3-2-1 na začátku), WorldHealthBar.cs
     AirsoftLook.cs, AirsoftGuns.cs, PlayerAvatar.cs, EnemyAnimator.cs, CharacterCustomizerUI.cs   postavy a zbraně
     PlayerProfile.cs         lokální profil, statistiky, XP
     MapCatalog.cs, MapLayout.cs, MilsimZone.cs, MinimapHidden.cs, AutoConnect.cs
-    UI/                      UIKit (barvy, písma, prvky), UIPoly, GameSettings, SettingsScreen, Minimap, ProfileUI
+    UI/                      UIKit (barvy, písma, prvky), UIPoly, GameSettings, SettingsScreen, Minimap, ProfileUI,
+                             MenuShowcase (pozadí menu a lobby ze snímků ze hry)
     Objectives/              ObjectiveMode, RoundMode, CaptureTheFlag, Domination, Medic, BombMode, VipEscort,
                              ObjectiveHUD, MapManifest
   Editor/                    AirsoftSceneBuilder, AirsoftMapBuilder, AirsoftWarehouseBuilder, AirsoftBlenderMapBuilder,
-                             ObjectiveMapSetup, AirsoftAssetSetup, kontroly *LogicCheck / *PlayCheck, MapNavCheck
+                             ObjectiveMapSetup, AirsoftAssetSetup, kontroly *LogicCheck / *PlayCheck, MapNavCheck,
+                             MenuShotsCapture (snímky pro pozadí menu)
   Scenes/                    AirsoftLobby, AirsoftArena (Town), AirsoftWarehouse, AirsoftOutpost, AirsoftForest
                              (+ složky s NavMeshem)
   Models/Maps/               Outpost.fbx, Forest.fbx (export z Blenderu)
   Prefabs/                   FPSPlayer, Enemy
-  Resources/                 AirsoftUI/Fonts, MapPreviews, MapManifest.asset
+  Resources/                 AirsoftUI/Fonts, MapPreviews, MenuShots (pozadí menu), MapManifest.asset
   ThirdParty/Quaternius/     low-poly modely (postavy, zbraně, budovy, ulice, příroda, rekvizity)
   DefaultNetworkPrefabs.asset   seznam síťových prefabů
 tools/Blender/                skripty map pro Blender (+ .blend)
+tools/menu_shots.sh          znovu nafotí pozadí menu (zápasy s boty v batch módu)
 .github/workflows/build.yml  CI build
 docs/BUILD.md                návod na build a itch.io
 DEVLOG.md                    vývojový deník
@@ -278,7 +291,7 @@ Omezení v kódu:
 - Boti hrají ve všech PvP režimech včetně objektivových (CTF, Domination, Bomb, VIP Escort, Medic) — nesou/brání vlajku, drží body, pokládají/zneškodňují bombu, eskortují/honí VIP, oživují.
 - Ekonomika a účty jsou zatím lokální (uloženo na počítači): Credits za zápas, nákup zbraní v ARMORY, přihlášení přes jméno/heslo. Gunsmith tuning statů zatím není (chce serverový sync kvůli ověřování zásahů).
 - Hráč s ochranou po spawnu nedostane poškození, střelec ale i tak vidí hit marker.
-- Při pádu pod mapu se hráč vrátí na pevnou pozici (0, 2, 0), ne na spawn.
+- Při pádu pod mapu se hráč vrátí na spawn svého týmu.
 - V Milsim se po návratu na základnu nedoplňuje munice.
 - Profil a XP jsou jen lokálně v souboru na počítači (`airsoft_profile.json` v `persistentDataPath`), takže jdou ručně upravit.
   Virtuální hráči MPPM na jednom počítači sdílejí jeden profil.

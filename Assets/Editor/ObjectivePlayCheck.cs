@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using System;
+using System.Linq;
 using Unity.Netcode;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -23,6 +24,9 @@ namespace AirsoftFPS.Editor
         static int fails, passes;
         static bool batch;
         static int savedBotFill;
+        static bool introWait, introSawFrozen, introSawFlying, introSawStill, introRan, introPrepSeen;   // match-start intro (MatchIntro)
+        static int introShot;
+        static readonly float[] INTRO_SHOTS = { 0.9f, 2.7f, 4.5f, 6.2f, 6.8f };   // -introShots: frames to Logs/intro_N.png
         static readonly System.Text.StringBuilder log = new System.Text.StringBuilder();
 
         public static void RunBatch()
@@ -51,6 +55,7 @@ namespace AirsoftFPS.Editor
         static void Run(MatchNet.GameModeType m)
         {
             mode = m; stage = 0; fails = passes = 0;
+            introWait = introSawFrozen = introSawFlying = introSawStill = introRan = introPrepSeen = false; introShot = 0;
             savedBotFill = UnityEngine.PlayerPrefs.GetInt("Airsoft.BotFill", 0);
             UnityEngine.PlayerPrefs.SetInt("Airsoft.BotFill", 0);   // host-only check: no bots (they would interfere)
             UnityEngine.PlayerPrefs.Save();
@@ -139,9 +144,10 @@ namespace AirsoftFPS.Editor
                         Check(ObjectiveMode.Active.Mode == mode, "objective object created for " + mode);
                         Check(MapLayout.Current != null, "arena has a MapLayout (" + (MapLayout.Current ? MapLayout.Current.displayName : "-") + ")");
                         Check(mn.TeamOf(nm.LocalClientId) == 1, "host is on Red");
-                        Check(GameObject.Find("ObjectiveMarkers") != null, "HUD built the objective marker layer");
+                        introWait = true;   // (the HUD, with the objective markers, is hidden while the drone flies)
                         Next(); break;
                     default:
+                        if (introWait) { TickIntro(nm, mn); return; }
                         if (mode == MatchNet.GameModeType.CaptureTheFlag) TickCtf(nm, mn);
                         else if (mode == MatchNet.GameModeType.Bomb) TickBomb(nm, mn);
                         else if (mode == MatchNet.GameModeType.VipEscort) TickVip(nm, mn);
@@ -150,6 +156,69 @@ namespace AirsoftFPS.Editor
                 }
             }
             catch (Exception e) { Finish("exception: " + e); }
+        }
+
+        // ───────── match-start intro: frozen (no moving) until the go time, drone camera, then the player's own ─────────
+        static void TickIntro(NetworkManager nm, MatchNet mn)
+        {
+            ulong me = nm.LocalClientId;
+            if (MatchNet.IntroFrozen)
+            {
+                if (!introSawFrozen)
+                {
+                    introSawFrozen = true;
+                    Check(ObjectiveMode.SpeedFactor(me) == 0f, "intro: nobody may move before the go");
+                }
+                if (MatchIntro.Flying) introSawFlying = true;
+                if (mn.IntroLength > 0f && mn.IntroLeft < 2f && !MatchIntro.Flying) introSawStill = true;
+                if (ObjectiveMode.Active is RoundMode rm0 && mn.IntroLeft > 0.3f && mn.IntroLeft < 2f
+                    && rm0.Round == 1 && rm0.RoundStage == RoundMode.Stage.Prep) introPrepSeen = true;
+                float elapsed = mn.IntroLength - mn.IntroLeft;
+                if (Environment.GetCommandLineArgs().Contains("-introShots") && introShot < INTRO_SHOTS.Length && elapsed >= INTRO_SHOTS[introShot])
+                    SaveFrame("Logs/intro_" + introShot++ + ".png");
+                if (InStage > 40) Finish("the match never went live after the intro");
+                return;
+            }
+            bool had = mn.IntroLength > 0f;
+            introRan = had;
+            if (had && ObjectiveMode.Active is RoundMode)
+                Check(introPrepSeen, "intro: round 1's PREP 3-2-1 runs with the intro's");
+            log.AppendLine($"  intro: {(had ? mn.IntroLength + " s" : "skipped (batch)")}");
+            if (had)
+            {
+                Check(introSawFrozen, "intro: frozen while it played");
+                Check(introSawFlying, "intro: the drone camera flew");
+                Check(introSawStill, "intro: camera back in the player's eyes for the 3-2-1");
+            }
+            Check(!MatchIntro.Flying, "intro over: player camera live again");
+            Check(GameObject.Find("ObjectiveMarkers") != null, "HUD built the objective marker layer");
+            var cam = Me() != null ? Me().GetComponent<FPSController>().playerCamera : null;
+            Check(cam != null && cam.enabled, "intro over: player camera enabled");
+            if (mn.UsesTimeLimit) Check(mn.TimeLeft > mn.TimeLimitMinutes * 60f - 5f, $"match clock starts at the go ({mn.TimeLeft:0} s left)");
+            introWait = false;
+            stageStart = EditorApplication.timeSinceStartup;
+        }
+
+        static void SaveFrame(string path)
+        {
+            Camera cam = null;
+            foreach (var c in UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsSortMode.None))
+                if (c.isActiveAndEnabled && (cam == null || c.depth > cam.depth)) cam = c;
+            if (cam == null) return;
+            var rt = new RenderTexture(960, 540, 24);
+            var prev = cam.targetTexture;
+            cam.targetTexture = rt;
+            cam.Render();
+            cam.targetTexture = prev;
+            RenderTexture.active = rt;
+            var tex = new Texture2D(960, 540, TextureFormat.RGB24, false);
+            tex.ReadPixels(new Rect(0, 0, 960, 540), 0, 0);
+            tex.Apply();
+            RenderTexture.active = null;
+            System.IO.File.WriteAllBytes(path, tex.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(tex);
+            rt.Release();
+            log.AppendLine("  frame " + path + " from " + cam.name);
         }
 
         // ───────── CTF: take the blue flag, die with it, re-take it, score 3 times ─────────
@@ -253,10 +322,11 @@ namespace AirsoftFPS.Editor
             switch (stage)
             {
                 case 4:
-                    if (bm.RoundStage != RoundMode.Stage.Prep) { if (InStage > 10) Finish("round 1 never started"); return; }
+                    bool liveAfterIntro = introRan && bm.Round == 1 && bm.RoundStage == RoundMode.Stage.Live;   // PREP ended with the intro
+                    if (bm.RoundStage != RoundMode.Stage.Prep && !liveAfterIntro) { if (InStage > 10) Finish("round 1 never started"); return; }
                     Check(bm.Round == 1 && bm.AttackTeam == 1, "round 1: Red (host) attacks");
                     Check(bm.State == BombMode.BombState.Carried && bm.Carrier == me, "the host carries the bomb");
-                    Check(ObjectiveMode.SpeedFactor(me) == 0f, "frozen in prep");
+                    if (!liveAfterIntro) Check(ObjectiveMode.SpeedFactor(me) == 0f, "frozen in prep");
                     Check(!mn.UsesTimeLimit && mn.TimeLeft < 0f, "no match clock (timed rounds)");
                     Check(bm.sites.Count == 2, "2 bomb sites from the MapLayout");
                     Next(); break;
@@ -320,7 +390,8 @@ namespace AirsoftFPS.Editor
             switch (stage)
             {
                 case 4:
-                    if (vm.RoundStage != RoundMode.Stage.Prep) { if (InStage > 10) Finish("round 1 never started"); return; }
+                    bool vipLiveAfterIntro = introRan && vm.Round == 1 && vm.RoundStage == RoundMode.Stage.Live;
+                    if (vm.RoundStage != RoundMode.Stage.Prep && !vipLiveAfterIntro) { if (InStage > 10) Finish("round 1 never started"); return; }
                     Check(vm.Round == 1 && vm.AttackTeam == 1 && vm.Vip == me, "round 1: Red escorts, the host is the VIP");
                     Next(); break;
                 case 5:

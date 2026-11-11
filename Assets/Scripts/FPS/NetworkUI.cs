@@ -485,7 +485,8 @@ namespace AirsoftFPS
             var screen = Rect(root, "MenuScreen").Fill();
             Box(screen, "Ground", Ground, true).rectTransform.Fill();
 
-            // right half: low-poly town illustration, bleeding to the screen edge
+            // right half: real game frames (MenuShowcase), or the low-poly town illustration without them,
+            // bleeding to the screen edge
             var art = Box(screen, "Art", Scenery);
             art.rectTransform.anchorMin = new Vector2(0.5f, 0f);
             art.rectTransform.anchorMax = Vector2.one;
@@ -493,8 +494,8 @@ namespace AirsoftFPS
             art.rectTransform.offsetMax = Vector2.zero;
 
             var stage = Rect(screen, "Stage").At(0.5f, 0.5f, 0, 0, 1280, 720);
-            var town = Rect(stage, "Town").TL(520, 0, 760, 720);
-            BuildTown(town);
+            var showcase = MenuShowcase.Create(art.rectTransform, 0.08f, true);
+            if (showcase == null) BuildTown(Rect(stage, "Town").TL(520, 0, 760, 720));
             // dark left panel with a diagonal edge
             var left = Box(screen, "LeftFill", Ground);
             left.rectTransform.anchorMin = Vector2.zero;
@@ -572,8 +573,22 @@ namespace AirsoftFPS
             var info = VCol(stage, "Info", 10, TextAnchor.LowerRight, false);
             info.GetComponent<RectTransform>().At(1f, 0f, -48, 40, 700, 70);
             var chips = HRow(info.transform, "Modes", 8, TextAnchor.MiddleRight);
-            foreach (var m in new[] { "CO-OP SURVIVAL", "FREE-FOR-ALL", "TEAM DEATHMATCH", "GUN GAME" })
-                Badge(chips.transform, m, Scrim(0.78f), Fg, Color.clear, 11);
+            if (showcase != null)
+            {
+                // what the background picture shows: map + mode
+                var mapChip = Badge(chips.transform, "", Scrim(0.78f), Fg, Color.clear, 11).GetComponentInChildren<TextMeshProUGUI>();
+                var modeChip = Badge(chips.transform, "", Accent, Ground, Color.clear, 11).GetComponentInChildren<TextMeshProUGUI>();
+                void SetChips(MenuShowcase.Slide sl)
+                {
+                    mapChip.text = MapCatalog.NameOf(sl.map).ToUpperInvariant();
+                    modeChip.text = ModeName(sl.mode).ToUpperInvariant();
+                }
+                showcase.OnSlide += SetChips;
+                SetChips(showcase.Current);
+            }
+            else
+                foreach (var m in new[] { "CO-OP SURVIVAL", "FREE-FOR-ALL", "TEAM DEATHMATCH", "GUN GAME" })
+                    Badge(chips.transform, m, Scrim(0.78f), Fg, Color.clear, 11);
             var meta = Badge(info.transform, $"Up to {MAX_PLAYERS} players · 10 weapons · v{Application.version}", Scrim(0.78f), Fg, Color.clear, 13);
             var metaText = meta.GetComponentInChildren<TextMeshProUGUI>();
             ApplyFont(metaText, F.Body); metaText.characterSpacing = 0;
@@ -647,6 +662,7 @@ namespace AirsoftFPS
         {
             var screen = Rect(root, "ConnectingScreen").Fill();
             Box(screen, "Ground", Ground, true).rectTransform.Fill();
+            MenuShowcase.Create(screen, 0.8f, false);
 
             var card = Box(screen, "Card", Surface, true);
             card.rectTransform.At(0.5f, 0.5f, 0, 0, 560, 400);
@@ -771,6 +787,7 @@ namespace AirsoftFPS
         {
             var screen = Rect(root, "LobbyScreen").Fill();
             Box(screen, "Ground", Ground, true).rectTransform.Fill();
+            MenuShowcase.Create(screen, 0.88f, false);   // game frames breathing faintly behind the panels
 
             var stage = Rect(screen, "Stage").At(0.5f, 0.5f, 0, 0, 1280, 720);
             // header rule and bottom bar run past the 1280 stage to the screen edges

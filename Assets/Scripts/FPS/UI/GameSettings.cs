@@ -33,6 +33,7 @@ namespace AirsoftFPS
         public static bool ShowHitMarker;
         public static bool ShowHealthBars;
         public static bool Killcam;           // look at your killer for ~2 s before the death screen
+        public static bool ViewBob;           // camera bobs with your steps (and the full sprint FOV kick)
         public static bool ShowMinimap;
         public static bool MinimapRotate;     // true = map turns with you (you face up), false = north up
 
@@ -94,6 +95,7 @@ namespace AirsoftFPS
             ShowHitMarker  = PlayerPrefs.GetInt(P + "HitMarker", 1) == 1;
             ShowHealthBars = PlayerPrefs.GetInt(P + "HealthBars", 1) == 1;
             Killcam        = PlayerPrefs.GetInt(P + "Killcam", 1) == 1;
+            ViewBob        = PlayerPrefs.GetInt(P + "ViewBob", 1) == 1;
             ShowMinimap    = PlayerPrefs.GetInt(P + "Minimap", 1) == 1;
             MinimapRotate  = PlayerPrefs.GetInt(P + "MinimapRotate", 1) == 1;
             Clamp();
@@ -136,6 +138,7 @@ namespace AirsoftFPS
             PlayerPrefs.SetInt(P + "HitMarker", ShowHitMarker ? 1 : 0);
             PlayerPrefs.SetInt(P + "HealthBars", ShowHealthBars ? 1 : 0);
             PlayerPrefs.SetInt(P + "Killcam", Killcam ? 1 : 0);
+            PlayerPrefs.SetInt(P + "ViewBob", ViewBob ? 1 : 0);
             PlayerPrefs.SetInt(P + "Minimap", ShowMinimap ? 1 : 0);
             PlayerPrefs.SetInt(P + "MinimapRotate", MinimapRotate ? 1 : 0);
             PlayerPrefs.Save();
@@ -146,7 +149,7 @@ namespace AirsoftFPS
         {
             foreach (var k in new[] { "Sens", "ScopedSens", "InvertY", "ToggleCrouch", "Fov", "ResW", "ResH", "Fullscreen",
                          "VSync", "Quality", "PostFx", "ShowFps", "VolMaster", "VolSfx", "VolMusic", "VolVoice", "Ambience",
-                         "XColor", "XSize", "HitMarker", "HealthBars", "Killcam", "Minimap", "MinimapRotate" })
+                         "XColor", "XSize", "HitMarker", "HealthBars", "Killcam", "ViewBob", "Minimap", "MinimapRotate" })
                 PlayerPrefs.DeleteKey(P + k);
             Load();
         }

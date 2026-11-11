@@ -66,7 +66,7 @@ namespace AirsoftFPS
             {
                 case Stage.Waiting:
                     if (waitingSince < 0) waitingSince = now;
-                    if (participants.Count > 0 && now - waitingSince >= FIRST_ROUND_DELAY) StartRound(1, now);
+                    if (participants.Count > 0 && now - waitingSince >= FIRST_ROUND_DELAY && FirstRoundDue(now)) StartRound(1, now);
                     break;
                 case Stage.Prep:
                     RoundTick(dt, now);
@@ -86,6 +86,15 @@ namespace AirsoftFPS
                     if (now >= StageEndsAt) StartRound(Round + 1, now);
                     break;
             }
+        }
+
+        // Round 1 waits for the match-start intro: its PREP 3-2-1 ends exactly when the match goes live.
+        bool FirstRoundDue(double now)
+        {
+            var mn = MatchNet.Instance;
+            if (Round > 0 || mn == null || mn.CurrentPhase != MatchNet.Phase.InMatch || testParticipants != null) return true;
+            if (mn.MatchGoTime <= 0) return false;
+            return now >= mn.MatchGoTime - PREP_SECONDS;
         }
 
         void StartRound(int n, double now)

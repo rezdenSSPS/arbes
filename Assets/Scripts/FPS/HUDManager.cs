@@ -61,6 +61,7 @@ namespace AirsoftFPS
         GameObject hitScreen;   // Milsim HIT overlay
         SettingsScreen settings;
         KillCam killCam;
+        MatchIntro intro;
 
         // HUD widgets
         GameObject codeChip;
@@ -276,7 +277,7 @@ namespace AirsoftFPS
             bool heldOut = hit && NetworkManager.Singleton != null && ObjectiveMode.HoldsHit(NetworkManager.Singleton.LocalClientId);
 
             // (no HUD before the own avatar, and with it the only camera, has spawned)
-            hudRoot.SetActive(wired && !results && !isPaused && !killcam);
+            hudRoot.SetActive(wired && !results && !isPaused && !killcam && !MatchIntro.Flying);   // the drone flyover is clean
             resultsScreen.SetActive(results);
             pauseScreen.SetActive(isPaused && !results);
             deathScreen.SetActive(dead && !killcam && !results && !isPaused && !showScores
@@ -479,7 +480,7 @@ namespace AirsoftFPS
                 }
                 var w = weaponCtrl.CurrentWeapon;
                 int mag = weaponCtrl.CurrentMag;
-                ammoWeapon.text = $"[{(active == 9 ? 0 : active + 1)}] {weaponCtrl.CurrentWeaponName}" +
+                ammoWeapon.text = weaponCtrl.CurrentWeaponName +
                                   $"  <size=75%><color={Html(Faint)}>{BBBallistics.WeightLabel(PlayerProfile.BbIndex)} BB</color></size>";
                 ammoMag.text = mag.ToString();
                 ammoReserve.text = "/ " + weaponCtrl.CurrentReserve;
@@ -945,6 +946,8 @@ namespace AirsoftFPS
             deathScreen.SetActive(false); killcamScreen.SetActive(false);
             scoreboard.SetActive(false); pauseScreen.SetActive(false); resultsScreen.SetActive(false);
             killCam = gameObject.AddComponent<KillCam>();
+            intro = gameObject.AddComponent<MatchIntro>();
+            intro.Build(root);
         }
 
         static RectTransform ScrimRow(Transform parent, string name, float spacing, RectOffset pad, float alpha = 0.72f)
@@ -1162,10 +1165,9 @@ namespace AirsoftFPS
                 slotViews.Add(sv);
             }
 
-            // bottom-right ammo
+            // bottom-right ammo (bare text, no panel behind it)
             var ammo = VCol(root, "Ammo", 6, TextAnchor.LowerRight, false);
             ammo.padding = new RectOffset(16, 16, 12, 12);
-            ammo.gameObject.AddComponent<Image>().color = Scrim();
             var ammoFit = ammo.gameObject.AddComponent<ContentSizeFitter>();
             ammoFit.horizontalFit = ammoFit.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             var ammoRt = ammo.GetComponent<RectTransform>();

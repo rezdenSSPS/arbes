@@ -287,6 +287,9 @@ namespace AirsoftFPS
             NotifyAmmo();
         }
 
+        // Hip-fire field of view: the Settings FOV plus the sprint kick from the movement controller.
+        float BaseFov => GameSettings.FieldOfView + (fpsController != null ? fpsController.FovKick : 0f);
+
         void Update()
         {
             // Muzzle flash runs on ALL clients so remote players see your shots
@@ -304,12 +307,12 @@ namespace AirsoftFPS
             if (lifeAmmoDue && ObjectiveMode.Active != null) ApplyLifeAmmo();
             if (Time.timeScale == 0) return;
             bool dead = ownHealth != null && ownHealth.IsSpawned && ownHealth.isDead.Value;
-            if (HUDManager.InputBlocked || dead || (ownHealth != null && ownHealth.IsOut) || GoggleFog.Wiping)
+            if (HUDManager.InputBlocked || dead || (ownHealth != null && ownHealth.IsOut) || GoggleFog.Wiping || MatchNet.IntroFrozen)
             {
-                // a menu is open, Milsim HIT, dead (death screen / spectating) or wiping the goggles: no shooting/switching,
+                // a menu is open, the match-start intro / 3-2-1 is running, Milsim HIT, dead (death screen / spectating) or wiping the goggles: no shooting/switching,
                 // drop out of the scope
                 isAiming = false;
-                if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, GameSettings.FieldOfView, Time.deltaTime * 10f);
+                if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, BaseFov, Time.deltaTime * 10f);
                 // dead: drop a reload in progress (restarted on respawn); otherwise let it finish
                 if (dead)
                 {
@@ -326,7 +329,7 @@ namespace AirsoftFPS
             {
                 isAiming = false;
                 isReloading = false;
-                if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, GameSettings.FieldOfView, Time.deltaTime * 10f);
+                if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, BaseFov, Time.deltaTime * 10f);
                 SetHeldWeaponVisible(false);
                 HandleBang(true);
                 return;
@@ -380,8 +383,8 @@ namespace AirsoftFPS
             // Weapon bob while moving
             Vector3 bob = Vector3.zero;
             var kb = Keyboard.current;
-            bool moving = kb != null && (kb.wKey.isPressed || kb.aKey.isPressed ||
-                                         kb.sKey.isPressed || kb.dKey.isPressed);
+            bool moving = fpsController != null ? fpsController.GroundSpeed > 0.6f
+                          : kb != null && (kb.wKey.isPressed || kb.aKey.isPressed || kb.sKey.isPressed || kb.dKey.isPressed);
             if (moving)
             {
                 bool sprint = fpsController != null && fpsController.IsSprinting;
@@ -705,7 +708,7 @@ namespace AirsoftFPS
             else
             {
                 isAiming = false;
-                if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, GameSettings.FieldOfView, Time.deltaTime * 10f);
+                if (playerCam) playerCam.fieldOfView = Mathf.Lerp(playerCam.fieldOfView, BaseFov, Time.deltaTime * 10f);
             }
         }
 

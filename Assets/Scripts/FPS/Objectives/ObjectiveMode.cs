@@ -209,7 +209,8 @@ namespace AirsoftFPS
         }
 
         // Owner (FPSController): walk speed factor (0 = frozen, e.g. before a round starts).
-        public static float SpeedFactor(ulong clientId) => Active != null ? Active.MoveFactor(clientId) : 1f;
+        public static float SpeedFactor(ulong clientId) =>
+            MatchNet.IntroFrozen ? 0f : Active != null ? Active.MoveFactor(clientId) : 1f;   // match-start intro: everyone waits
 
         // Owner + server (WeaponController): may this player use this weapon (e.g. the VIP: sidearms only)?
         public static bool WeaponAllowed(ulong clientId, WeaponData w) => Active == null || w == null || Active.AllowsWeapon(clientId, w);

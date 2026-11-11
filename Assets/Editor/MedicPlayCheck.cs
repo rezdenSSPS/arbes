@@ -122,6 +122,9 @@ namespace AirsoftFPS.Editor
                 {
                     case 0:
                         if (nm == null || InStage < 1) return;
+                        // a free port of our own (another editor may already listen on the default 7777)
+                        var utp = nm.GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
+                        if (utp != null) utp.SetConnectionData("127.0.0.1", (ushort)UnityEngine.Random.Range(20000, 40000));
                         Check(nm.StartHost(), "host started");
                         Next(); break;
                     case 1:

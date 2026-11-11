@@ -80,13 +80,14 @@ namespace AirsoftFPS
             }
             else readyKnown = false;
 
-            // match start: the first frame we're in the map, in the match, with our player spawned
+            // match start: the moment the match goes live (after the intro flyover and its 3-2-1), in the map,
+            // with our player spawned. Round modes blow their own whistle when round 1 goes live.
             var local = LocalHealth(nm);
-            if (phase == MatchNet.Phase.InMatch && inMap && !matchStartPlayed && local != null)
+            if (phase == MatchNet.Phase.InMatch && inMap && !matchStartPlayed && local != null && !MatchNet.IntroFrozen)
             {
                 matchStartPlayed = true;
                 AirsoftAudio.Play2D("match_start", 0.6f);
-                AirsoftAudio.Play2D("whistle", 0.5f);
+                if (!(ObjectiveMode.Active is RoundMode)) AirsoftAudio.Play2D("whistle", 0.5f);
             }
 
             // match end: end whistle, then win / lose / draw

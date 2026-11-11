@@ -204,6 +204,7 @@ namespace AirsoftFPS
             Check(c1, "Show hit marker", () => GameSettings.ShowHitMarker, v => GameSettings.ShowHitMarker = v);
             Check(c1, "Show enemy health bars", () => GameSettings.ShowHealthBars, v => GameSettings.ShowHealthBars = v);
             Check(c1, "Killcam (look at who eliminated you)", () => GameSettings.Killcam, v => GameSettings.Killcam = v);
+            Check(c1, "Camera bob when walking", () => GameSettings.ViewBob, v => GameSettings.ViewBob = v);
 
             // live preview
             var prev = Box(pane, "Preview", Hex("#4F5A62"));

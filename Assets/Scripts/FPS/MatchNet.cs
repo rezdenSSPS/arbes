@@ -80,6 +80,32 @@ namespace AirsoftFPS
         public float WindSpeed { get; private set; }
         // Network server time (NetworkManager.ServerTime) when the clock runs out; 0 = not running.
         public double MatchEndTime { get; private set; }
+
+        // ── Match-start intro (MatchIntro on every peer): a drone flies over the map, the camera lands in
+        // your eyes, 3-2-1, go. Everyone is frozen (no moving, no shooting, bots stand still) until the
+        // server time MatchGoTime; the match clock starts from it. Round modes (Bomb / VIP): round 1's PREP
+        // is timed to end exactly at MatchGoTime, so its 3-2-1 is the intro's 3-2-1.
+        public const float INTRO_FLY = 7f;       // drone shots + the swoop into the player's eyes
+        public const float INTRO_COUNT = 3f;     // 3-2-1
+        public double MatchGoTime { get; private set; }   // server time the match goes live; 0 = arena still loading
+        public float IntroLength { get; private set; }    // seconds from the arena load to MatchGoTime (0 = no intro)
+        // Batch play checks skip the intro (they would only wait for it) unless run with -intro.
+        static bool IntroEnabled => !Application.isBatchMode || Array.IndexOf(Environment.GetCommandLineArgs(), "-intro") >= 0;
+
+        // Everyone: is the match-start freeze on right now?
+        public static bool IntroFrozen
+        {
+            get
+            {
+                var mn = Instance;
+                if (mn == null || mn.CurrentPhase != Phase.InMatch || mn.nm == null || !mn.nm.IsListening) return false;
+                if (mn.MatchGoTime <= 0) return true;   // arena loading: nobody moves yet
+                return mn.nm.ServerTime.Time < mn.MatchGoTime;
+            }
+        }
+        // Seconds until the match goes live (0 once it has).
+        public float IntroLeft => CurrentPhase != Phase.InMatch || MatchGoTime <= 0 || nm == null ? 0f
+                                  : Mathf.Max(0f, (float)(MatchGoTime - nm.ServerTime.Time));
         // Co-op: the wave the server's EnemySpawner is on (clients have no live spawner state of their own).
         public int CoopWave { get; private set; } = 1;
         public void ServerSetCoopWave(int wave)
@@ -166,7 +192,7 @@ namespace AirsoftFPS
             if (nm.IsClient && !clientHandlersUp) RegisterClientHandlers();
             if (nm.IsServer && !serverHandlersUp) RegisterServerHandlers();
 
-            if (nm.IsServer) TickMatchClock();
+            if (nm.IsServer) { TickIntro(); TickMatchClock(); }
             BotsUpdate();
             WindSystem.SyncWorld();          // windsocks in the arena
             ObjectiveMode.Sync(this, nm);   // objective modes (CTF, Domination): create / remove the rules object
@@ -343,6 +369,8 @@ namespace AirsoftFPS
             IsDraw = false;
             EndedOnTime = false;
             MatchEndTime = 0;   // the clock starts once the arena has loaded (TickMatchClock)
+            MatchGoTime = 0;    // set when the arena has loaded (TickIntro)
+            IntroLength = 0f;
             awards.Clear();
             MatchAwards.Reset();
             // reset scores (and split into two teams for Team Deathmatch)
@@ -493,15 +521,25 @@ namespace AirsoftFPS
             Invoke(nameof(ReturnToLobby), RESULTS_SECONDS);
         }
 
-        // Server: start the clock once the arena is the active scene, end the match when it runs out.
+        // Server: once the arena is the active scene, fix the moment the match goes live (after the intro).
+        void TickIntro()
+        {
+            if (CurrentPhase != Phase.InMatch || MatchGoTime > 0) return;
+            if (SceneManager.GetActiveScene().name != MatchScene) return;
+            IntroLength = IntroEnabled ? INTRO_FLY + INTRO_COUNT : 0f;
+            MatchGoTime = nm.ServerTime.Time + Mathf.Max(0.01f, IntroLength);
+            BroadcastState();
+        }
+
+        // Server: start the clock when the match goes live (after the intro), end the match when it runs out.
         void TickMatchClock()
         {
             if (CurrentPhase != Phase.InMatch || !UsesTimeLimit) return;
             double now = nm.ServerTime.Time;
             if (MatchEndTime <= 0)
             {
-                if (SceneManager.GetActiveScene().name != MatchScene) return;
-                MatchEndTime = now + TimeLimitMinutes * 60.0;
+                if (SceneManager.GetActiveScene().name != MatchScene || MatchGoTime <= 0) return;
+                MatchEndTime = Math.Max(now, MatchGoTime) + TimeLimitMinutes * 60.0;
                 BroadcastState();
                 return;
             }
@@ -569,6 +607,7 @@ namespace AirsoftFPS
             IsDraw = false;
             EndedOnTime = false;
             MatchEndTime = 0;
+            MatchGoTime = 0;
             EnemiesEnabled = true;
             awards.Clear();
             for (int i = 0; i < roster.Count; i++)
@@ -653,6 +692,7 @@ namespace AirsoftFPS
             IsDraw = false;
             EndedOnTime = false;
             MatchEndTime = 0;
+            MatchGoTime = 0;
             LastDeath = default;
             CoopWave = 1;
             WindSpeed = 0f;
@@ -722,6 +762,8 @@ namespace AirsoftFPS
             w.WriteValueSafe((byte)((IsDraw ? 1 : 0) | (EndedOnTime ? 2 : 0)));
             w.WriteValueSafe((byte)TimeLimitMinutes);
             w.WriteValueSafe(MatchEndTime);
+            w.WriteValueSafe(MatchGoTime);
+            w.WriteValueSafe(IntroLength);
             w.WriteValueSafe(CoopWave);
             w.WriteValueSafe((byte)WindSetting);
             w.WriteValueSafe(FogEnabled);
@@ -761,6 +803,8 @@ namespace AirsoftFPS
             reader.ReadValueSafe(out byte endFlags);
             reader.ReadValueSafe(out byte timeLimit);
             reader.ReadValueSafe(out double matchEnd);
+            reader.ReadValueSafe(out double matchGo);
+            reader.ReadValueSafe(out float introLength);
             reader.ReadValueSafe(out int coopWave);
             reader.ReadValueSafe(out byte windSetting);
             reader.ReadValueSafe(out bool fog);
@@ -798,6 +842,8 @@ namespace AirsoftFPS
             EndedOnTime = (endFlags & 2) != 0;
             TimeLimitMinutes = timeLimit;
             MatchEndTime = matchEnd;
+            MatchGoTime = matchGo;
+            IntroLength = introLength;
             CoopWave = coopWave;
             WindSetting = windSetting;
             FogEnabled = fog;
