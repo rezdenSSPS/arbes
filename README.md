@@ -100,6 +100,8 @@ už používá jiná spuštěná hra na stejném počítači, hostování skonč
 | Pauza, nastavení | Esc |
 | Lobby: ready / změna režimu (host) | R / M |
 
+Barva rozhraní (*Settings → Interface*): 8 barev (Blaze – oranžová, Green, Blue, Violet, Yellow, Teal, Pink, Red) pro tlačítka, zvýraznění, šipku minimapy a akcenty v HUDu; projeví se hned. Týmové barvy (červená / modrá) zůstávají.
+
 Nastavení (*Settings*): citlivost myši a v puškohledu, invertovaná osa Y, FOV, rozlišení, celá obrazovka, V-Sync,
 kvalita, post-processing, barva a velikost zaměřovače, ukazatele zdraví nad hlavami, killcam, pohupování kamery
 při chůzi, minimapa. Ukládá se do PlayerPrefs.

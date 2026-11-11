@@ -154,7 +154,9 @@ namespace AirsoftFPS
             plat.transform.SetParent(stage, false);
             plat.transform.localPosition = new Vector3(0, -0.03f, 0);
             plat.transform.localScale = new Vector3(1.3f, 0.03f, 1.3f);
-            plat.GetComponent<Renderer>().sharedMaterial = AirsoftLook.MakeMat(Accent);
+            var platR = plat.GetComponent<Renderer>();
+            platR.sharedMaterial = AirsoftLook.MakeMat(Accent);
+            UIKit.ThemeChanged += () => { if (platR != null) platR.sharedMaterial = AirsoftLook.MakeMat(Accent); };
             AirsoftLook.SetLayer(plat, PreviewLayer);
         }
 

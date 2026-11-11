@@ -37,6 +37,9 @@ namespace AirsoftFPS
         public static bool ShowMinimap;
         public static bool MinimapRotate;     // true = map turns with you (you face up), false = north up
 
+        // Interface
+        public static int UiTheme;            // index into UIKit.ThemeNames (accent colour of menus and HUD)
+
         public static readonly string[] CrosshairColorNames = { "White", "Blaze", "Green", "Cyan", "Yellow" };
         public static readonly Color[] CrosshairColors =
         {
@@ -98,7 +101,9 @@ namespace AirsoftFPS
             ViewBob        = PlayerPrefs.GetInt(P + "ViewBob", 1) == 1;
             ShowMinimap    = PlayerPrefs.GetInt(P + "Minimap", 1) == 1;
             MinimapRotate  = PlayerPrefs.GetInt(P + "MinimapRotate", 1) == 1;
+            UiTheme        = PlayerPrefs.GetInt(P + "UiTheme", 0);
             Clamp();
+            UIKit.SetTheme(UiTheme);
         }
 
         static void Clamp()
@@ -109,6 +114,7 @@ namespace AirsoftFPS
             Quality = Mathf.Clamp(Quality, 0, 2);
             CrosshairColor = Mathf.Clamp(CrosshairColor, 0, CrosshairColors.Length - 1);
             CrosshairSize = Mathf.Clamp(CrosshairSize, 6, 24);
+            UiTheme = Mathf.Clamp(UiTheme, 0, UIKit.ThemeNames.Length - 1);
             MasterVolume = Mathf.Clamp01(MasterVolume); SfxVolume = Mathf.Clamp01(SfxVolume);
             MusicVolume = Mathf.Clamp01(MusicVolume); AnnouncerVolume = Mathf.Clamp01(AnnouncerVolume);
         }
@@ -141,6 +147,7 @@ namespace AirsoftFPS
             PlayerPrefs.SetInt(P + "ViewBob", ViewBob ? 1 : 0);
             PlayerPrefs.SetInt(P + "Minimap", ShowMinimap ? 1 : 0);
             PlayerPrefs.SetInt(P + "MinimapRotate", MinimapRotate ? 1 : 0);
+            PlayerPrefs.SetInt(P + "UiTheme", UiTheme);
             PlayerPrefs.Save();
             Apply();
         }
@@ -149,7 +156,7 @@ namespace AirsoftFPS
         {
             foreach (var k in new[] { "Sens", "ScopedSens", "InvertY", "ToggleCrouch", "Fov", "ResW", "ResH", "Fullscreen",
                          "VSync", "Quality", "PostFx", "ShowFps", "VolMaster", "VolSfx", "VolMusic", "VolVoice", "Ambience",
-                         "XColor", "XSize", "HitMarker", "HealthBars", "Killcam", "ViewBob", "Minimap", "MinimapRotate" })
+                         "XColor", "XSize", "HitMarker", "HealthBars", "Killcam", "ViewBob", "Minimap", "MinimapRotate", "UiTheme" })
                 PlayerPrefs.DeleteKey(P + k);
             Load();
         }

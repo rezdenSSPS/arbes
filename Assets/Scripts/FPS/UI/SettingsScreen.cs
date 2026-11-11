@@ -68,7 +68,7 @@ namespace AirsoftFPS
             // tabs
             var tabRow = Rect(stage, "Tabs").TL(64, 120, 1152, 48);
             Box(tabRow, "Line", Line).rectTransform.At(0f, 0f, 0, 0, 1152, 1);
-            string[] names = { "CONTROLS", "VIDEO", "AUDIO", "GAMEPLAY" };
+            string[] names = { "CONTROLS", "VIDEO", "AUDIO", "GAMEPLAY", "INTERFACE" };
             float x = 0;
             for (int i = 0; i < names.Length; i++)
             {
@@ -88,6 +88,7 @@ namespace AirsoftFPS
             panes.Add(BuildVideo(content));
             panes.Add(BuildAudio(content));
             panes.Add(BuildGameplay(content));
+            panes.Add(BuildInterface(content));
         }
 
         void SelectTab(int i)
@@ -189,6 +190,7 @@ namespace AirsoftFPS
             {
                 int idx = i;
                 var cell = Rect(swRow.transform, "Swatch").LE(44, 44);
+                cell.gameObject.AddComponent<ThemeFixed>();
                 var ring = Frame(cell, Fg, 2f, "Ring");
                 ring.rectTransform.Fill(-5, -5, -5, -5);
                 rings.Add(ring);
@@ -227,11 +229,65 @@ namespace AirsoftFPS
             return pane.gameObject;
         }
 
+        // Interface: the accent colour of menus and HUD. Applied at once (the screen behind recolours too).
+        GameObject BuildInterface(Transform content)
+        {
+            var pane = Rect(content, "Interface").Fill();
+            var c1 = Column(pane, 0);
+
+            var block = VCol(c1, "Theme", 12);
+            Label(block.transform, "Interface color", F.Body, 16, Fg).LE(-1, 22);
+            var grid = Rect(block.transform, "Swatches").LE(-1, 2 * 64 + 10);
+            var rings = new List<Image>();
+            for (int i = 0; i < ThemeAccents.Length; i++)
+            {
+                int idx = i;
+                var cell = Rect(grid, "Swatch" + i).TL(5 + (i % 4) * 132, 5 + (i / 4) * 74, 122, 58);
+                cell.gameObject.AddComponent<ThemeFixed>();
+                var ring = Frame(cell, Fg, 2f, "Ring");
+                ring.rectTransform.Fill(-5, -5, -5, -5);
+                rings.Add(ring);
+                var b = Button(cell, "", Btn.Ghost, 10, () => { GameSettings.UiTheme = idx; UIKit.SetTheme(idx); RefreshAll(); });
+                b.GetComponent<RectTransform>().Fill();
+                // fixed colours (not the theme's): the swatch must keep showing its own colour
+                b.bgN = b.bgH = b.bgP = ThemeAccents[i];
+                b.Refresh();
+                var name = Label(cell, ThemeNames[i].ToUpperInvariant(), F.CondBold, 16, Ground, TextAlignmentOptions.Center, 0.06f);
+                name.rectTransform.Fill();
+                name.raycastTarget = false;
+            }
+            refreshers.Add(() => { for (int i = 0; i < rings.Count; i++) rings[i].enabled = i == GameSettings.UiTheme; });
+            var note = Label(c1, "Buttons, highlights, your name, the minimap arrow and HUD accents use this color. Team colors (red / blue) stay as they are.",
+                F.Body, 14, Muted);
+            note.textWrappingMode = TextWrappingModes.Normal;
+            note.LE(-1, 44);
+
+            // preview: the main pieces in the chosen colour (they follow the theme live)
+            var prev = Box(pane, "Preview", Surface);
+            prev.rectTransform.TL(600, 0, 552, 300);
+            Frame(prev.transform, Line, 1f);
+            Caption(prev.transform, "PREVIEW", 11, Muted).rectTransform.TL(20, 16, 200, 14);
+            Button(prev.transform, "HOST GAME", Btn.Primary, 20, () => { }, F.CondBold, 10).GetComponent<RectTransform>().TL(20, 48, 240, 52);
+            var badge = Badge(prev.transform, "NEXT", Accent, Ground, Color.clear);
+            badge.anchorMin = badge.anchorMax = badge.pivot = new Vector2(0f, 1f);
+            badge.anchoredPosition = new Vector2(280, -62);
+            var lvl = Label(prev.transform, "LEVEL 6", F.CondBlack, 30, Accent, TextAlignmentOptions.MidlineLeft);
+            lvl.rectTransform.TL(20, 120, 240, 36);
+            var bar = Bar(prev.transform, "XP", Line, Accent);
+            bar.transform.parent.GetComponent<RectTransform>().TL(20, 166, 300, 6);
+            SetBar(bar, 0.68f);
+            var tag = Label(prev.transform, "", F.BodySemi, 15, Fg, TextAlignmentOptions.MidlineLeft);
+            tag.rectTransform.TL(20, 196, 500, 24);
+            refreshers.Add(() => tag.text = $"test <color={Html(Accent)}>(you)</color>  ·  <color={Html(Accent)}>+150 XP</color>");
+            return pane.gameObject;
+        }
+
         void RefreshAll() { foreach (var r in refreshers) r(); }
 
         // ───────────── shared crosshair (also used by the HUD) ─────────────
         public static Image[] CrosshairArms(Transform parent)
         {
+            if (parent.GetComponent<ThemeFixed>() == null) parent.gameObject.AddComponent<ThemeFixed>();   // own colour (Settings)
             var arms = new Image[4];
             for (int i = 0; i < 4; i++)
             {

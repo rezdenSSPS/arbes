@@ -24,8 +24,11 @@ namespace AirsoftFPS
         public static readonly Color TextSoft   = Hex("#D9D6CC");
         public static readonly Color Muted      = Hex("#A3A898");
         public static readonly Color Faint      = Hex("#8A8F80");
-        public static readonly Color Accent     = Hex("#FF7A1A");
-        public static readonly Color AccentHi   = Hex("#FF9A4D");
+        // Accent = the interface colour theme (Settings > Interface): orange by default.
+        public static Color Accent => ThemeAccents[theme];
+        public static Color AccentHi => ThemeAccentsHi[theme];
+        public static Color AccentLo => LoOf(Accent);   // pressed primary button
+        internal static Color LoOf(Color a) => Color.Lerp(a, Color.black, 0.09f);
         public static readonly Color Ready      = Hex("#7BD389");
         public static readonly Color Red        = Hex("#F05A4F");
         public static readonly Color Blue       = Hex("#7DB8FF");
@@ -35,6 +38,36 @@ namespace AirsoftFPS
         public static readonly Color Scenery    = Hex("#2B3138");
         public static readonly Color Disabled   = Hex("#2C3026");
         public static readonly Color DisabledFg = Hex("#6E7364");
+
+        // ───────────── interface colour themes ─────────────
+        public static readonly string[] ThemeNames = { "Blaze", "Green", "Blue", "Violet", "Yellow", "Teal", "Pink", "Red" };
+        public static readonly Color[] ThemeAccents =
+        {
+            Hex("#FF7A1A"), Hex("#4ADE80"), Hex("#3B9EFF"), Hex("#A78BFA"),
+            Hex("#FACC15"), Hex("#2DD4BF"), Hex("#F472B6"), Hex("#F43F5E"),
+        };
+        public static readonly Color[] ThemeAccentsHi =
+        {
+            Hex("#FF9A4D"), Hex("#86EFAC"), Hex("#7ABDFF"), Hex("#C4B5FD"),
+            Hex("#FDE047"), Hex("#5EEAD4"), Hex("#F9A8D4"), Hex("#FB7185"),
+        };
+        static int theme;
+        public static int Theme => theme;
+        public static event System.Action ThemeChanged;
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetThemeEvents() => ThemeChanged = null;   // domain reload is off: drop old listeners
+
+        // Switches the accent colour. Everything built from now on uses it; what is already on screen is
+        // recoloured in place (UIKit.ThemeRecolour), so the change shows at once, menus and HUD alike.
+        public static void SetTheme(int index)
+        {
+            index = Mathf.Clamp(index, 0, ThemeAccents.Length - 1);
+            if (index == theme) return;
+            var from = new[] { Accent, AccentHi, AccentLo };
+            theme = index;
+            ThemeRecolour.Run(from, new[] { Accent, AccentHi, AccentLo });
+            ThemeChanged?.Invoke();
+        }
 
         public static Color Hex(string h)
         {
@@ -732,7 +765,7 @@ namespace AirsoftFPS
             switch (s)
             {
                 case UIKit.Btn.Primary:
-                    bgN = UIKit.Accent; bgH = UIKit.AccentHi; bgP = UIKit.Hex("#E86A10"); bgD = UIKit.Disabled;
+                    bgN = UIKit.Accent; bgH = UIKit.AccentHi; bgP = UIKit.AccentLo; bgD = UIKit.Disabled;
                     fgN = fgH = UIKit.Ground; fgD = UIKit.DisabledFg; lineN = lineH = lineD = clear; break;
                 case UIKit.Btn.Secondary:
                     bgN = clear; bgH = UIKit.A(UIKit.Fg, 0.08f); bgP = UIKit.A(UIKit.Fg, 0.16f); bgD = clear;
