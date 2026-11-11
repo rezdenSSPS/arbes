@@ -858,10 +858,11 @@ namespace AirsoftFPS
                 txt.padding = dense ? new RectOffset(14, 14, densePad, densePad)
                             : compact ? new RectOffset(16, 16, 6, 6) : new RectOffset(16, 16, 9, 9);
                 txt.GetComponent<RectTransform>().Fill();
-                Label(txt.transform, ModeName(mode).ToUpperInvariant(), F.CondBold, dense ? 16 : compact ? 18 : 20, Fg, TextAlignmentOptions.MidlineLeft, 0.02f)
-                    .LE(-1, dense ? (cardH < 34f ? 17 : 18) : compact ? 20 : 22);   // 11+ modes: 33 px cards, title + desc must fit
-                var desc = Label(txt.transform, ModeDesc(mode), F.Body, dense ? 11 : 12, Muted);
-                if (compact) { desc.overflowMode = TextOverflowModes.Ellipsis; desc.LE(-1, dense ? 14 : 16); }
+                bool tiny = cardH < 31f;   // 13 modes: 28 px cards
+                Label(txt.transform, ModeName(mode).ToUpperInvariant(), F.CondBold, dense ? (tiny ? 15 : 16) : compact ? 18 : 20, Fg, TextAlignmentOptions.MidlineLeft, 0.02f)
+                    .LE(-1, dense ? (tiny ? 15 : cardH < 34f ? 17 : 18) : compact ? 20 : 22);   // 11+ modes: title + desc must fit
+                var desc = Label(txt.transform, ModeDesc(mode), F.Body, dense ? (tiny ? 10 : 11) : 12, Muted);
+                if (compact) { desc.overflowMode = TextOverflowModes.Ellipsis; desc.LE(-1, dense ? (tiny ? 11 : 14) : 16); }
                 else desc.Wrap().LE(-1, 30);
                 b.label.gameObject.SetActive(false);
                 modeCards.Add((b, frame, group));

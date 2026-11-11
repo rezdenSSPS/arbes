@@ -308,7 +308,7 @@ namespace AirsoftFPS
 
             // top widget per mode
             tdmWidget.SetActive(MatchNet.IsTeamMode(mode));
-            ffaWidget.SetActive(mode == MatchNet.GameModeType.FreeForAll);
+            ffaWidget.SetActive(MatchNet.IsFfaLike(mode));   // Free-for-All, Juggernaut, One in the Chamber
             ggWidget.SetActive(mode == MatchNet.GameModeType.GunGame);
             coopWidget.SetActive(mode == MatchNet.GameModeType.Coop);
 
@@ -342,7 +342,7 @@ namespace AirsoftFPS
                         : $"YOU ARE <color={Html(TeamColor(team))}>{(team == 1 ? "RED" : "BLUE")}</color>";
                     tdmYou.transform.parent.gameObject.SetActive(team != 0);
                 }
-                else if (mode == MatchNet.GameModeType.FreeForAll)
+                else if (MatchNet.IsFfaLike(mode))
                 {
                     int myKills = 0, best = -1; string leader = "";
                     foreach (var e in mnet.Roster)
@@ -353,7 +353,8 @@ namespace AirsoftFPS
                     ffaYou.text = myKills.ToString();
                     ffaLeader.text = "LEADER  " + leader;
                     ffaLeaderScore.text = Mathf.Max(0, best).ToString();
-                    ffaTarget.text = "/ " + MatchNet.FFA_KILL_TARGET;
+                    int killTarget = MatchNet.KillTarget(mode);
+                    ffaTarget.text = killTarget > 0 ? "/ " + killTarget : "";   // One in the Chamber: last one standing
                 }
                 else if (mode == MatchNet.GameModeType.GunGame)
                 {
@@ -522,7 +523,7 @@ namespace AirsoftFPS
                     tv.score.text = mnet.TeamScore(t + 1).ToString();
                     tv.headK.text = milsimSb ? "HITS" : "KILLS";
                     tv.headD.text = milsimSb ? "OUT" : "DEATHS";
-                    bool objSb = ObjectiveMode.HasObjective(mode);   // CTF / Domination: objective column
+                    bool objSb = ObjectiveMode.HasPoints(mode);   // CTF / Domination: objective column
                     tv.headO.text = objSb ? ObjectiveMode.PointsLabelFor(mode) : "";
                     int r = 0;
                     foreach (var e in list)
@@ -557,7 +558,7 @@ namespace AirsoftFPS
                 row.go.SetActive(true);
                 row.rank.text = (i + 1).ToString();
                 row.rank.color = i == 0 ? Accent : Muted;
-                row.name.text = you ? e.name + " (you)" : e.name;
+                row.name.text = (you ? e.name + " (you)" : e.name) + ObjectiveMode.TagFor(e.clientId);   // JUGGERNAUT / OUT
                 row.bg.color = you ? A(Accent, 0.16f) : Color.clear;
                 row.barBack.SetActive(!coop);
                 row.progress.gameObject.SetActive(!coop);
@@ -568,10 +569,16 @@ namespace AirsoftFPS
                     SetBar(row.bar, e.kills / (float)MatchNet.GUNGAME_WEAPONS);
                     row.progress.text = WeaponNameAt(lvl);
                 }
+                else if (ObjectiveMode.TryProgress(e.clientId, out float frac, out string progText))   // One in the Chamber: lives
+                {
+                    SetBar(row.bar, frac);
+                    row.progress.text = progText;
+                }
                 else if (!coop)
                 {
-                    SetBar(row.bar, e.kills / (float)MatchNet.FFA_KILL_TARGET);
-                    row.progress.text = e.kills + " / " + MatchNet.FFA_KILL_TARGET;
+                    int killTarget = Mathf.Max(1, MatchNet.KillTarget(mode) > 0 ? MatchNet.KillTarget(mode) : MatchNet.FFA_KILL_TARGET);
+                    SetBar(row.bar, e.kills / (float)killTarget);
+                    row.progress.text = e.kills + " / " + killTarget;
                 }
                 row.a.text = coop ? "" : e.kills.ToString();
                 row.b.text = e.deaths.ToString();
@@ -582,7 +589,7 @@ namespace AirsoftFPS
         // fewer deaths.
         static int CompareForRanking(MatchNet.Entry a, MatchNet.Entry b, MatchNet.GameModeType mode)
         {
-            if (ObjectiveMode.HasObjective(mode))
+            if (ObjectiveMode.HasPoints(mode))
             {
                 int pa = ObjectiveMode.PointsOf(a.clientId), pb = ObjectiveMode.PointsOf(b.clientId);
                 if (pa != pb) return pb.CompareTo(pa);
@@ -606,6 +613,8 @@ namespace AirsoftFPS
             MatchNet.GameModeType.GunGame => "finish all " + MatchNet.GUNGAME_WEAPONS + " weapons",
             MatchNet.GameModeType.Milsim => "first team to " + MatchNet.MILSIM_HIT_TARGET + " hits",
             MatchNet.GameModeType.Infection => "survivors hold out · infected tag everyone",
+            MatchNet.GameModeType.Juggernaut => "take down the juggernaut · first to " + MatchNet.JUGG_KILL_TARGET + " kills",
+            MatchNet.GameModeType.OneInTheChamber => "1 BB, any hit kills · last one standing",
             _ when ObjectiveMode.HasObjective(m)   // CTF, Domination, Bomb, VIP escort
                 => "first team to " + ObjectiveMode.TargetFor(m) + ObjectiveMode.UnitFor(m),
             MatchNet.GameModeType.Medic => "medics revive · out of tickets and players = lose",
@@ -621,7 +630,8 @@ namespace AirsoftFPS
             {
                 if (objDelay < 0f) held = true; else delay = objDelay;
                 deathRespawnIn.text = held ? heldText : "Respawning in";
-                deathRespawnNote.text = held ? "No respawns during the round." : "Full health on respawn.";
+                deathRespawnNote.text = held ? (ObjectiveMode.Active is OneInTheChamber ? "Watch the last ones standing." : "No respawns during the round.")
+                                             : "Full health on respawn.";
             }
             else { deathRespawnIn.text = "Respawning in"; deathRespawnNote.text = "Full health on respawn."; }
             float left = held ? 0f : Mathf.Max(0f, delay - (Time.unscaledTime - deathTime));
@@ -682,8 +692,11 @@ namespace AirsoftFPS
                     pauseScore.text = $"{Mathf.Min(mnet.GunLevelOf(me) + 1, MatchNet.GUNGAME_WEAPONS)} / {MatchNet.GUNGAME_WEAPONS}";
                     break;
                 case MatchNet.GameModeType.FreeForAll:
+                case MatchNet.GameModeType.Juggernaut:
+                case MatchNet.GameModeType.OneInTheChamber:
                     int k = 0; foreach (var e in mnet.Roster) if (e.clientId == me) k = e.kills;
-                    pauseScore.text = $"{k} / {MatchNet.FFA_KILL_TARGET}";
+                    int kt = MatchNet.KillTarget(mnet.Mode);
+                    pauseScore.text = kt > 0 ? $"{k} / {kt}" : $"{k} kills · {ObjectiveMode.PointsOf(me)} lives";
                     break;
                 default:
                     pauseScore.text = "WAVE " + (MatchNet.Instance != null ? MatchNet.Instance.CoopWave : 1);
@@ -727,9 +740,9 @@ namespace AirsoftFPS
                 resWinner.text = mnet.WinnerClientId == me ? "YOU WIN" : w + " WINS";
                 resBanner.color = Accent;
                 bool gg = mode == MatchNet.GameModeType.GunGame;
-                resSub.text = onTime ? (gg ? "time's up · furthest weapon" : "time's up · most kills")
+                resSub.text = objLine ?? (onTime ? (gg ? "time's up · furthest weapon" : "time's up · most kills")
                             : gg ? "finished all " + MatchNet.GUNGAME_WEAPONS + " weapons"
-                                 : "first to " + MatchNet.FFA_KILL_TARGET + " kills";
+                                 : "first to " + MatchNet.KillTarget(mode) + " kills");
             }
 
             var list = new List<MatchNet.Entry>(mnet.Roster);
@@ -745,7 +758,7 @@ namespace AirsoftFPS
                 p.name.color = tdm ? TeamColor(e.team) : Fg;
                 p.stat.text = mode == MatchNet.GameModeType.GunGame
                     ? $"{WeaponNameAt(Mathf.Min(e.kills, MatchNet.GUNGAME_WEAPONS - 1))} · {Mathf.Min(e.kills, MatchNet.GUNGAME_WEAPONS)} / {MatchNet.GUNGAME_WEAPONS}"
-                    : ObjectiveMode.HasObjective(mode) ? $"{ObjectiveMode.PointsOf(e.clientId)} {ObjectiveMode.PointsLabelFor(mode).ToLowerInvariant()} · {e.kills} {(milsim ? "hits" : "kills")}"
+                    : ObjectiveMode.HasPoints(mode) ? $"{ObjectiveMode.PointsOf(e.clientId)} {ObjectiveMode.PointsLabelFor(mode).ToLowerInvariant()} · {e.kills} {(milsim ? "hits" : "kills")}"
                     : milsim ? $"{e.kills} hits · {e.deaths} out"
                     : $"{e.kills} kills · {e.deaths} deaths";
                 p.bg.color = you ? Surface : Raised;

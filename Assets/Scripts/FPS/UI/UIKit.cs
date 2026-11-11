@@ -649,6 +649,8 @@ namespace AirsoftFPS
             MatchNet.GameModeType.Bomb => "Bomb",
             MatchNet.GameModeType.VipEscort => "VIP Escort",
             MatchNet.GameModeType.Infection => "Infection",
+            MatchNet.GameModeType.Juggernaut => "Juggernaut",
+            MatchNet.GameModeType.OneInTheChamber => "One in the Chamber",
             _ => "Co-op Survival"
         };
 
@@ -664,6 +666,8 @@ namespace AirsoftFPS
             MatchNet.GameModeType.Bomb => $"Plant at A or B, or defuse it. No respawns. First to {BombMode.ROUNDS_TO_WIN} rounds.",
             MatchNet.GameModeType.VipEscort => $"Escort your VIP to the extraction, or take them down. First to {VipEscort.ROUNDS_TO_WIN}.",
             MatchNet.GameModeType.Infection => $"Infected tag survivors up close; tagged = infected. Survive {Mathf.RoundToInt(Infection.SURVIVE_SECONDS / 60f)} min.",
+            MatchNet.GameModeType.Juggernaut => $"All vs one RPK juggernaut. Down them to take over. First to {MatchNet.JUGG_KILL_TARGET}.",
+            MatchNet.GameModeType.OneInTheChamber => $"1911, 1 BB, any hit kills. Kill = +1 BB. {OneInTheChamber.LIVES} lives.",
             _ => "Team up against waves of AI enemies."
         };
 

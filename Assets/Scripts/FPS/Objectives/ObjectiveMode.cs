@@ -66,6 +66,15 @@ namespace AirsoftFPS
                 type = typeof(Infection), target = 0, unit = "survivors",   // no score race: survive the clock
                 pointsLabel = "INFECT", missing = null, ownClock = true
             },
+            // free-for-all modes: no teams, the roster's kills decide (MatchNet), no map points needed
+            [MatchNet.GameModeType.Juggernaut] = new Def
+            {
+                type = typeof(Juggernaut), target = 0, unit = "kills", pointsLabel = "", missing = null
+            },
+            [MatchNet.GameModeType.OneInTheChamber] = new Def
+            {
+                type = typeof(OneInTheChamber), target = 0, unit = "kills", pointsLabel = "LIVES", missing = null
+            },
         };
 
         public static bool HasObjective(MatchNet.GameModeType m) => defs.ContainsKey(m);
@@ -77,6 +86,9 @@ namespace AirsoftFPS
         public static string UnitFor(MatchNet.GameModeType m) => defs.TryGetValue(m, out var d) ? " " + d.unit : "";
 
         public static string PointsLabelFor(MatchNet.GameModeType m) => defs.TryGetValue(m, out var d) ? d.pointsLabel : "";
+
+        // The mode keeps per-player points worth showing and ranking by (Juggernaut has none: kills decide).
+        public static bool HasPoints(MatchNet.GameModeType m) => defs.TryGetValue(m, out var d) && !string.IsNullOrEmpty(d.pointsLabel);
 
         // Plays with the Milsim HIT rule (one BB = out, raised hand) instead of HP.
         public static bool UsesHitRule(MatchNet.GameModeType m) => defs.TryGetValue(m, out var d) && d.hitRule;
@@ -145,11 +157,11 @@ namespace AirsoftFPS
             return true;
         }
 
-        // Time ran out: who wins? false = no objective (MatchNet decides as before).
+        // Time ran out: who wins? false = no objective, or a free-for-all one (MatchNet decides by kills).
         public static bool DecideOnTimeout(out int winnerTeam, out bool draw)
         {
             winnerTeam = 0; draw = false;
-            if (Active == null) return false;
+            if (Active == null || !MatchNet.IsTeamMode(Active.Mode)) return false;
             Active.WinnerOnTimeout(out winnerTeam, out draw);
             return true;
         }
@@ -206,6 +218,43 @@ namespace AirsoftFPS
         // HUD: the mode's own name for a team ("INFECTED" / "SURVIVORS"), or null for the usual RED / BLUE.
         public static string TeamLabel(int team) => Active != null ? Active.TeamDisplayName(team) : null;
 
+        // ── free-for-all objective modes (Juggernaut, One in the Chamber): damage, weapons, ammo ──
+
+        // Server (MatchNet.BlocksDamage, so bullets, bangs and bots): no damage between these two players
+        // (Juggernaut: the hunters don't shoot each other, everyone is after the juggernaut).
+        public static bool BlocksDamageBetween(ulong attacker, ulong victim) =>
+            Active != null && attacker != victim && Active.NoDamageBetween(attacker, victim);
+
+        // Server (Health.TakeDamage): the damage this hit really does (Juggernaut: a fixed share of the
+        // juggernaut's health per hit; One in the Chamber: any hit kills).
+        public static int AdjustDamage(ulong victim, ulong attacker, string weapon, int amount, int victimMax) =>
+            Active != null ? Active.DamageFor(victim, attacker, weapon, amount, victimMax) : amount;
+
+        // Owner + server + bots: the mode hands this weapon out (no Armory purchase needed: the juggernaut's RPK).
+        public static bool WeaponGranted(ulong clientId, WeaponData w) => Active != null && w != null && Active.GrantsWeapon(clientId, w);
+
+        // Owner + server + bots: what a new life starts with in this weapon (One in the Chamber: 1 BB, no
+        // reserve). false = the usual full magazine and reserve. Both sides apply it themselves at the start
+        // of each life, so the owner's count and the server's authoritative one agree without a message.
+        public static bool LifeAmmo(ulong clientId, WeaponData w, out int mag, out int reserve)
+        {
+            mag = reserve = 0;
+            return Active != null && w != null && Active.StartAmmo(clientId, w, out mag, out reserve);
+        }
+
+        // Scoreboard progress column for free-for-all modes (One in the Chamber: lives left). false = kills.
+        public static bool TryProgress(ulong clientId, out float fraction, out string text)
+        {
+            fraction = 0f; text = null;
+            return Active != null && Active.Progress(clientId, out fraction, out text);
+        }
+
+        protected virtual bool NoDamageBetween(ulong attacker, ulong victim) => false;
+        protected virtual int DamageFor(ulong victim, ulong attacker, string weapon, int amount, int victimMax) => amount;
+        protected virtual bool GrantsWeapon(ulong clientId, WeaponData w) => false;
+        protected virtual bool StartAmmo(ulong clientId, WeaponData w, out int mag, out int reserve) { mag = reserve = 0; return false; }
+        protected virtual bool Progress(ulong clientId, out float fraction, out string text) { fraction = 0f; text = null; return false; }
+
         protected virtual bool MeleeOnlyRole(ulong clientId) => false;
         protected virtual string TeamDisplayName(int team) => null;
         protected virtual bool HoldRespawn(ulong clientId) => false;
@@ -248,6 +297,10 @@ namespace AirsoftFPS
             winnerTeam = Active.DeclaredWinner; draw = Active.DeclaredDraw;
             return true;
         }
+
+        // The player who won a free-for-all objective mode (One in the Chamber: the last one standing), or
+        // ulong.MaxValue (a team result, a draw, or nothing declared).
+        public static ulong DeclaredPlayerWinner => Active != null && Active.HasDeclared ? Active.DeclaredPlayer : ulong.MaxValue;
 
         // Objective events ("Alex took the BLUE flag"): text + team colour (0 = neutral). Raised on everyone.
         public static event Action<string, int> OnAnnounce;
@@ -327,6 +380,15 @@ namespace AirsoftFPS
         public bool HasDeclared { get; private set; }
         public int DeclaredWinner { get; private set; }
         public bool DeclaredDraw { get; private set; }
+        public ulong DeclaredPlayer { get; private set; } = ulong.MaxValue;
+
+        // Free-for-all modes: this player wins the match.
+        protected void DeclarePlayerWinner(ulong id)
+        {
+            if (HasDeclared) return;
+            DeclaredPlayer = id;
+            DeclareWinner(0, id == ulong.MaxValue);
+        }
 
         protected void DeclareWinner(int winnerTeam, bool draw = false)
         {

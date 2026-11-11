@@ -45,7 +45,8 @@ namespace AirsoftFPS
             m == GameModeType.GunGame || m == GameModeType.Milsim ||
             m == GameModeType.CaptureTheFlag || m == GameModeType.Domination ||
             m == GameModeType.Bomb || m == GameModeType.VipEscort ||
-            m == GameModeType.Medic || m == GameModeType.Infection;
+            m == GameModeType.Medic || m == GameModeType.Infection ||
+            m == GameModeType.Juggernaut || m == GameModeType.OneInTheChamber;
 
         public bool BotsActive => ModeHasBots(Mode) && BotFill > 0;
 

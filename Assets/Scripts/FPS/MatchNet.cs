@@ -15,8 +15,9 @@ namespace AirsoftFPS
     // the whole state to clients whenever it changes.
     public partial class MatchNet : MonoBehaviour   // bots: MatchNet.Bots.cs, map vote: MatchNetMapVote.cs
     {
-        public enum GameModeType { Coop = 0, FreeForAll = 1, TeamDeathmatch = 2, GunGame = 3, Milsim = 4, CaptureTheFlag = 5, Domination = 6, Medic = 7, Bomb = 8, VipEscort = 9, Infection = 10 }
-        public const int MODE_COUNT = 11;
+        public enum GameModeType { Coop = 0, FreeForAll = 1, TeamDeathmatch = 2, GunGame = 3, Milsim = 4, CaptureTheFlag = 5, Domination = 6, Medic = 7, Bomb = 8, VipEscort = 9, Infection = 10,
+                                   Juggernaut = 11, OneInTheChamber = 12 }
+        public const int MODE_COUNT = 13;
         public enum Phase { Lobby = 0, InMatch = 1, Results = 2 }
 
         public struct Entry
@@ -37,6 +38,7 @@ namespace AirsoftFPS
 
         // Config
         public const int FFA_KILL_TARGET = 15;
+        public const int JUGG_KILL_TARGET = 15;   // Juggernaut: kills as the juggernaut + juggernaut takedowns
         public const int TDM_KILL_TARGET = 40;
         public const int GUNGAME_WEAPONS = 10;
         public const int MILSIM_HIT_TARGET = 30;   // Milsim: each BB hit scores a point for the shooter's team
@@ -378,9 +380,10 @@ namespace AirsoftFPS
             }
 
             // Win conditions
-            if (Mode == GameModeType.FreeForAll)
+            if (Mode == GameModeType.FreeForAll || Mode == GameModeType.Juggernaut)
             {
-                foreach (var e in roster) if (e.kills >= FFA_KILL_TARGET) { EndMatch(e.clientId, 0); break; }
+                int target = KillTarget(Mode);
+                foreach (var e in roster) if (e.kills >= target) { EndMatch(e.clientId, 0); break; }
             }
             else if (Mode == GameModeType.GunGame)
             {
@@ -436,7 +439,12 @@ namespace AirsoftFPS
         void CheckTeamTarget()
         {
             // an objective mode that decides the result itself (Medic: a team out of tickets and players)
-            if (ObjectiveMode.TryDeclaredResult(out int objWinner, out bool objDraw)) { EndMatch(ulong.MaxValue, objWinner, false, objDraw); return; }
+            // (One in the Chamber: the last player standing)
+            if (ObjectiveMode.TryDeclaredResult(out int objWinner, out bool objDraw))
+            {
+                EndMatch(ObjectiveMode.DeclaredPlayerWinner, objWinner, false, objDraw);
+                return;
+            }
             int target = TeamTarget;
             if (target <= 0) return;   // no score race (Medic tickets)
             if (TeamScore(1) >= target) EndMatch(ulong.MaxValue, 1);
@@ -490,7 +498,7 @@ namespace AirsoftFPS
             if (now >= MatchEndTime) EndMatchOnTime();
         }
 
-        // Time ran out: FFA -> most kills; Gun Game -> highest weapon level, then kills, then
+        // Time ran out: FFA / Juggernaut / One in the Chamber -> most kills; Gun Game -> highest weapon level, then kills, then
         // fewest deaths; TDM -> higher team score. An exact tie is a draw.
         void EndMatchOnTime()
         {
@@ -514,6 +522,8 @@ namespace AirsoftFPS
                 {
                     if (best < 0) { best = i; continue; }
                     int c = gunGame ? CompareGunGame(roster[i], roster[best]) : roster[i].kills.CompareTo(roster[best].kills);
+                    if (c == 0 && ObjectiveMode.HasPoints(Mode))   // One in the Chamber: more lives left breaks the tie
+                        c = ObjectiveMode.PointsOf(roster[i].clientId).CompareTo(ObjectiveMode.PointsOf(roster[best].clientId));
                     if (c > 0) { best = i; tie = false; }
                     else if (c == 0) tie = true;
                 }
@@ -875,6 +885,12 @@ namespace AirsoftFPS
                                                          || m == GameModeType.Bomb || m == GameModeType.VipEscort
                                                          || m == GameModeType.Infection;
         public bool TeamMode => IsTeamMode(Mode);
+        // Everyone for themselves, ranked by kills (Free-for-All, Juggernaut, One in the Chamber).
+        public static bool IsFfaLike(GameModeType m) => m == GameModeType.FreeForAll || m == GameModeType.Juggernaut
+                                                        || m == GameModeType.OneInTheChamber;
+        // Kills that win a free-for-all mode (0 = none: One in the Chamber is last one standing).
+        public static int KillTarget(GameModeType m) => m == GameModeType.FreeForAll ? FFA_KILL_TARGET
+                                                        : m == GameModeType.Juggernaut ? JUGG_KILL_TARGET : 0;
         public bool IsMilsim => Mode == GameModeType.Milsim;
         // One BB = out with a raised hand (Milsim, and objective modes built on it such as Medic).
         public static bool IsHitRuleMode(GameModeType m) => m == GameModeType.Milsim || ObjectiveMode.UsesHitRule(m);
@@ -892,9 +908,12 @@ namespace AirsoftFPS
         }
 
         // Team modes: block damage between teammates (friendly fire off).
+        // Free-for-all objective modes may block some pairs too (Juggernaut: the hunters among themselves).
         public bool BlocksDamage(ulong attacker, ulong victim)
         {
-            if (!TeamMode || attacker == victim) return false;
+            if (attacker == victim) return false;
+            if (ObjectiveMode.BlocksDamageBetween(attacker, victim)) return true;
+            if (!TeamMode) return false;
             if (!HasEntry(attacker) || !HasEntry(victim)) return false;
             return TeamOf(attacker) == TeamOf(victim);
         }

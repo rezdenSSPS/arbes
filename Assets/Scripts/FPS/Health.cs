@@ -136,6 +136,10 @@ namespace AirsoftFPS
                 return;
             }
 
+            // free-for-all modes: Juggernaut (a share of the juggernaut's HP per hit), One in the Chamber (one hit kills)
+            if (IsCombatant) amount = ObjectiveMode.AdjustDamage(MatchId, attackerClientId, weapon, amount, maxHealth);
+            if (amount <= 0) return;
+
             lastAttackerClientId = attackerClientId;
             lastAttackerWeapon = weapon;
             lastAttackerObject = attackerObject;
@@ -257,6 +261,12 @@ namespace AirsoftFPS
             if (nt != null && nt.CanCommitToTransform) nt.Teleport(pos, rot, transform.localScale);
             else transform.SetPositionAndRotation(pos, rot);
             if (cc) cc.enabled = true;
+        }
+
+        // Server: back to full health (Juggernaut: whoever takes the juggernaut down starts fresh as the new one).
+        public void ServerHealFull()
+        {
+            if (IsServer && IsSpawned && !isDead.Value) currentHealth.Value = maxHealth;
         }
 
         void StartSpawnProtection()

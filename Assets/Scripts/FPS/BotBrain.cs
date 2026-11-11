@@ -68,6 +68,9 @@ namespace AirsoftFPS
         WeaponData[] weapons;
         int weaponIdx = -1;
         int mag;
+        const int ENDLESS = 1000000;
+        int reserve = ENDLESS;     // bots carry endless spare mags unless the mode says otherwise
+        bool lifeAmmoDue;          // apply ObjectiveMode.LifeAmmo once the mode exists (One in the Chamber: 1 BB)
         float reloadUntil;
         float nextShot;
         int burstLeft;
@@ -157,6 +160,7 @@ namespace AirsoftFPS
             lastHp = hp;
 
             UpdateWeapon(mn, false);
+            if (lifeAmmoDue && ObjectiveMode.Active != null) ApplyLifeAmmo();
             if (!live) { Halt(); return; }
 
             if (health.IsOut)   // HIT (Milsim / objective HIT rule): hand up (EnemyAnimator), no shooting
@@ -233,11 +237,34 @@ namespace AirsoftFPS
             weaponIdx = Mathf.Clamp(idx, 0, weapons.Length - 1);
             var w = weapons[weaponIdx];
             mag = w.magSize;
+            reserve = ENDLESS;
+            lifeAmmoDue = true;
             reloadUntil = 0f;
             nextShot = Time.time + 0.4f;
             burstLeft = 0;
             if (fx != null && fx.IsSpawned) fx.botWeapon.Value = weaponIdx;
         }
+
+        void ApplyLifeAmmo()
+        {
+            lifeAmmoDue = false;
+            var w = Weapon;
+            if (w != null && ObjectiveMode.LifeAmmo(BotId, w, out int m, out int r)) { mag = m; reserve = r; reloadUntil = 0f; }
+        }
+
+        // Server: rounds for a kill (One in the Chamber: +1 BB).
+        public void GiveAmmo(int n)
+        {
+            if (lifeAmmoDue && ObjectiveMode.Active != null) ApplyLifeAmmo();
+            var w = Weapon;
+            if (w == null || n <= 0) return;
+            int toMag = Mathf.Clamp(w.magSize - mag, 0, n);
+            mag += toMag;
+            reserve += n - toMag;
+            if (mag > 0) reloadUntil = 0f;
+        }
+
+        bool OutOfAmmo => mag <= 0 && reserve <= 0;
 
         // ───────── perception ─────────
 
@@ -259,6 +286,7 @@ namespace AirsoftFPS
         bool IsOpponent(MatchNet mn, Health h)
         {
             if (h == null || h == health || !h.IsSpawned || !h.IsCombatant) return false;
+            if (mn != null && mn.BlocksDamage(BotId, h.MatchId)) return false;   // Juggernaut: hunters ignore each other
             if (mn == null || !mn.TeamMode) return true;   // FFA / Gun Game: everyone
             int mine = mn.TeamOf(BotId), theirs = mn.TeamOf(h.MatchId);
             return mine == 0 || theirs == 0 || mine != theirs;
@@ -346,7 +374,8 @@ namespace AirsoftFPS
 
         void Engage(MatchNet mn)
         {
-            if (ObjectiveMode.MeleeOnly(BotId)) { MeleeEngage(mn); return; }   // Infection: run them down and tag
+            // Infection: run them down and tag; One in the Chamber with an empty gun: the bang rule is all that's left
+            if (ObjectiveMode.MeleeOnly(BotId) || OutOfAmmo) { MeleeEngage(mn); return; }
             var w = Weapon;
             if (w == null) return;
             Vector3 to = target.transform.position - transform.position;
@@ -491,9 +520,11 @@ namespace AirsoftFPS
             {
                 if (now < reloadUntil) return;
                 reloadUntil = 0f;
-                mag = w.magSize;
+                int take = Mathf.Min(w.magSize - mag, reserve);
+                mag += take;
+                reserve -= take;
             }
-            if (mag <= 0) { reloadUntil = now + w.reloadTime; return; }
+            if (mag <= 0) { if (reserve > 0) reloadUntil = now + w.reloadTime; return; }
             if (now < nextShot || now < burstPauseUntil) return;
             if (dist > w.range * 0.9f) return;
 
@@ -506,7 +537,7 @@ namespace AirsoftFPS
                 if (burstLeft <= 0) burstLeft = Random.Range(3, 10);
                 if (--burstLeft <= 0) burstPauseUntil = now + Random.Range(0.25f, 0.6f) + skill.reaction * 0.5f;
             }
-            if (mag <= 0) reloadUntil = now + w.reloadTime;
+            if (mag <= 0 && reserve > 0) reloadUntil = now + w.reloadTime;
             ShotsFired++;
             FireShot(w, dist);
         }

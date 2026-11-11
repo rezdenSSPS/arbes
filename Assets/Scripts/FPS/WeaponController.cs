@@ -301,6 +301,7 @@ namespace AirsoftFPS
             }
 
             if (!IsOwner) return;
+            if (lifeAmmoDue && ObjectiveMode.Active != null) ApplyLifeAmmo();
             if (Time.timeScale == 0) return;
             bool dead = ownHealth != null && ownHealth.IsSpawned && ownHealth.isDead.Value;
             if (HUDManager.InputBlocked || dead || (ownHealth != null && ownHealth.IsOut) || GoggleFog.Wiping)
@@ -472,6 +473,7 @@ namespace AirsoftFPS
             var mn = MatchNet.Instance;
             if (mn != null && mn.Mode == MatchNet.GameModeType.GunGame) return true;
             if (!ObjectiveMode.WeaponAllowed(OwnerClientId, weapons[idx])) return false;
+            if (ObjectiveMode.WeaponGranted(OwnerClientId, weapons[idx])) return true;   // the juggernaut's RPK
             return ShopCatalog.OwnedWeapon(weapons[idx].weaponName);
         }
 
@@ -481,6 +483,7 @@ namespace AirsoftFPS
             if (idx < 0 || weapons == null || idx >= weapons.Length) return true;
             var mn = MatchNet.Instance;
             if (mn != null && mn.Mode == MatchNet.GameModeType.GunGame) return true;
+            if (ObjectiveMode.WeaponGranted(OwnerClientId, weapons[idx])) return true;
             return ShopCatalog.OwnedWeapon(weapons[idx].weaponName);
         }
 
@@ -502,6 +505,97 @@ namespace AirsoftFPS
             if (IsSpawned) RefillAmmoRpc();   // keep the server's authoritative ammo in sync (round start)
         }
 
+        // ───── Mode ammo (Juggernaut refill, One in the Chamber: 1 BB per life, +1 per kill) ─────
+        // The owner and the server each apply ObjectiveMode.LifeAmmo at the start of a life (spawn / respawn),
+        // the server lazily before it next checks this player's ammo. Kills add rounds on both sides.
+        bool lifeAmmoDue = true, svLifeAmmoDue = true;
+
+        void ApplyLifeAmmo()
+        {
+            lifeAmmoDue = false;
+            if (weapons == null || magAmmos == null) return;
+            bool any = false;
+            for (int i = 0; i < weapons.Length; i++)
+            {
+                if (!ObjectiveMode.LifeAmmo(OwnerClientId, weapons[i], out int m, out int r)) continue;
+                magAmmos[i] = m;
+                reserveAmmos[i] = r;
+                if (i == currentIndex) { ammoInMag = m; ammoReserve = r; isReloading = false; }
+                any = true;
+            }
+            if (any) NotifyAmmo();
+        }
+
+        void SvApplyLifeAmmo()
+        {
+            svLifeAmmoDue = false;
+            if (svMag == null) return;
+            for (int i = 0; i < weapons.Length; i++)
+            {
+                if (!ObjectiveMode.LifeAmmo(OwnerClientId, weapons[i], out int m, out int r)) continue;
+                svMag[i] = m;
+                svReserve[i] = r;
+                if (svReloadWeapon == i) svReloadWeapon = -1;
+            }
+        }
+
+        public int IndexOfWeapon(string weaponName)
+        {
+            if (weapons == null) return -1;
+            for (int i = 0; i < weapons.Length; i++) if (weapons[i].weaponName == weaponName) return i;
+            return -1;
+        }
+
+        // Mag first (up to its size), the rest into the reserve.
+        static void AddRounds(ref int mag, ref int reserve, int magSize, int n)
+        {
+            int toMag = Mathf.Clamp(magSize - mag, 0, n);
+            mag += toMag;
+            reserve += n - toMag;
+        }
+
+        // Server: give this player n rounds for a weapon (One in the Chamber: +1 BB per kill).
+        public void ServerGiveAmmo(int weaponIdx, int n)
+        {
+            if (!IsServer || svMag == null || weaponIdx < 0 || weaponIdx >= weapons.Length || n <= 0) return;
+            if (svLifeAmmoDue && ObjectiveMode.Active != null) SvApplyLifeAmmo();
+            AddRounds(ref svMag[weaponIdx], ref svReserve[weaponIdx], weapons[weaponIdx].magSize, n);
+            GiveAmmoRpc(weaponIdx, n);
+        }
+
+        [Rpc(SendTo.Owner)]
+        void GiveAmmoRpc(int weaponIdx, int n)
+        {
+            if (weapons == null || magAmmos == null || weaponIdx < 0 || weaponIdx >= weapons.Length) return;
+            if (lifeAmmoDue && ObjectiveMode.Active != null) ApplyLifeAmmo();
+            if (weaponIdx == currentIndex)
+            {
+                AddRounds(ref ammoInMag, ref ammoReserve, weapons[weaponIdx].magSize, n);
+                magAmmos[weaponIdx] = ammoInMag;
+                reserveAmmos[weaponIdx] = ammoReserve;
+            }
+            else AddRounds(ref magAmmos[weaponIdx], ref reserveAmmos[weaponIdx], weapons[weaponIdx].magSize, n);
+            NotifyAmmo();
+            AirsoftAudio.Play2D("reload_in", 0.45f, AirsoftAudio.Bus.Sfx, 0.04f);
+        }
+
+        // Server: full magazines and reserves again (Juggernaut: the new juggernaut's RPK is fully loaded).
+        public void ServerRefillAmmo()
+        {
+            if (!IsServer || svMag == null) return;
+            for (int i = 0; i < weapons.Length; i++) { svMag[i] = weapons[i].magSize; svReserve[i] = weapons[i].maxReserve; }
+            svReloadWeapon = -1;
+            svLifeAmmoDue = false;
+            RefillAmmoOwnerRpc();
+        }
+
+        [Rpc(SendTo.Owner)]
+        void RefillAmmoOwnerRpc()
+        {
+            lifeAmmoDue = false;
+            RefillAmmo();   // (also tells the server again: harmless, it's already full)
+        }
+
         // ───── Server-authoritative ammo: reload / refill (owner -> server) ─────
 
         // Server: complete a reload whose timer has elapsed (reserve -> mag). Called lazily before each shot.
@@ -521,6 +615,7 @@ namespace AirsoftFPS
         {
             if (rpcParams.Receive.SenderClientId != OwnerClientId) return;
             if (svMag == null || weaponIdx < 0 || weaponIdx >= weapons.Length) return;
+            if (svLifeAmmoDue && ObjectiveMode.Active != null) SvApplyLifeAmmo();
             SvFinishReloadIfDue();
             if (svReloadWeapon == weaponIdx) return;                               // already reloading this one
             if (svMag[weaponIdx] >= weapons[weaponIdx].magSize || svReserve[weaponIdx] <= 0) return;
@@ -853,6 +948,7 @@ namespace AirsoftFPS
         {
             smokeCount = SMOKE_MAX;
             if (IsServer) svSmoke = SMOKE_MAX;
+            lifeAmmoDue = svLifeAmmoDue = true;   // the mode's ammo for a new life (One in the Chamber: 1 BB)
             NotifyAmmo();
         }
 
@@ -995,6 +1091,7 @@ namespace AirsoftFPS
             // Server-authoritative ammo: a trigger pull costs one round and you can't fire mid-reload or empty.
             if (svMag != null)
             {
+                if (svLifeAmmoDue && ObjectiveMode.Active != null) SvApplyLifeAmmo();
                 SvFinishReloadIfDue();
                 if (svReloadWeapon == weaponIdx && Time.unscaledTime < svReloadEnd)
                 { RejectShot(shotSeq, "reloading"); return; }
