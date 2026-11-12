@@ -76,6 +76,9 @@ už používá jiná spuštěná hra na stejném počítači, hostování skonč
   odešle (a chat otevře), Esc nebo ikona ho zavře. Max. 120 znaků, nejvýš 3 zprávy za 2 s. Historie vydrží i po návratu
   ze zápasu, po odpojení se smaže. Když je chat otevřený, klávesy R a M nic nedělají.
 - Okna Armory, Profil a Účet se zavírají tlačítkem CLOSE nebo klávesou Esc.
+- **Armory** (tlačítko ARMORY v hlavním menu): všech 10 replik na kartách – model se otáčí ve 3D, pod ním název, krátký popis
+  (co to je a k čemu), poškození / kadence / zásobník a cena. Startovní zbraně mají STARTER, koupené OWNED, zamčené
+  podle ranku jsou vybledlé a ukazují potřebný rank. Pod nimi výběr váhy kuliček.
 - **Pravidla zápasu** (tlačítko **RULES** dole vedle chatu, odznak CUSTOM = něco se liší od normální hry): host nastaví
   zdraví (50–200 HP, i boti), rychlost pohybu (75–150 %), skok (normální / vysoký / „měsíc“ s nízkou gravitací),
   čas respawnu (1 / 3 / 6 / 10 s), životy (∞ / 1 / 3 / 5 – kdo je vyčerpá, už se nevrátí; vyhrává poslední hráč / tým,

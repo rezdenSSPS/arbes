@@ -307,3 +307,10 @@ Vyvíjeno paralelně ve čtyřech větvích (`feat/ui-fixes`, `feat/random-mode`
 - Po hodu slot krátce blikne barvou rozhraní; bez granátů zešedne a počet je červeně 0. Po respawnu jsou zase 2. Ukazuje se ve všech režimech, i v Gun Game, kde jsou ostatní sloty skryté.
 - Starý štítek „SMOKE“ zmizel, ukazatel životů (pravidla zápasu) je teď na jeho místě nad zdravím.
 - Testy: kompilace čistá, objektivy 104/0, medik 39/0, zvuk 34/0, medik v play módu 27/0, Random mode 23/0, chat 35/0, pravidla 24/0, CTF 19/0, Domination 18/0, Bomb 29/0, VIP 23/0. HUD ve FFA vykreslený a zkontrolovaný očima: 2 granáty, bliknutí po hodu, 0 granátů. **Neověřeno:** hod skutečnou klávesou G (stav se v testu nastavil přímo).
+
+## 2026-11-12 — Armory: otáčející se zbraně s cenou a popisem
+- Obchod Armory měl jen textový seznam šesti kupovaných zbraní. Teď ukazuje všech 10 replik na kartách 5 × 2: nahoře se model zbraně pomalu otáčí ve 3D, pod ním je název, dvouřádkový popis (co to je a k čemu se hodí), řádek čísel (poškození, kadence, zásobník) a dole cena s tlačítkem BUY. Startovní zbraně mají FREE / STARTER, koupené OWNED, zbraně nad tvůj rank jsou vybledlé a ukazují „RANK n“.
+- **`ShopShowcase`**: všechny repliky stojí v mřížce na skryté scéně hluboko pod mapou (vrstva 29), jedna ortografická kamera je natáčí do jedné textury s průhledným pozadím a každá karta ukazuje svůj výřez (`uvRect`). Kamera běží jen při otevřeném obchodu; scéna se postaví při prvním otevření. Každá zbraň se zmenší/zvětší tak, aby se vešla do karty v každém natočení, a má vlastní tři bodová světla (hlavní, modré doplňkové, teplé zezadu).
+- Popisy zbraní jsou v `ShopCatalog.Describe`. Okno je širší (1180 px), dolní poznámka se přesunula do nadpisu.
+- Oprava: u kuliček se cena psala se symbolem ◆, který úzké písmo nemá (zobrazil se čtvereček) – teď „900 CR“.
+- Testy: kompilace čistá, objektivy 104/0, medik 39/0, zvuk 34/0, medik v play módu 27/0, Random mode 23/0, chat 35/0, pravidla 24/0, CTF 19/0, Domination 18/0, Bomb 29/0, VIP 23/0. Otevřený obchod vykreslený dvakrát po sobě (zbraně se točí) a zkontrolovaný očima. **Neověřeno:** nákup kliknutím myší (logika nákupu se neměnila).

@@ -56,6 +56,23 @@ namespace AirsoftFPS
         // Can this weapon be put in a loadout (free starter or already bought)?
         public static bool OwnedWeapon(string id) => IsStarter(id) || PlayerProfile.Owns(id);
 
+        // What the replica is, for the Armory card under the spinning model (two short lines).
+        static readonly Dictionary<string, string> descriptions = new Dictionary<string, string>
+        {
+            { "1911 GBB Pistol",    "Gas blowback sidearm: snappy, accurate, 15 rounds. Always with you." },
+            { "CO2 Revolver",       "Six CO2 shells that hit twice as hard as the 1911. Slow to reload." },
+            { "Uzi GBB SMG",        "Full-auto gas SMG, 15 shots a second. Sprays at range." },
+            { "M870 Spring Shotgun","Pump spring shotgun, 3 BBs per shot. Brutal up close, useless far." },
+            { "P90 AEG",            "Electric PDW with a 68-round mag and almost no kick. Made for CQB." },
+            { "AK AEG",             "All-round electric rifle: 120-round mid-cap, iron-sight zoom." },
+            { "RPK Support AEG",    "300-round box mag to keep heads down. Heavy and slow to reload." },
+            { "M14 DMR",            "Semi-auto marksman AEG with a tight barrel. Hits hard far away." },
+            { "Spring Bolt Rifle",  "Quiet spring bolt-action on iron sights. Two hits at most." },
+            { "L96 Spring Sniper",  "Scoped bolt-action sniper: one hit and they are out. Slow bolt." },
+        };
+
+        public static string Describe(string id) => descriptions.TryGetValue(id, out var d) ? d : "";
+
         public static bool TryGet(string id, out Item item)
         {
             foreach (var i in weapons) if (i.id == id) { item = i; return true; }
