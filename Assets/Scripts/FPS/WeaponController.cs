@@ -233,6 +233,12 @@ namespace AirsoftFPS
                 catch (System.Exception e) { Debug.LogWarning("[Airsoft] gun model " + weapons[i].model + ": " + e.Message); }
                 if (g == null) continue;
 
+                // the slot is the hand position: no leftovers from the old placeholder (the M870's slot was
+                // still scaled to 45 % for an M4 model, which shrank the shotgun and its hands)
+                slot.localPosition = Vector3.zero;
+                slot.localRotation = Quaternion.identity;
+                slot.localScale = Vector3.one;
+
                 // hide the old placeholder parts
                 foreach (var r in slot.GetComponentsInChildren<Renderer>(true))
                     if (!r.transform.IsChildOf(g.root.transform)) r.enabled = false;

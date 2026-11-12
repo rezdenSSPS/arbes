@@ -3,8 +3,9 @@ using UnityEngine;
 
 namespace AirsoftFPS
 {
-    // First-person support hand (owner only, purely visual): a low-poly gloved left hand that reloads the
-    // replica and steadies it while you inspect it (T). Driven by WeaponController.LateUpdate, which asks
+    // First-person hands (owner only, purely visual): low-poly gloved hands that always hold the replica.
+    // The right hand stays on the pistol grip; the left hand rests on the fore-end (handguns: wrapped round
+    // the right hand), leaves it to reload and comes back, and steadies the gun while you inspect it (T). Driven by WeaponController.LateUpdate, which asks
     // Animate() for an extra pose of the weapon holder each frame.
     //
     // Everything is a pure function of the reload progress (0..1 of WeaponData.reloadTime) or the inspect
@@ -34,6 +35,10 @@ namespace AirsoftFPS
             public Vector3 charge;                    // slide / charging handle / bolt (rack after a reload)
             public bool hasCharge;
             public Vector3 tiltPos, tiltRot;          // holder offset while reloading (camera space / euler)
+            public Vector3 grip;                      // middle of the pistol grip / wrist (right hand)
+            public float rake = 18f;                  // grip angle from vertical (degrees, bottom backwards)
+            public bool twoHand;                      // handguns: the left hand wraps the right one
+            public Vector3? fore;                     // where the left hand rests on long guns (default: support)
         }
 
         static Spec SpecFor(string model)
@@ -44,46 +49,55 @@ namespace AirsoftFPS
                     return new Spec { refLen = 0.22f, takeMat = "Magazine", magOut = new Vector3(0f, -1f, -0.22f),
                         magCenter = new Vector3(0f, -0.06f, 0.05f), magSize = new Vector3(0.016f, 0.09f, 0.045f),
                         support = new Vector3(0f, -0.03f, 0.075f), charge = new Vector3(0f, 0.03f, 0.075f), hasCharge = true,
+                        grip = new Vector3(0f, -0.06f, 0.008f), rake = 18f, twoHand = true,
                         tiltPos = new Vector3(-0.14f, 0.17f, -0.02f), tiltRot = new Vector3(-4f, -22f, -24f) };
                 case "Revolver":
                     return new Spec { kind = Kind.Revolver, refLen = 0.3f,
                         magCenter = new Vector3(0f, 0f, 0.152f), magSize = new Vector3(0.05f, 0.05f, 0.065f),
                         support = new Vector3(0f, -0.03f, 0.14f), charge = new Vector3(0f, 0f, 0.152f),
+                        grip = new Vector3(0f, -0.05f, 0.005f), rake = 25f, twoHand = true,
                         tiltPos = new Vector3(-0.14f, 0.17f, -0.02f), tiltRot = new Vector3(-22f, -16f, -40f) };
                 case "Uzi":
                     return new Spec { refLen = 0.36f, takeObj = "Cube", magOut = Vector3.down,
                         magCenter = new Vector3(0f, -0.095f, 0.096f), magSize = new Vector3(0.02f, 0.13f, 0.044f),
                         support = new Vector3(0f, 0.01f, 0.24f), charge = new Vector3(0f, 0.065f, 0.21f), hasCharge = true,
+                        grip = new Vector3(0f, -0.05f, 0f), rake = 6f, twoHand = false,
                         tiltPos = new Vector3(-0.14f, 0.16f, -0.02f), tiltRot = new Vector3(-8f, -14f, -30f) };
                 case "P90":
                     return new Spec { refLen = 0.5f, takeMat = "Material.004", magOut = new Vector3(0f, 1f, -0.15f),
                         magCenter = new Vector3(0f, -0.008f, 0.07f), magSize = new Vector3(0.06f, 0.02f, 0.26f),
                         support = new Vector3(0f, -0.06f, 0.22f), charge = new Vector3(0f, 0.04f, 0.2f),
+                        grip = new Vector3(0f, -0.05f, 0.04f), rake = 10f, twoHand = false,
                         tiltPos = new Vector3(-0.15f, 0.16f, -0.12f), tiltRot = new Vector3(-6f, -10f, 26f) };
                 case "Shotgun":
                     return new Spec { kind = Kind.Shells, refLen = 0.85f,
                         magCenter = new Vector3(0f, -0.03f, 0.40f), magSize = new Vector3(0.019f, 0.019f, 0.06f),
                         support = new Vector3(0f, -0.005f, 0.64f), charge = new Vector3(0f, -0.005f, 0.64f), hasCharge = true,
+                        grip = new Vector3(0f, -0.035f, -0.02f), rake = 25f, twoHand = false,
                         tiltPos = new Vector3(-0.16f, 0.14f, -0.28f), tiltRot = new Vector3(-6f, -12f, -42f) };
                 case "AK47":
                     return new Spec { refLen = 0.68f, takeObj = "Cube.001", magOut = new Vector3(0f, -1f, 0.35f),
                         magCenter = new Vector3(0f, -0.08f, 0.09f), magSize = new Vector3(0.03f, 0.16f, 0.06f),
                         support = new Vector3(0f, 0.0f, 0.22f), charge = new Vector3(0.03f, 0.05f, 0.05f),
+                        grip = new Vector3(0f, -0.05f, -0.03f), rake = 18f, twoHand = false,
                         tiltPos = new Vector3(-0.17f, 0.2f, -0.16f), tiltRot = new Vector3(-8f, -12f, -30f) };
                 case "Rifle":
                     return new Spec { kind = Kind.TopClip, refLen = 0.9f,
                         magCenter = new Vector3(0f, 0.012f, 0.36f), magSize = new Vector3(0.014f, 0.03f, 0.055f),
                         support = new Vector3(0f, -0.01f, 0.62f), charge = new Vector3(0.02f, 0.02f, 0.33f),
+                        grip = new Vector3(0f, -0.02f, -0.02f), rake = 35f, twoHand = false, fore = new Vector3(0f, -0.01f, 0.38f),
                         tiltPos = new Vector3(-0.15f, 0.13f, -0.3f), tiltRot = new Vector3(-4f, -10f, 26f) };
                 case "BoltRifle":
                     return new Spec { kind = Kind.TopClip, refLen = 0.95f,
                         magCenter = new Vector3(0f, 0.016f, 0.43f), magSize = new Vector3(0.014f, 0.03f, 0.055f),
                         support = new Vector3(0f, -0.02f, 0.62f), charge = new Vector3(0.022f, 0.022f, 0.38f), hasCharge = true,
+                        grip = new Vector3(0f, -0.02f, -0.02f), rake = 35f, twoHand = false, fore = new Vector3(0f, -0.02f, 0.40f),
                         tiltPos = new Vector3(-0.15f, 0.13f, -0.3f), tiltRot = new Vector3(-4f, -10f, 26f) };
                 case "SniperRifle":
                     return new Spec { refLen = 1.0f, takeMat = "Magazine", magOut = Vector3.down,
                         magCenter = new Vector3(0f, -0.07f, 0.225f), magSize = new Vector3(0.02f, 0.05f, 0.06f),
                         support = new Vector3(0f, -0.03f, 0.40f), charge = new Vector3(0.02f, 0.012f, 0.13f), hasCharge = true,
+                        grip = new Vector3(0f, -0.04f, -0.02f), rake = 20f, twoHand = false, fore = new Vector3(0f, -0.03f, 0.32f),
                         tiltPos = new Vector3(-0.16f, 0.17f, -0.26f), tiltRot = new Vector3(-6f, -10f, -28f) };
             }
             return null;
@@ -97,14 +111,17 @@ namespace AirsoftFPS
             public Vector3 p;
             public Quaternion r;
             public bool cam;     // p is in camera space (off-screen spots)
-            public Key(float u, Vector3 p, Quaternion r, float grip) { this.u = u; this.p = p; this.r = r; this.grip = grip; cam = false; }
+            public bool idle;    // the resting pose on the gun (start / end of a reload)
+            public Key(float u, Vector3 p, Quaternion r, float grip) { this.u = u; this.p = p; this.r = r; this.grip = grip; cam = false; idle = false; }
             public static Key Cam(float u, Vector3 p, Quaternion r, float grip) => new Key(u, p, r, grip) { cam = true };
+            public static Key Idle(float u) => new Key(u, Vector3.zero, Quaternion.identity, 0.6f) { idle = true };
         }
 
         // camera space: below the bottom edge of the screen (hand away / fetching a fresh mag), the shoulder
         static readonly Vector3 OFF_CAM = new Vector3(-0.1f, -0.5f, 0.25f);
         static readonly Vector3 FETCH_CAM = new Vector3(0.0f, -0.46f, 0.38f);
         static readonly Vector3 SHOULDER_CAM = new Vector3(-0.1f, -0.75f, 0.12f);
+        static readonly Vector3 SHOULDER_R_CAM = new Vector3(0.3f, -0.72f, 0.05f);
 
         class Rig
         {
@@ -119,7 +136,7 @@ namespace AirsoftFPS
             public Transform item;            // TopClip: clip; Shells: shell; Revolver: speedloader
             public Transform loaderRounds;    // Revolver: the speedloader's rounds (stay in the cylinder)
             public Transform[] casings;       // Revolver: empty shells falling out
-            public Vector3 magCenter, magOut, support, charge, pivot;
+            public Vector3 magCenter, magOut, support, charge, pivot, grip, fore;
             public float magHalfLen;
             public Vector3 holdPos;           // the carried part, in hand space
             public Quaternion holdRot = Quaternion.identity;
@@ -146,9 +163,17 @@ namespace AirsoftFPS
         int cur = -1;
         float inspectT = -1f;
 
-        Transform hand, sleeve, camT;
-        readonly Transform[] fingerA = new Transform[4], fingerB = new Transform[4];
-        Transform thumbA, thumbB;
+        // One gloved hand: palm, two-segment fingers and thumb, cuff and a sleeve aimed at the shoulder.
+        class HandRig
+        {
+            public Transform root, sleeve, thumbA, thumbB;
+            public readonly Transform[] fingerA = new Transform[4], fingerB = new Transform[4];
+            public Vector3 shoulderCam;
+        }
+
+        HandRig L, R;                  // L: support hand (reloads, inspect, fore-end); R: trigger hand on the grip
+        Transform camT;
+        Transform hand => L.root;
         readonly List<Mesh> ownedMeshes = new List<Mesh>();
 
         public bool Inspecting => inspectT >= 0f;
@@ -170,7 +195,8 @@ namespace AirsoftFPS
             weapons = weaponList;
             camT = weaponHolder.parent != null ? weaponHolder.parent : weaponHolder;
             rigs = new Rig[weapons.Length];
-            BuildHand();
+            L = BuildHand("VMHand", false);
+            R = BuildHand("VMHandR", true);
             for (int i = 0; i < weapons.Length && i < weaponHolder.childCount; i++)
             {
                 var slot = weaponHolder.GetChild(i);
@@ -182,6 +208,7 @@ namespace AirsoftFPS
                 catch (System.Exception e) { Debug.LogWarning("[Airsoft] viewmodel hand rig " + weapons[i].model + ": " + e.Message); }
             }
             hand.gameObject.SetActive(false);
+            R.root.gameObject.SetActive(false);
         }
 
         Rig BuildRig(Transform slot, Transform model, Spec spec, WeaponData w)
@@ -191,6 +218,8 @@ namespace AirsoftFPS
             r.magCenter = spec.magCenter * r.k;
             r.support = spec.support * r.k;
             r.charge = spec.charge * r.k;
+            r.grip = spec.grip * r.k;
+            r.fore = (spec.fore ?? spec.support) * r.k;
             r.rack = spec.hasCharge && AirsoftAudio.ShotKind(w) != "aeg";
             r.pivot = new Vector3(0f, 0f, w.modelLength * 0.35f);
             Vector3 magSize = spec.magSize * r.k;
@@ -376,10 +405,12 @@ namespace AirsoftFPS
 
         // ───────── the glove ─────────
 
-        void BuildHand()
+        HandRig BuildHand(string name, bool right)
         {
-            hand = new GameObject("VMHand").transform;
+            var h = new HandRig { shoulderCam = right ? SHOULDER_R_CAM : SHOULDER_CAM };
+            var hand = new GameObject(name).transform;
             hand.SetParent(transform, false);
+            h.root = hand;
             var box = BoxMesh();
             Transform Bx(Transform p, string n, Vector3 c, Vector3 s, Material m)
             {
@@ -394,10 +425,11 @@ namespace AirsoftFPS
             Bx(hand, "BackPad", new Vector3(0f, 0.0158f, -0.012f), new Vector3(0.06f, 0.004f, 0.04f), Cuff());
             Bx(hand, "Cuff", new Vector3(0f, 0.001f, -0.068f), new Vector3(0.074f, 0.04f, 0.05f), Cuff());
             Bx(hand, "Strap", new Vector3(0f, 0.001f, -0.066f), new Vector3(0.078f, 0.044f, 0.016f), Strap());
-            sleeve = new GameObject("Forearm").transform;      // aimed at the shoulder every frame (wrist bends)
+            var sleeve = new GameObject("Forearm").transform;      // aimed at the shoulder every frame (wrist bends)
             sleeve.SetParent(hand, false);
             sleeve.localPosition = new Vector3(0f, 0.003f, -0.075f);
-            Bx(sleeve, "Sleeve", new Vector3(0f, 0f, -0.33f), new Vector3(0.07f, 0.06f, 0.66f), Sleeve());
+            h.sleeve = sleeve;
+            Bx(sleeve, "Sleeve", new Vector3(0f, 0f, -0.6f), new Vector3(0.072f, 0.064f, 1.2f), Sleeve());   // long enough to leave the screen
 
             float[] fx = { 0.031f, 0.0105f, -0.0105f, -0.031f };      // index .. pinky (thumb side = +X)
             float[] l1 = { 0.042f, 0.046f, 0.043f, 0.034f };
@@ -415,33 +447,38 @@ namespace AirsoftFPS
                 b.localPosition = new Vector3(0f, 0f, l1[i]);
                 Bx(b, "Seg", new Vector3(0f, 0f, l2[i] * 0.5f), new Vector3(0.0175f, 0.0185f, l2[i]), Glove());
                 Bx(b, "Tip", new Vector3(0f, -0.0085f, l2[i] * 0.62f), new Vector3(0.0155f, 0.004f, l2[i] * 0.62f), Suede());
-                fingerA[i] = a; fingerB[i] = b;
+                h.fingerA[i] = a; h.fingerB[i] = b;
             }
-            thumbA = new GameObject("ThumbA").transform;
+            var thumbA = new GameObject("ThumbA").transform;
             thumbA.SetParent(hand, false);
             thumbA.localPosition = new Vector3(0.036f, -0.008f, -0.022f);
             Bx(thumbA, "Seg", new Vector3(0f, 0f, 0.021f), new Vector3(0.022f, 0.021f, 0.046f), Glove());
-            thumbB = new GameObject("ThumbB").transform;
+            var thumbB = new GameObject("ThumbB").transform;
             thumbB.SetParent(thumbA, false);
             thumbB.localPosition = new Vector3(0f, 0f, 0.042f);
             Bx(thumbB, "Seg", new Vector3(0f, 0f, 0.016f), new Vector3(0.0195f, 0.019f, 0.034f), Glove());
             Bx(thumbB, "Tip", new Vector3(0f, -0.0085f, 0.02f), new Vector3(0.016f, 0.004f, 0.022f), Suede());
-            SetGrip(0.3f);
+            h.thumbA = thumbA; h.thumbB = thumbB;
+            if (right) hand.localScale = new Vector3(-1f, 1f, 1f);   // the right hand is the left one mirrored
+            SetGrip(h, 0.3f);
+            return h;
         }
 
         static readonly float[] Splay = { 4f, 1f, -2f, -6f };
 
-        void SetGrip(float g)
+        void SetGrip(float g) => SetGrip(L, g);
+
+        static void SetGrip(HandRig h, float g)
         {
             g = Mathf.Clamp01(g);
             for (int i = 0; i < 4; i++)
             {
                 float extra = i * 4f;   // the little finger curls a bit more
-                fingerA[i].localRotation = Quaternion.Euler(Mathf.Lerp(6f, 72f + extra, g), Mathf.Lerp(Splay[i], 0f, g), 0f);
-                fingerB[i].localRotation = Quaternion.Euler(Mathf.Lerp(8f, 88f, g), 0f, 0f);
+                h.fingerA[i].localRotation = Quaternion.Euler(Mathf.Lerp(6f, 72f + extra, g), Mathf.Lerp(Splay[i], 0f, g), 0f);
+                h.fingerB[i].localRotation = Quaternion.Euler(Mathf.Lerp(8f, 88f, g), 0f, 0f);
             }
-            thumbA.localRotation = Quaternion.Euler(Mathf.Lerp(12f, 34f, g), Mathf.Lerp(48f, 18f, g), Mathf.Lerp(-20f, -45f, g));
-            thumbB.localRotation = Quaternion.Euler(Mathf.Lerp(6f, 38f, g), 0f, 0f);
+            h.thumbA.localRotation = Quaternion.Euler(Mathf.Lerp(12f, 34f, g), Mathf.Lerp(48f, 18f, g), Mathf.Lerp(-20f, -45f, g));
+            h.thumbB.localRotation = Quaternion.Euler(Mathf.Lerp(6f, 38f, g), 0f, 0f);
         }
 
         // ───────── keyframes ─────────
@@ -454,23 +491,76 @@ namespace AirsoftFPS
             return x <= 0f || x >= 1f ? 0f : Mathf.Sin(x * Mathf.PI);
         }
 
-        Vector3 KeyPos(Transform slot, Key k) => k.cam ? slot.InverseTransformPoint(camT.TransformPoint(k.p)) : k.p;
-
-        void Eval(Transform slot, Key[] keys, float u, out Vector3 p, out Quaternion r, out float g)
+        // A key in slot space (camera-space spots converted, the resting key = the idle pose on the gun).
+        void Resolve(Rig rig, Key k, out Vector3 p, out Quaternion r, out float g)
         {
-            if (u <= keys[0].u) { p = KeyPos(slot, keys[0]); r = keys[0].r; g = keys[0].grip; return; }
+            if (k.idle) { IdleLeft(rig, out p, out r, out g); return; }
+            p = k.cam ? rig.slot.InverseTransformPoint(camT.TransformPoint(k.p)) : k.p;
+            r = k.r; g = k.grip;
+        }
+
+        void Eval(Rig rig, Key[] keys, float u, out Vector3 p, out Quaternion r, out float g)
+        {
+            if (u <= keys[0].u) { Resolve(rig, keys[0], out p, out r, out g); return; }
             for (int i = 0; i < keys.Length - 1; i++)
             {
                 var a = keys[i]; var b = keys[i + 1];
                 if (u > b.u) continue;
                 float t = Ease(Mathf.InverseLerp(a.u, b.u, u));
-                p = Vector3.Lerp(KeyPos(slot, a), KeyPos(slot, b), t);
-                r = Quaternion.Slerp(a.r, b.r, t);
-                g = Mathf.Lerp(a.grip, b.grip, t);
+                Resolve(rig, a, out var pa, out var ra, out var ga);
+                Resolve(rig, b, out var pb, out var rb, out var gb);
+                p = Vector3.Lerp(pa, pb, t);
+                r = Quaternion.Slerp(ra, rb, t);
+                g = Mathf.Lerp(ga, gb, t);
                 return;
             }
-            var l = keys[keys.Length - 1];
-            p = KeyPos(slot, l); r = l.r; g = l.grip;
+            Resolve(rig, keys[keys.Length - 1], out p, out r, out g);
+        }
+
+        // ───────── resting poses (both hands on the gun) ─────────
+
+        // Right hand around the pistol grip: back of the hand to the right, fingers across the front of the
+        // grip, thumb up (it is the mirrored left hand, so its thumb side is -X).
+        void IdleRight(Rig rig, out Vector3 p, out Quaternion q)
+        {
+            float rk = rig.spec.rake * Mathf.Deg2Rad;
+            Vector3 fingers = new Vector3(0f, -Mathf.Sin(rk), Mathf.Cos(rk));
+            q = Look(fingers, Vector3.right);
+            p = rig.grip + Vector3.right * 0.03f - fingers * 0.024f;
+        }
+
+        // Left hand: under the fore-end (long guns) or wrapped round the right hand (handguns).
+        void IdleLeft(Rig rig, out Vector3 p, out Quaternion q, out float g)
+        {
+            if (rig.spec.twoHand)
+            {
+                q = Look(Vector3.right * 0.55f + Vector3.forward * 0.5f + Vector3.down * 0.4f, Vector3.left + Vector3.down * 0.25f);
+                p = rig.grip + new Vector3(-0.04f, -0.012f, 0.012f);
+                g = 0.65f;
+                return;
+            }
+            q = Look(Vector3.right * 0.85f + Vector3.forward * 0.25f + Vector3.up * 0.35f, Vector3.down + Vector3.left * 0.45f);
+            p = rig.fore + new Vector3(-0.012f, -0.04f, 0f);
+            g = 0.6f;
+        }
+
+        void PlaceRight(Rig rig)
+        {
+            if (R.root.parent != rig.slot) R.root.SetParent(rig.slot, false);
+            IdleRight(rig, out var p, out var q);
+            R.root.localPosition = p;
+            R.root.localRotation = q;
+            SetGrip(R, 0.8f);
+            if (!R.root.gameObject.activeSelf) R.root.gameObject.SetActive(true);
+        }
+
+        void PlaceIdleLeft(Rig rig)
+        {
+            IdleLeft(rig, out var p, out var q, out var g);
+            hand.localPosition = p;
+            hand.localRotation = q;
+            SetGrip(g);
+            if (!hand.gameObject.activeSelf) hand.gameObject.SetActive(true);
         }
 
         static Quaternion Look(Vector3 fingers, Vector3 back) => Quaternion.LookRotation(fingers.normalized, back.normalized);
@@ -572,6 +662,10 @@ namespace AirsoftFPS
                     break;
                 }
             }
+            // the hand starts from and goes back to its place on the gun
+            if (keys.Count > 0 && keys[0].cam && keys[0].u <= 0f) keys[0] = Key.Idle(0f);
+            int last = keys.Count - 1;
+            if (last > 0 && keys[last].cam && keys[last].u >= 1f) keys[last] = Key.Idle(1f);
             r.reload = keys.ToArray();
         }
 
@@ -606,10 +700,11 @@ namespace AirsoftFPS
                 cur = weapon;
                 inspectT = -1f;
                 var rr = cur >= 0 && cur < rigs.Length ? rigs[cur] : null;
-                if (rr != null) hand.SetParent(rr.slot, false);
+                if (rr != null) { hand.SetParent(rr.slot, false); R.root.SetParent(rr.slot, false); }
             }
             var r = cur >= 0 && cur < rigs.Length ? rigs[cur] : null;
-            if (r == null) { hand.gameObject.SetActive(false); return; }
+            if (r == null) { hand.gameObject.SetActive(false); R.root.gameObject.SetActive(false); return; }
+            PlaceRight(r);   // the trigger hand never leaves the grip
 
             if (reloadU >= 0f) inspectT = -1f;
             if (inspectT >= 0f)
@@ -621,7 +716,7 @@ namespace AirsoftFPS
             Vector3 pos = Vector3.zero, euler = Vector3.zero;
             if (reloadU >= 0f) ReloadPose(r, Mathf.Clamp01(reloadU), out pos, out euler);
             else if (inspectT >= 0f) InspectPose(r, inspectT / INSPECT_SECONDS, out pos, out euler);
-            else { ResetRig(r); hand.gameObject.SetActive(false); return; }
+            else { ResetRig(r); PlaceIdleLeft(r); return; }   // resting: both hands on the gun
 
             dRot = Quaternion.Euler(euler);
             // rotate about the gun's middle rather than the grip
@@ -630,7 +725,7 @@ namespace AirsoftFPS
 
         void PlaceHand(Rig r, float u)
         {
-            Eval(r.slot, r.reload, u, out var p, out var q, out var g);
+            Eval(r, r.reload, u, out var p, out var q, out var g);
             hand.localPosition = p;
             hand.localRotation = q;
             SetGrip(g);
@@ -640,14 +735,16 @@ namespace AirsoftFPS
 
         // The forearm points from the wrist back to the shoulder (lower left, behind the camera), bending at
         // the wrist at most 80 degrees.
-        void AimForearm()
+        void AimForearm() => AimForearm(L);
+
+        void AimForearm(HandRig h)
         {
-            Vector3 wrist = sleeve.position;
-            Vector3 d = (camT.TransformPoint(SHOULDER_CAM) - wrist).normalized;
-            Vector3 back = -hand.forward;
+            Vector3 wrist = h.sleeve.position;
+            Vector3 d = (camT.TransformPoint(h.shoulderCam) - wrist).normalized;
+            Vector3 back = -h.root.forward;
             float ang = Vector3.Angle(back, d);
             if (ang > 80f) d = Vector3.Slerp(back, d, 80f / ang);
-            sleeve.rotation = Quaternion.LookRotation(-d, hand.up);
+            h.sleeve.rotation = Quaternion.LookRotation(-d, h.root.up);
         }
 
         static void Show(Transform t, bool on)
@@ -805,8 +902,8 @@ namespace AirsoftFPS
 
             // the hand: palm up under the gun (in camera space, whatever way the gun is turned), from 0.44 to 0.92
             float w = Seg(u, 0.42f, 0.52f) * (1f - Seg(u, 0.84f, 0.94f));
-            if (w <= 0f) { hand.gameObject.SetActive(false); return; }
-            if (!hand.gameObject.activeSelf) hand.gameObject.SetActive(true);
+            PlaceIdleLeft(r);   // turns the gun with it; from 0.42 it moves under the gun
+            if (w <= 0f) return;
             pendingSupport = true;
             supportW = w;
         }
@@ -818,16 +915,21 @@ namespace AirsoftFPS
         // under the gun's support point.
         public void LateHands()
         {
-            if (!pendingSupport) return;
+            var r = rigs != null && cur >= 0 && cur < rigs.Length ? rigs[cur] : null;
+            if (r != null && pendingSupport)
+            {
+                Vector3 at = r.slot.TransformPoint(r.support) - camT.up * 0.04f;
+                Quaternion q = Quaternion.LookRotation(camT.right * 0.9f + camT.forward * 0.35f + camT.up * 0.1f, -camT.up + camT.right * 0.2f);
+                IdleLeft(r, out var ip, out var iq, out var ig);
+                Vector3 from = r.slot.TransformPoint(ip);
+                Quaternion fromQ = r.slot.rotation * iq;
+                hand.SetPositionAndRotation(Vector3.Lerp(from, at, supportW), Quaternion.Slerp(fromQ, q, supportW));
+                SetGrip(Mathf.Lerp(ig, 0.7f, supportW));
+            }
             pendingSupport = false;
-            var r = cur >= 0 && cur < rigs.Length ? rigs[cur] : null;
-            if (r == null) return;
-            Vector3 at = r.slot.TransformPoint(r.support) - camT.up * 0.04f;
-            Quaternion q = Quaternion.LookRotation(camT.right * 0.9f + camT.forward * 0.35f + camT.up * 0.1f, -camT.up + camT.right * 0.2f);
-            Vector3 off = camT.TransformPoint(OFF_CAM);
-            hand.SetPositionAndRotation(Vector3.Lerp(off, at, supportW), q);
-            SetGrip(Mathf.Lerp(0.3f, 0.7f, supportW));
-            AimForearm();
+            // forearms point at the shoulders once the gun has its final pose for this frame
+            if (L != null && hand.gameObject.activeSelf) AimForearm(L);
+            if (R != null && R.root.gameObject.activeSelf) AimForearm(R);
         }
 
         void OnDestroy()

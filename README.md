@@ -167,6 +167,10 @@ Pořadí slotů (klávesy 1–0) je zároveň pořadí v Gun Game:
 RPK podpůrná AEG, M14 DMR, pružinová opakovačka, L96 pružinová odstřelovačka.
 Statistiky jsou v `Assets/Scripts/FPS/WeaponData.cs`.
 
+V pohledu z první osoby drží zbraň obě ruce v rukavicích (`ViewmodelHands`): pravá ruka je pořád na rukojeti,
+levá u pistolí a revolveru podpírá zespodu (držení obouruč), u samopalů a pušek drží předpažbí. Při přebití a
+prohlídce se ruce plynule přesunou do animace a po ní zpátky na zbraň.
+
 **Váha kuliček** (Armory): 0,20 g a 0,25 g (výchozí) jsou zdarma, 0,28 g a 0,32 g se kupují. Těžší kulička vyletí
 pomaleji, ale méně ji brzdí vzduch a méně ji unáší vítr, takže na dálku drží dráhu líp.
 
