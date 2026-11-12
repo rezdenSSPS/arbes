@@ -100,7 +100,7 @@ namespace AirsoftFPS
             if (searchTimer > 0) return;
             searchTimer = 0.5f;
 
-            float closest = detectionRange;
+            float closest = detectionRange * MatchNet.NightSightFactor;   // shorter at night
             Transform best = null;
 
             foreach (var client in NetworkManager.Singleton.ConnectedClientsList)

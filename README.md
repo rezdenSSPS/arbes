@@ -121,6 +121,9 @@ Pravidla zápasu volí host v lobby (platí pro všechny):
   u spawnů obou týmů a čip se šipkou pod minimapou. Vítr je i slyšet (`WindAmbience`): hlasitost podle síly, s nárazy,
   pod střechou tlumeně; vypíná se spolu s ambiencí v nastavení zvuku.
 - **Zamlžování brýlí** ON / OFF: buď se mlží všem stejně rychle (bez ohledu na typ brýlí), nebo nikomu. Otírá se klávesou F.
+- **Noc** (NIGHT) OFF / ON: zápas se hraje v noci. Slunce je slabý modrý měsíc, obloha, okolní světlo a mlha jsou tmavé,
+  pouliční lampy na mapě svítí teplým světlem a každý hráč má čelovku (světlo před sebou vidí jen on). Boti a co-op
+  nepřátelé vidí v noci jen na 60 % vzdálenosti. Minimapa zůstává denní, aby byla čitelná.
 
 ## Herní režimy
 

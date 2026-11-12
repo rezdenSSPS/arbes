@@ -225,6 +225,7 @@ namespace AirsoftFPS
             foreach (var mh in FindObjectsByType<MinimapHidden>())
                 foreach (var r in mh.GetComponentsInChildren<Renderer>())
                     if (r.enabled) { r.enabled = false; hiddenR.Add(r); }
+            bool wasNight = NightLighting.Daylight();   // night match: photograph the map in daylight
             bool fog = RenderSettings.fog;
             RenderSettings.fog = false;   // fog would wash out a shot from 120 m up
             try
@@ -237,6 +238,7 @@ namespace AirsoftFPS
             finally
             {
                 RenderSettings.fog = fog;
+                if (wasNight) NightLighting.Night();
                 foreach (var r in hiddenR) if (r != null) r.enabled = true;
                 foreach (var c in hiddenC) if (c != null) c.enabled = true;
                 cam.targetTexture = null;

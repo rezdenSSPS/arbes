@@ -1074,14 +1074,14 @@ namespace AirsoftFPS
         }
 
         // Match rules (host picks, everyone sees): wind strength and goggle fog, one row under the bot note.
-        Segmented windSeg, fogSeg;
+        Segmented windSeg, fogSeg, nightSeg;
 
         void BuildMatchRules(RectTransform colRt, float y)
         {
             var row = Rect(colRt, "MatchRules").TL(0, y, 556, 30);
             rulesRow = row;
 
-            var wind = Rect(row, "Wind").TL(0, 0, 286, 30);
+            var wind = Rect(row, "Wind").TL(0, 0, 202, 30);
             Caption(wind, "WIND", 12, Muted, 0.16f).rectTransform.Fill();
             windSeg = Segments(wind, WindSystem.SETTING_NAMES, WindSystem.DEFAULT_SETTING, 28, 12, i =>
             {
@@ -1091,15 +1091,26 @@ namespace AirsoftFPS
             wrt.anchorMin = wrt.anchorMax = wrt.pivot = new Vector2(1f, 0.5f);
             wrt.anchoredPosition = Vector2.zero;
 
-            var fog = Rect(row, "Fog").TL(304, 0, 252, 30);
+            var fog = Rect(row, "Fog").TL(216, 0, 176, 30);
             Caption(fog, "GOGGLE FOG", 12, Muted, 0.16f).rectTransform.Fill();
             fogSeg = Segments(fog, new[] { "OFF", "ON" }, 1, 28, 12, i =>
             {
                 if (isHost && MatchNet.Instance != null) MatchNet.Instance.HostSetFog(i == 1);
-            }, 12f);
+            }, 10f);
             var frt = (RectTransform)fogSeg.transform;
             frt.anchorMin = frt.anchorMax = frt.pivot = new Vector2(1f, 0.5f);
             frt.anchoredPosition = Vector2.zero;
+
+            // NIGHT: the match is played at night (MatchNet.Night.cs, NightLighting)
+            var night = Rect(row, "Night").TL(406, 0, 150, 30);
+            Caption(night, "NIGHT", 12, Muted, 0.16f).rectTransform.Fill();
+            nightSeg = Segments(night, new[] { "OFF", "ON" }, 0, 28, 12, i =>
+            {
+                if (isHost && MatchNet.Instance != null) MatchNet.Instance.HostSetNight(i == 1);
+            }, 10f);
+            var nrt = (RectTransform)nightSeg.transform;
+            nrt.anchorMin = nrt.anchorMax = nrt.pivot = new Vector2(1f, 0.5f);
+            nrt.anchoredPosition = Vector2.zero;
         }
 
         void RefreshMatchRules(MatchNet mnet)
@@ -1108,8 +1119,11 @@ namespace AirsoftFPS
             if (windSeg.Selected != mnet.WindSetting) windSeg.Select(mnet.WindSetting, false);
             int fi = mnet.FogEnabled ? 1 : 0;
             if (fogSeg.Selected != fi) fogSeg.Select(fi, false);
+            int ni = mnet.NightMode ? 1 : 0;
+            if (nightSeg.Selected != ni) nightSeg.Select(ni, false);
             windSeg.SetInteractable(isHost);   // clients see the host's pick, readable but not clickable
             fogSeg.SetInteractable(isHost);
+            nightSeg.SetInteractable(isHost);
         }
 
         // Whether the lobby shows the bot options (FILL WITH BOTS, BOT DIFFICULTY and the bot note) for this

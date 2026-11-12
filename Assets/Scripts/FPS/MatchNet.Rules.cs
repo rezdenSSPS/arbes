@@ -112,6 +112,7 @@ namespace AirsoftFPS
         void WriteRules(FastBufferWriter w)
         {
             for (int i = 0; i < RULE_COUNT; i++) w.WriteValueSafe(rules[i]);
+            w.WriteValueSafe(NightMode);   // NIGHT lobby toggle (MatchNet.Night.cs)
         }
 
         void ReadRules(FastBufferReader r)
@@ -121,6 +122,8 @@ namespace AirsoftFPS
                 r.ReadValueSafe(out byte v);
                 rules[i] = v;
             }
+            r.ReadValueSafe(out bool night);
+            NightMode = night;
         }
 
         // Server, after a death was counted: with limited lives the match ends when only one player (FFA,

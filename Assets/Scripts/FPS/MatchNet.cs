@@ -175,6 +175,7 @@ namespace AirsoftFPS
             WindSetting = Mathf.Clamp(PlayerPrefs.GetInt(WIND_PREF, WindSystem.DEFAULT_SETTING), 0, WindSystem.SETTING_NAMES.Length - 1);
             FogEnabled = PlayerPrefs.GetInt(FOG_PREF, 1) == 1;
             LoadRules();
+            LoadNight();
         }
 
         void Update()
@@ -196,6 +197,7 @@ namespace AirsoftFPS
             if (nm.IsServer) { TickIntro(); TickMatchClock(); }
             BotsUpdate();
             WindSystem.SyncWorld();          // windsocks in the arena
+            NightLighting.Tick(this);        // night match: dark arena, lamps, headlamp
             ObjectiveMode.Sync(this, nm);   // objective modes (CTF, Domination): create / remove the rules object
         }
 

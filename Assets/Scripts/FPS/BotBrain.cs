@@ -302,7 +302,7 @@ namespace AirsoftFPS
                 if (h == null || h.isDead.Value || h.IsOut || !IsOpponent(mn, h)) continue;
                 Vector3 to = Chest(h) - Eye;
                 float d = to.magnitude;
-                if (d > skill.sight) continue;
+                if (d > skill.sight * MatchNet.NightSightFactor) continue;   // shorter at night
                 bool current = h == target && Time.time - lastSeenTime < 1.5f;
                 Vector3 flat = to; flat.y = 0;
                 bool inView = alert || current || d < 6f || Vector3.Angle(transform.forward, flat) < skill.fov * 0.5f;

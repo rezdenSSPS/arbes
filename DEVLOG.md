@@ -314,3 +314,11 @@ Vyvíjeno paralelně ve čtyřech větvích (`feat/ui-fixes`, `feat/random-mode`
 - Popisy zbraní jsou v `ShopCatalog.Describe`. Okno je širší (1180 px), dolní poznámka se přesunula do nadpisu.
 - Oprava: u kuliček se cena psala se symbolem ◆, který úzké písmo nemá (zobrazil se čtvereček) – teď „900 CR“.
 - Testy: kompilace čistá, objektivy 104/0, medik 39/0, zvuk 34/0, medik v play módu 27/0, Random mode 23/0, chat 35/0, pravidla 24/0, CTF 19/0, Domination 18/0, Bomb 29/0, VIP 23/0. Otevřený obchod vykreslený dvakrát po sobě (zbraně se točí) a zkontrolovaný očima. **Neověřeno:** nákup kliknutím myší (logika nákupu se neměnila).
+
+## 2026-11-12 — Noční režim
+- V lobby je v řádku s větrem a zamlžením brýlí nový přepínač **NIGHT** OFF / ON. Volí ho host (uloží se mu do PlayerPrefs „Airsoft.Night“), ostatní ho vidí jen pro čtení; posílá se s pravidly zápasu (`MatchNet.Night.cs`).
+- **`NightLighting`**: když se v noci načte mapa zápasu, každý počítač si ji sám ztmaví (nic se navíc neposílá): slunce na 13 % s modrou barvou měsíce a slabšími stíny, kopie procedurální oblohy s nízkou expozicí a tmavě modrým odstínem (slunce na obloze je teď měsíc), tmavé tříbarevné okolní světlo, slabé odrazy a tmavě modrá mlha, která končí nejpozději v 75 m. Pouliční lampy a lucerny (podle jména objektu, nejvýš 32) dostanou teplé bodové světlo bez stínů: na Town 12, ve Warehouse 4.
+- **Čelovka**: místní hráč má na kameře kuželové světlo (62°, dosvit 32 m). Svítí jen jemu, ostatní ji nevidí.
+- **Boti v noci**: boti v PvP i nepřátelé v co-opu si všimnou hráče jen na 60 % vzdálenosti (`MatchNet.NightSightFactor`).
+- Minimapa se fotí jednou shora: v noci se na ten jeden snímek vrátí denní světlo (`NightLighting.Daylight` / `Night`), aby byla mapa čitelná.
+- Testy: kompilace čistá, objektivy 104/0, medik 39/0, zvuk 34/0, medik v play módu 27/0, Random mode 24/0, chat 35/0, pravidla 24/0, CTF 19/0, Domination 18/0, Bomb 29/0, VIP 23/0. Vykresleno a zkontrolováno očima: lobby s NIGHT ON, Town ve dne a v noci (dva pohledy), Warehouse, Outpost a Forest v noci. **Neověřeno:** klient přes síť a hraní noci s myší (zda je čelovka dost silná, zda není moc tma v lese).
