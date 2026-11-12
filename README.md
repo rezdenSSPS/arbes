@@ -80,7 +80,7 @@ už používá jiná spuštěná hra na stejném počítači, hostování skonč
   zdraví (50–200 HP, i boti), rychlost pohybu (75–150 %), skok (normální / vysoký / „měsíc“ s nízkou gravitací),
   čas respawnu (1 / 3 / 6 / 10 s), životy (∞ / 1 / 3 / 5 – kdo je vyčerpá, už se nevrátí; vyhrává poslední hráč / tým,
   platí ve FFA, TDM, Gun Game, CTF a Domination) a nekonečnou munici. Ostatní pravidla jen vidí. Volba se hostiteli pamatuje,
-  RESET TO NORMAL vrací běžnou hru. Zbývající životy ukazuje HUD vedle kouřového granátu.
+  RESET TO NORMAL vrací běžnou hru. Zbývající životy ukazuje HUD nad ukazatelem zdraví.
 
 ## Ovládání
 
@@ -94,7 +94,7 @@ už používá jiná spuštěná hra na stejném počítači, hostování skonč
 | Střelba | levé tlačítko myši |
 | Míření / puškohled | pravé tlačítko myši |
 | Bang (eliminace na blízko bez výstřelu) | V |
-| Kouřový granát (gadget, vestoje) | G |
+| Kouřový granát (gadget, vestoje; 2 na život, v liště zbraní dole jako slot **G** s počtem) | G |
 | Otřít zamlžené brýle | F |
 | Přebití | R (ruka v rukavici vymění zásobník, u brokovnice zasouvá náboje, u revolveru rychlonabíječ) |
 | Prohlídka zbraně | T (zruší ji střelba, míření, přebíjení, sprint nebo přepnutí) |

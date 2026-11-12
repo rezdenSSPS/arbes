@@ -86,8 +86,12 @@ namespace AirsoftFPS
         Image hpFill;
         Image staminaFill;
         CanvasGroup staminaGroup;
-        TextMeshProUGUI smokeLabel;
-        GameObject smokeChip;
+        // smoke grenade in the inventory row (key G), after the weapons
+        SlotView grenadeSlot;
+        TextMeshProUGUI grenadeCount;
+        CanvasGroup grenadeIcon;
+        int grenadeLast = -1;
+        float grenadeFlash;
         readonly List<SlotView> slotViews = new List<SlotView>();
         TextMeshProUGUI ammoWeapon, ammoMag, ammoReserve;
         TextMeshProUGUI ffaTitle;   // FREE-FOR-ALL / JUGGERNAUT / ONE IN THE CHAMBER
@@ -454,13 +458,6 @@ namespace AirsoftFPS
                 if (staminaGroup != null) staminaGroup.alpha = Mathf.MoveTowards(staminaGroup.alpha, targetA, Time.unscaledDeltaTime * 4f);
             }
 
-            // smoke gadget count
-            if (smokeChip != null)
-            {
-                smokeChip.SetActive(!dead && weaponCtrl != null);
-                if (weaponCtrl != null && smokeLabel != null) smokeLabel.text = "SMOKE " + weaponCtrl.CurrentSmoke;
-            }
-
             // lives left (custom rules)
             if (livesChip != null)
             {
@@ -489,6 +486,7 @@ namespace AirsoftFPS
                     sv.key.color = sv.name.color = on ? Ground : locked ? Faint : Fg;
                     sv.frame.enabled = !on;
                 }
+                UpdateGrenadeSlot(weaponCtrl.CurrentSmoke);
                 var w = weaponCtrl.CurrentWeapon;
                 int mag = weaponCtrl.CurrentMag;
                 ammoWeapon.text = weaponCtrl.CurrentWeaponName +
@@ -501,6 +499,48 @@ namespace AirsoftFPS
                 reloadHint.SetActive(lowAmmo || reloading);
                 reloadText.text = reloading ? "RELOADING…" : "RELOAD";
             }
+        }
+
+        // Smoke grenade slot: key G, a small grenade, how many are left; flashes when one is thrown, greys out at 0.
+        void BuildGrenadeSlot(Transform row)
+        {
+            Rect(row, "Gap").LE(8, 50);   // a little apart from the weapons
+            var sv = new SlotView();
+            sv.bg = Box(row, "SlotGrenade", Scrim());
+            sv.bg.LE(58, 50);
+            sv.frame = Frame(sv.bg.transform, A(Line, 0.9f), 1f);
+            sv.key = Label(sv.bg.transform, "G", F.MonoBold, 10, Fg, TextAlignmentOptions.TopLeft);
+            sv.key.rectTransform.Fill(6, 5, 6, 5);
+            sv.name = Label(sv.bg.transform, "SMOKE", F.CondBold, 13, Fg, TextAlignmentOptions.BottomLeft);
+            sv.name.rectTransform.Fill(6, 5, 4, 5);
+            grenadeCount = Label(sv.bg.transform, "2", F.MonoBold, 12, Accent, TextAlignmentOptions.TopRight);
+            grenadeCount.rectTransform.Fill(6, 4, 6, 5);
+            grenadeSlot = sv;
+
+            // canister with a cap, a lever and a coloured band (smoke grenade)
+            var icon = Rect(sv.bg.transform, "Icon").At(0.5f, 1f, 0, -6, 14, 22);
+            grenadeIcon = icon.gameObject.AddComponent<CanvasGroup>();
+            grenadeIcon.blocksRaycasts = false;
+            var body = new Color(0.47f, 0.52f, 0.42f);
+            Box(icon, "Body", body).rectTransform.At(0.5f, 0f, 0, 0, 10, 15);
+            Box(icon, "Band", Accent).rectTransform.At(0.5f, 0f, 0, 9, 10, 2.5f);
+            Box(icon, "Cap", new Color(0.2f, 0.21f, 0.2f)).rectTransform.At(0.5f, 0f, 0, 15, 6, 3.5f);
+            Box(icon, "Lever", new Color(0.62f, 0.63f, 0.6f)).rectTransform.At(0.5f, 0f, 5.5f, 6, 2, 11.5f);
+        }
+
+        void UpdateGrenadeSlot(int count)
+        {
+            if (grenadeSlot == null) return;
+            if (grenadeLast >= 0 && count < grenadeLast) grenadeFlash = 1f;   // just thrown
+            grenadeLast = count;
+            grenadeFlash = Mathf.MoveTowards(grenadeFlash, 0f, Time.unscaledDeltaTime * 3f);
+            bool empty = count <= 0;
+            var idle = empty ? Scrim(0.35f) : Scrim(0.72f);
+            grenadeSlot.bg.color = Color.Lerp(idle, Accent, grenadeFlash * 0.85f);
+            grenadeSlot.key.color = grenadeSlot.name.color = empty ? Faint : grenadeFlash > 0.5f ? Ground : Fg;
+            grenadeCount.text = count.ToString();
+            grenadeCount.color = empty ? Danger : grenadeFlash > 0.5f ? Ground : Accent;
+            grenadeIcon.alpha = empty ? 0.3f : 1f;
         }
 
         // Top-right leaderboard: the scoreboard's order (objective points, then kills, then fewer deaths),
@@ -1156,19 +1196,9 @@ namespace AirsoftFPS
             staminaGroup = sbBack.gameObject.AddComponent<CanvasGroup>();
             staminaGroup.alpha = 0f;
 
-            // smoke gadget pip, above the health box
-            var smk = HRow(root, "Smoke", 7, TextAnchor.MiddleLeft);
-            smk.GetComponent<RectTransform>().At(0f, 0f, 24, 124, 170, 28);
-            smk.padding = new RectOffset(9, 11, 4, 4);
-            smk.gameObject.AddComponent<Image>().color = Scrim();
-            Box(smk.transform, "Cyl", Accent).LE(9, 15);
-            smokeLabel = Label(smk.transform, "SMOKE 2", F.BodyBold, 12, Fg, TextAlignmentOptions.MidlineLeft, 0.1f);
-            Label(smk.transform, "G", F.MonoBold, 11, Muted);
-            smokeChip = smk.gameObject;
-
-            // lives left (lobby rule LIVES), next to the smoke pip
+            // lives left (lobby rule LIVES), above the health box
             var lv = HRow(root, "Lives", 7, TextAnchor.MiddleLeft);
-            lv.GetComponent<RectTransform>().At(0f, 0f, 202, 124, 102, 28);
+            lv.GetComponent<RectTransform>().At(0f, 0f, 24, 124, 102, 28);
             lv.padding = new RectOffset(10, 10, 4, 4);
             lv.gameObject.AddComponent<Image>().color = Scrim();
             Label(lv.transform, "LIVES", F.BodyBold, 11, Muted, TextAlignmentOptions.MidlineLeft, 0.14f);
@@ -1178,7 +1208,7 @@ namespace AirsoftFPS
 
             // bottom-center weapon slots
             var slotsRow = HRow(root, "Slots", 4, TextAnchor.LowerCenter);
-            slotsRow.GetComponent<RectTransform>().At(0.5f, 0f, 0, 24, 10 * 62, 50);
+            slotsRow.GetComponent<RectTransform>().At(0.5f, 0f, 0, 24, 11 * 62 + 12, 50);
             for (int i = 0; i < 10; i++)
             {
                 var sv = new SlotView();
@@ -1192,6 +1222,7 @@ namespace AirsoftFPS
                 sv.name.overflowMode = TextOverflowModes.Truncate;
                 slotViews.Add(sv);
             }
+            BuildGrenadeSlot(slotsRow.transform);
 
             // bottom-right ammo (bare text, no panel behind it)
             var ammo = VCol(root, "Ammo", 6, TextAnchor.LowerRight, false);

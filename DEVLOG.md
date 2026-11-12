@@ -301,3 +301,9 @@ Vyvíjeno paralelně ve čtyřech větvích (`feat/ui-fixes`, `feat/random-mode`
 - Nová volba se ukládá do PlayerPrefs „Airsoft.Bots“; stará „Airsoft.BotFill“ se jednou převede (do 4 hráčů = 3 boti, do 8 = 7).
 - Kontroly upravené na nový klíč (Random mode / pravidla se 3 boty, fotky do menu se 7). `RulesPlayCheck` má 3 nové kontroly posuvníku (uložený počet, oříznutí na 7 a doplnění rosteru, návrat na 3) a botům před zásahem vypne ochranu po spawnu – bot, který se objevil později, jinak zásah ignoroval a kontrola občas padala.
 - Testy: kompilace čistá, objektivy 104/0, medik 39/0, zvuk 34/0, medik v play módu 27/0, Random mode 23/0, chat 35/0, pravidla 24/0 (4× po sobě), CTF 19/0, Domination 18/0, Bomb 29/0, VIP 23/0. Lobby s 0, 5 a 7 boty vykreslené a zkontrolované očima. **Neověřeno:** tažení posuvníku skutečnou myší a klient přes síť.
+
+## 2026-11-12 — Granát v inventáři
+- Kouřový granát (klávesa G) byl v HUDu jen jako malý štítek „SMOKE 2“ nad zdravím, v liště zbraní dole chyběl. Teď má v liště vlastní slot za zbraněmi (s malou mezerou): klávesa **G**, ikonka granátu (tělo, pruh v barvě rozhraní, víčko, páka), nápis SMOKE a počet zbývajících vpravo nahoře.
+- Po hodu slot krátce blikne barvou rozhraní; bez granátů zešedne a počet je červeně 0. Po respawnu jsou zase 2. Ukazuje se ve všech režimech, i v Gun Game, kde jsou ostatní sloty skryté.
+- Starý štítek „SMOKE“ zmizel, ukazatel životů (pravidla zápasu) je teď na jeho místě nad zdravím.
+- Testy: kompilace čistá, objektivy 104/0, medik 39/0, zvuk 34/0, medik v play módu 27/0, Random mode 23/0, chat 35/0, pravidla 24/0, CTF 19/0, Domination 18/0, Bomb 29/0, VIP 23/0. HUD ve FFA vykreslený a zkontrolovaný očima: 2 granáty, bliknutí po hodu, 0 granátů. **Neověřeno:** hod skutečnou klávesou G (stav se v testu nastavil přímo).
